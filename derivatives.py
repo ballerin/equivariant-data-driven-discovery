@@ -1,0 +1,122 @@
+"""
+Derivative backend selector for multigraph_operators.py.
+
+Exposes six backend-neutral functions (grad, laplacian, hessian, bilaplacian,
+trilaplacian, third_order) that dispatch to whichever backend is currently active.
+
+Usage
+-----
+Default backend is 'spectral' (FFT, exact for band-limited data).
+
+    import derivatives
+    derivatives.set_backend('polynomial')   # switch globally
+
+    # or, temporarily inside a block:
+    with derivatives.use_backend('polynomial'):
+        ops = get_operators(2, 3)           # evaluated with polynomial kernels
+
+After a backend switch, all subsequent operator evaluations use the new backend;
+calls go through the module-level functions below, so the switch is immediate.
+
+Available backends
+------------------
+'spectral'    — spectral_derivatives.py:   FFT-based, exact for band-limited data.
+'polynomial'  — polynomial_derivatives.py: local least-squares polynomial fit,
+                robust to measurement noise at the cost of a small bias.
+"""
+
+from contextlib import contextmanager
+import spectral_derivatives as _spectral
+import polynomial_derivatives as _polynomial
+
+# Dispatch table: backend name → dict of operation → function.
+# Each entry maps the neutral operation name to the backend-specific function.
+_DISPATCH = {
+    'spectral': {
+        'grad':         _spectral.spectral_grad,
+        'laplacian':    _spectral.spectral_laplacian,
+        'hessian':      _spectral.spectral_hessian,
+        'bilaplacian':  _spectral.spectral_bilaplacian,
+        'trilaplacian': _spectral.spectral_trilaplacian,
+        'third_order':  _spectral.spectral_third_order,
+    },
+    'polynomial': {
+        'grad':         _polynomial.polynomial_grad,
+        'laplacian':    _polynomial.polynomial_laplacian,
+        'hessian':      _polynomial.polynomial_hessian,
+        'bilaplacian':  _polynomial.polynomial_bilaplacian,
+        'trilaplacian': _polynomial.polynomial_trilaplacian,
+        'third_order':  _polynomial.polynomial_third_order,
+    },
+}
+
+_active_name = 'spectral'   # default
+
+
+def set_backend(name: str) -> None:
+    """Switch the active derivative backend globally.
+
+    Parameters
+    ----------
+    name : 'spectral' or 'polynomial'
+    """
+    global _active_name
+    if name not in _DISPATCH:
+        raise ValueError(f"Unknown backend {name!r}. Choose from: {list(_DISPATCH)}")
+    _active_name = name
+
+
+def get_backend() -> str:
+    """Return the name of the currently active backend."""
+    return _active_name
+
+
+@contextmanager
+def use_backend(name: str):
+    """Context manager: temporarily switch backend, then restore the previous one.
+
+    Example
+    -------
+    with derivatives.use_backend('polynomial'):
+        Theta, descs = build_equivariant_library(f, Lx, Ly)
+    """
+    previous = get_backend()
+    set_backend(name)
+    try:
+        yield
+    finally:
+        set_backend(previous)
+
+
+# ---------------------------------------------------------------------------
+# Public derivative APIs — backend-neutral names.
+# ---------------------------------------------------------------------------
+
+def grad(f, Lx, Ly):
+    """Gradient (f_x, f_y) via the active backend."""
+    return _DISPATCH[_active_name]['grad'](f, Lx, Ly)
+
+
+def laplacian(f, Lx, Ly):
+    """Laplacian Δf = f_xx + f_yy via the active backend."""
+    return _DISPATCH[_active_name]['laplacian'](f, Lx, Ly)
+
+
+def hessian(f, Lx, Ly):
+    """Hessian (f_xx, f_xy, f_yy) via the active backend."""
+    return _DISPATCH[_active_name]['hessian'](f, Lx, Ly)
+
+
+def bilaplacian(f, Lx, Ly):
+    """Bilaplacian Δ²f via the active backend."""
+    return _DISPATCH[_active_name]['bilaplacian'](f, Lx, Ly)
+
+
+def trilaplacian(f, Lx, Ly):
+    """Trilaplacian Δ³f via the active backend."""
+    return _DISPATCH[_active_name]['trilaplacian'](f, Lx, Ly)
+
+
+def third_order(f, Lx, Ly):
+    """Third-order partial derivatives (f_xxx, f_xxy, f_xyy, f_yyy) via the active backend."""
+    return _DISPATCH[_active_name]['third_order'](f, Lx, Ly)

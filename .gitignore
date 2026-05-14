@@ -1,0 +1,59 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.env
+.venv
+venv/
+env/
+ENV/
+.Python
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Notebook outputs and large arrays
+*.npy
+*.npz
+*.h5
+*.hdf5
+
+# Generated notebook result folders
+notebooks/**/results/
+notebooks/results/
+results/
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# IDE/editor
+.vscode/
+.idea/
+*.sublime-*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*~
+*.swp
+*.tmp
+*.log
+
+# Compiled extensions / binaries
+*.so
+*.dylib
+*.dll
+*.exe
