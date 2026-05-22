@@ -9,14 +9,14 @@ Provides:
 import numpy as np
 
 
-def print_pde(w, descriptions, lhs='f_t'):
+def print_pde(w, descriptions, lhs="f_t"):
     """Pretty-print an identified PDE from coefficient vector w."""
     terms = [(c, d) for c, d in zip(w, descriptions) if abs(c) > 1e-10]
     if not terms:
-        print(f'{lhs} = 0')
+        print(f"{lhs} = 0")
         return
-    rhs = ' + '.join(f'({c:+.5f}){d}' for c, d in terms)
-    print(f'{lhs} = {rhs}')
+    rhs = " + ".join(f"({c:+.5f}){d}" for c, d in terms)
+    print(f"{lhs} = {rhs}")
 
 
 def rotation_90(f):

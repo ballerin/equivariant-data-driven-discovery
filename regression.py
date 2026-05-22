@@ -30,8 +30,7 @@ def STRidge(X0, y, lam, maxit, tol, normalize=2):
     y = y.ravel()
 
     if normalize != 0:
-        Mreg = np.array([1.0 / (np.linalg.norm(X0[:, i], normalize) + 1e-14)
-                         for i in range(d)])
+        Mreg = np.array([1.0 / (np.linalg.norm(X0[:, i], normalize) + 1e-14) for i in range(d)])
         for i in range(d):
             X[:, i] = Mreg[i] * X0[:, i]
     else:
@@ -49,8 +48,9 @@ def STRidge(X0, y, lam, maxit, tol, normalize=2):
     return Mreg * w
 
 
-def TrainSTRidge(R, ut, lam, d_tol, maxit=25, STR_iters=10,
-                 l0_penalty=None, normalize=2, split=0.8):
+def TrainSTRidge(
+    R, ut, lam, d_tol, maxit=25, STR_iters=10, l0_penalty=None, normalize=2, split=0.8
+):
     """Train STRidge with cross-validation over the sparsity tolerance.
 
     Parameters
@@ -81,14 +81,12 @@ def TrainSTRidge(R, ut, lam, d_tol, maxit=25, STR_iters=10,
         l0_penalty = 0.001 * np.linalg.cond(R)
 
     w_best = np.linalg.lstsq(Rtr, ytr, rcond=None)[0]
-    err_best = (np.linalg.norm(yte - Rte @ w_best) +
-                l0_penalty * np.count_nonzero(w_best))
+    err_best = np.linalg.norm(yte - Rte @ w_best) + l0_penalty * np.count_nonzero(w_best)
     tol = float(d_tol)
 
     for _ in range(maxit):
         w = STRidge(Rtr, ytr, lam, STR_iters, tol, normalize)
-        err = (np.linalg.norm(yte - Rte @ w) +
-               l0_penalty * np.count_nonzero(w))
+        err = np.linalg.norm(yte - Rte @ w) + l0_penalty * np.count_nonzero(w)
         if err <= err_best:
             err_best, w_best = err, w
             tol += d_tol

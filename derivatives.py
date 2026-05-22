@@ -26,31 +26,32 @@ Available backends
 """
 
 from contextlib import contextmanager
-import spectral_derivatives as _spectral
+
 import polynomial_derivatives as _polynomial
+import spectral_derivatives as _spectral
 
 # Dispatch table: backend name → dict of operation → function.
 # Each entry maps the neutral operation name to the backend-specific function.
 _DISPATCH = {
-    'spectral': {
-        'grad':         _spectral.spectral_grad,
-        'laplacian':    _spectral.spectral_laplacian,
-        'hessian':      _spectral.spectral_hessian,
-        'bilaplacian':  _spectral.spectral_bilaplacian,
-        'trilaplacian': _spectral.spectral_trilaplacian,
-        'third_order':  _spectral.spectral_third_order,
+    "spectral": {
+        "grad": _spectral.spectral_grad,
+        "laplacian": _spectral.spectral_laplacian,
+        "hessian": _spectral.spectral_hessian,
+        "bilaplacian": _spectral.spectral_bilaplacian,
+        "trilaplacian": _spectral.spectral_trilaplacian,
+        "third_order": _spectral.spectral_third_order,
     },
-    'polynomial': {
-        'grad':         _polynomial.polynomial_grad,
-        'laplacian':    _polynomial.polynomial_laplacian,
-        'hessian':      _polynomial.polynomial_hessian,
-        'bilaplacian':  _polynomial.polynomial_bilaplacian,
-        'trilaplacian': _polynomial.polynomial_trilaplacian,
-        'third_order':  _polynomial.polynomial_third_order,
+    "polynomial": {
+        "grad": _polynomial.polynomial_grad,
+        "laplacian": _polynomial.polynomial_laplacian,
+        "hessian": _polynomial.polynomial_hessian,
+        "bilaplacian": _polynomial.polynomial_bilaplacian,
+        "trilaplacian": _polynomial.polynomial_trilaplacian,
+        "third_order": _polynomial.polynomial_third_order,
     },
 }
 
-_active_name = 'spectral'   # default
+_active_name = "spectral"  # default
 
 
 def set_backend(name: str) -> None:
@@ -92,31 +93,39 @@ def use_backend(name: str):
 # Public derivative APIs — backend-neutral names.
 # ---------------------------------------------------------------------------
 
-def grad(f, Lx, Ly):
-    """Gradient (f_x, f_y) via the active backend."""
-    return _DISPATCH[_active_name]['grad'](f, Lx, Ly)
+
+def grad(f, Lx, Ly, prefilter_sigma=None):
+    """Gradient (f_x, f_y) via the active backend.
+
+    Parameters
+    ----------
+    prefilter_sigma : float or (float, float), optional
+        If provided, a periodic Gaussian prefilter (sigma in physical units)
+        is applied by the backend before differentiation.
+    """
+    return _DISPATCH[_active_name]["grad"](f, Lx, Ly, prefilter_sigma)
 
 
-def laplacian(f, Lx, Ly):
+def laplacian(f, Lx, Ly, prefilter_sigma=None):
     """Laplacian Δf = f_xx + f_yy via the active backend."""
-    return _DISPATCH[_active_name]['laplacian'](f, Lx, Ly)
+    return _DISPATCH[_active_name]["laplacian"](f, Lx, Ly, prefilter_sigma)
 
 
-def hessian(f, Lx, Ly):
+def hessian(f, Lx, Ly, prefilter_sigma=None):
     """Hessian (f_xx, f_xy, f_yy) via the active backend."""
-    return _DISPATCH[_active_name]['hessian'](f, Lx, Ly)
+    return _DISPATCH[_active_name]["hessian"](f, Lx, Ly, prefilter_sigma)
 
 
-def bilaplacian(f, Lx, Ly):
+def bilaplacian(f, Lx, Ly, prefilter_sigma=None):
     """Bilaplacian Δ²f via the active backend."""
-    return _DISPATCH[_active_name]['bilaplacian'](f, Lx, Ly)
+    return _DISPATCH[_active_name]["bilaplacian"](f, Lx, Ly, prefilter_sigma)
 
 
-def trilaplacian(f, Lx, Ly):
+def trilaplacian(f, Lx, Ly, prefilter_sigma=None):
     """Trilaplacian Δ³f via the active backend."""
-    return _DISPATCH[_active_name]['trilaplacian'](f, Lx, Ly)
+    return _DISPATCH[_active_name]["trilaplacian"](f, Lx, Ly, prefilter_sigma)
 
 
-def third_order(f, Lx, Ly):
+def third_order(f, Lx, Ly, prefilter_sigma=None):
     """Third-order partial derivatives (f_xxx, f_xxy, f_xyy, f_yyy) via the active backend."""
-    return _DISPATCH[_active_name]['third_order'](f, Lx, Ly)
+    return _DISPATCH[_active_name]["third_order"](f, Lx, Ly, prefilter_sigma)

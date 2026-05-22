@@ -33,12 +33,13 @@ def _wavenumbers_2d(Nx, Ny, Lx, Ly):
     """Return 2-D wavenumber grids (KX, KY) for an (Nx, Ny) FFT grid."""
     kx = 2.0 * np.pi / Lx * np.fft.fftfreq(Nx) * Nx
     ky = 2.0 * np.pi / Ly * np.fft.fftfreq(Ny) * Ny
-    return np.meshgrid(kx, ky, indexing='ij')
+    return np.meshgrid(kx, ky, indexing="ij")
 
 
 # -----------------------------------------------------------------------
 # Library builders
 # -----------------------------------------------------------------------
+
 
 def build_equivariant_library(f, Lx, Ly, max_p=2, max_n=3):
     """Build the equivariant library matrix for a 2-D scalar field f.
@@ -104,7 +105,7 @@ def build_standard_library(f, Lx, Ly, max_order=4, max_poly=3):
     """
     method = _derivatives.get_backend()
     Nx, Ny = f.shape
-    if method == 'spectral':
+    if method == "spectral":
         KX, KY = _wavenumbers_2d(Nx, Ny, Lx, Ly)
         fh = np.fft.fft2(f)
 
@@ -115,16 +116,16 @@ def build_standard_library(f, Lx, Ly, max_order=4, max_poly=3):
 
     derivs, deriv_names = [], []
     for a, b in multi_indices:
-        if method == 'spectral':
-            d_hat = (1j * KX)**a * (1j * KY)**b * fh
+        if method == "spectral":
+            d_hat = (1j * KX) ** a * (1j * KY) ** b * fh
             deriv = np.real(np.fft.ifft2(d_hat))
         else:
             if a + b == 0:
                 deriv = f.copy()
             else:
                 deriv = poly_partial(f, Lx, Ly, a, b)
-        name = (('x' * a) + ('y' * b)) if (a + b) > 0 else '1'
-        name = f'f_{name}' if (a + b) > 0 else '1'
+        name = (("x" * a) + ("y" * b)) if (a + b) > 0 else "1"
+        name = f"f_{name}" if (a + b) > 0 else "1"
         derivs.append(deriv)
         deriv_names.append(name)
 
@@ -136,9 +137,9 @@ def build_standard_library(f, Lx, Ly, max_order=4, max_poly=3):
             if p == 0:
                 desc = dname
             elif p == 1:
-                desc = f'f·{dname}' if dname != '1' else 'f'
+                desc = f"f·{dname}" if dname != "1" else "f"
             else:
-                desc = f'f^{p}·{dname}' if dname != '1' else f'f^{p}'
+                desc = f"f^{p}·{dname}" if dname != "1" else f"f^{p}"
             cols.append(col)
             descs.append(desc)
 
@@ -180,28 +181,28 @@ def build_standard_library_1d(u, L, max_deriv=3, max_poly=3):
     N = len(u)
 
     derivs = [np.ones(N)]
-    deriv_names = ['1']
-    if method == 'spectral':
+    deriv_names = ["1"]
+    if method == "spectral":
         k = np.fft.fftfreq(N) * N * (2 * np.pi / L)
         uhat = np.fft.fft(u)
         for d in range(1, max_deriv + 1):
             derivs.append(np.real(np.fft.ifft((1j * k) ** d * uhat)))
-            deriv_names.append('u_' + 'x' * d)
+            deriv_names.append("u_" + "x" * d)
     else:
         for d in range(1, max_deriv + 1):
             derivs.append(poly_partial_1d(u, L, d))
-            deriv_names.append('u_' + 'x' * d)
+            deriv_names.append("u_" + "x" * d)
 
     cols, descs = [], []
     for d_arr, d_name in zip(derivs, deriv_names):
         for p in range(max_poly + 1):
-            col = u ** p * d_arr
+            col = u**p * d_arr
             if p == 0:
                 desc = d_name
             elif p == 1:
-                desc = f'u*{d_name}' if d_name != '1' else 'u'
+                desc = f"u*{d_name}" if d_name != "1" else "u"
             else:
-                desc = f'u^{p}*{d_name}' if d_name != '1' else f'u^{p}'
+                desc = f"u^{p}*{d_name}" if d_name != "1" else f"u^{p}"
             cols.append(col)
             descs.append(desc)
 

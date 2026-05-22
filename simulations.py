@@ -31,16 +31,15 @@ dynamical noise (``dyn_noise > 0``)
 
 import numpy as np
 
-
 # ---------------------------------------------------------------------------
 # Internal IMEX kernel
 # ---------------------------------------------------------------------------
+
 
 def _imex_step(f, nonlin_fn, denom, dt, dyn_noise, rng):
     """Single IMEX step: implicit linear + explicit nonlinear + optional noise."""
     fhat = np.fft.fft2(f) + dt * np.fft.fft2(nonlin_fn(f))
     if dyn_noise > 0.0:
-        N = f.shape[0]
         xi = rng.standard_normal(f.shape)
         fhat += np.sqrt(dt) * dyn_noise * np.fft.fft2(xi)
     return np.real(np.fft.ifft2(fhat / denom))
@@ -61,6 +60,7 @@ def _run(f0, nonlin_fn, denom, dt, n_steps, save_every, dyn_noise, rng):
 # ---------------------------------------------------------------------------
 # Allen-Cahn
 # ---------------------------------------------------------------------------
+
 
 def allen_cahn(
     N=64,
@@ -116,9 +116,8 @@ def allen_cahn(
     """
     rng = np.random.default_rng(seed)
 
-    x = np.linspace(0, L, N, endpoint=False)
     k = np.fft.fftfreq(N) * N * (2 * np.pi / L)
-    KX, KY = np.meshgrid(k, k, indexing='ij')
+    KX, KY = np.meshgrid(k, k, indexing="ij")
     K2 = KX**2 + KY**2
 
     denom = 1.0 + eps**2 * K2 * dt
@@ -129,7 +128,7 @@ def allen_cahn(
     def nonlin(f):
         return f - f**3
 
-    n_steps = int(round(T_end / dt))+1 # +1 to ensure we compute also time T_end
+    n_steps = int(round(T_end / dt)) + 1  # +1 to ensure we compute also time T_end
     snapshots, times = _run(f0, nonlin, denom, dt, n_steps, save_every, dyn_noise, rng)
 
     if obs_noise > 0.0:
@@ -143,6 +142,7 @@ def allen_cahn(
 # ---------------------------------------------------------------------------
 # Swift-Hohenberg
 # ---------------------------------------------------------------------------
+
 
 def swift_hohenberg(
     N=64,
@@ -169,9 +169,8 @@ def swift_hohenberg(
     """
     rng = np.random.default_rng(seed)
 
-    x = np.linspace(0, L, N, endpoint=False)
     k = np.fft.fftfreq(N) * N * (2 * np.pi / L)
-    KX, KY = np.meshgrid(k, k, indexing='ij')
+    KX, KY = np.meshgrid(k, k, indexing="ij")
     K2 = KX**2 + KY**2
     K4 = K2**2
 
@@ -184,7 +183,7 @@ def swift_hohenberg(
 
     def nonlin(f):
         # cubic reaction term
-        return -f**3
+        return -(f**3)
 
     n_steps = int(round(T_end / dt)) + 1
     snapshots, times = _run(f0, nonlin, denom, dt, n_steps, save_every, dyn_noise, rng)
@@ -199,6 +198,7 @@ def swift_hohenberg(
 # ---------------------------------------------------------------------------
 # Kuramoto–Sivashinsky
 # ---------------------------------------------------------------------------
+
 
 def kuramoto_sivashinsky(
     N=64,
@@ -221,9 +221,8 @@ def kuramoto_sivashinsky(
     """
     rng = np.random.default_rng(seed)
 
-    x = np.linspace(0, L, N, endpoint=False)
     k = np.fft.fftfreq(N) * N * (2 * np.pi / L)
-    KX, KY = np.meshgrid(k, k, indexing='ij')
+    KX, KY = np.meshgrid(k, k, indexing="ij")
     K2 = KX**2 + KY**2
     K4 = K2**2
 
@@ -249,9 +248,11 @@ def kuramoto_sivashinsky(
 
     return snapshots, times
 
+
 # ---------------------------------------------------------------------------
 # Cahn-Hilliard
 # ---------------------------------------------------------------------------
+
 
 def cahn_hilliard(
     N=64,
@@ -286,7 +287,7 @@ def cahn_hilliard(
     rng = np.random.default_rng(seed)
 
     k = np.fft.fftfreq(N) * N * (2 * np.pi / L)
-    KX, KY = np.meshgrid(k, k, indexing='ij')
+    KX, KY = np.meshgrid(k, k, indexing="ij")
     K2 = KX**2 + KY**2
     K4 = K2**2
 
@@ -302,7 +303,7 @@ def cahn_hilliard(
         # We compute Delta(f^3 - f) spectrally and return the real-space result.
         return np.real(np.fft.ifft2(-K2 * np.fft.fft2(f**3 - f)))
 
-    n_steps = int(round(T_end / dt))+1 # +1 to ensure we compute also time T_end
+    n_steps = int(round(T_end / dt)) + 1  # +1 to ensure we compute also time T_end
     snapshots, times = _run(f0, nonlin, denom, dt, n_steps, save_every, dyn_noise, rng)
 
     if obs_noise > 0.0:
@@ -315,6 +316,7 @@ def cahn_hilliard(
 # ---------------------------------------------------------------------------
 # Porous Medium Equation (PME, m=2)
 # ---------------------------------------------------------------------------
+
 
 def porous_medium(
     N=64,
@@ -366,13 +368,13 @@ def porous_medium(
 
     x = np.linspace(0, L, N, endpoint=False)
     k = np.fft.fftfreq(N) * N * (2 * np.pi / L)
-    KX, KY = np.meshgrid(k, k, indexing='ij')
-    K2 = KX ** 2 + KY ** 2
+    KX, KY = np.meshgrid(k, k, indexing="ij")
+    K2 = KX**2 + KY**2
 
     if f0 is None:
-        X, Y = np.meshgrid(x, x, indexing='ij')
+        X, Y = np.meshgrid(x, x, indexing="ij")
         cx, cy, sigma = L / 2, L / 2, L / 8
-        f0 = np.exp(-((X - cx) ** 2 + (Y - cy) ** 2) / (2 * sigma ** 2))
+        f0 = np.exp(-((X - cx) ** 2 + (Y - cy) ** 2) / (2 * sigma**2))
         f0 /= f0.max()
 
     f = f0.copy()
@@ -384,7 +386,7 @@ def porous_medium(
         Df = np.real(np.fft.ifft2(-K2 * fhat))
         fx = np.real(np.fft.ifft2(1j * KX * fhat))
         fy = np.real(np.fft.ifft2(1j * KY * fhat))
-        rhs = f ** 2 * Df + 2.0 * f * (fx ** 2 + fy ** 2)
+        rhs = f**2 * Df + 2.0 * f * (fx**2 + fy**2)
         f = np.clip(f + dt * rhs, 0.0, None)
         if step % save_every == 0:
             snapshots_list.append(f.copy())
@@ -395,9 +397,7 @@ def porous_medium(
 
     if obs_noise > 0.0:
         sigma_n = obs_noise * snapshots.std()
-        snapshots = np.clip(
-            snapshots + sigma_n * rng.standard_normal(snapshots.shape), 0.0, None
-        )
+        snapshots = np.clip(snapshots + sigma_n * rng.standard_normal(snapshots.shape), 0.0, None)
 
     return snapshots, times
 
@@ -405,6 +405,7 @@ def porous_medium(
 # ---------------------------------------------------------------------------
 # Helpers for regression dataset preparation
 # ---------------------------------------------------------------------------
+
 
 def make_regression_data(snapshots, times, n_per_snap=200, skip_fraction=0.0, seed=0):
     """

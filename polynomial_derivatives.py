@@ -45,9 +45,9 @@ sensitive to noise.  When working with noisy data, consider restricting to
 max_p ≤ 2 to avoid the highest-order operators.
 """
 
-import numpy as np
 from math import factorial
 
+import numpy as np
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -56,11 +56,11 @@ from math import factorial
 # Default (deg, r) per derivative order.
 # Invariant: (2r+1)^2  >=  (deg+1)(deg+2)/2   (more points than monomials).
 _DEFAULTS = {
-    1: (3, 2),   # 25 pts,  10 mono
-    2: (3, 2),   # 25 pts,  10 mono
-    3: (4, 2),   # 25 pts,  15 mono
-    4: (5, 3),   # 49 pts,  21 mono
-    6: (7, 4),   # 81 pts,  36 mono
+    1: (3, 2),  # 25 pts,  10 mono
+    2: (3, 2),  # 25 pts,  10 mono
+    3: (4, 2),  # 25 pts,  15 mono
+    4: (5, 3),  # 49 pts,  21 mono
+    6: (7, 4),  # 81 pts,  36 mono
 }
 
 
@@ -82,18 +82,17 @@ def _poly_kernel(a, b, deg, r, dx, dy):
         the requested partial derivative at every grid point.
     """
     offsets = list(range(-r, r + 1))
-    pts = [(di, dj) for di in offsets for dj in offsets]           # (2r+1)² rows
+    pts = [(di, dj) for di in offsets for dj in offsets]  # (2r+1)² rows
     monomials = [(p, q) for p in range(deg + 1) for q in range(deg + 1 - p)]
 
     # Vandermonde matrix: V[pt, mono] = (di*dx)^p * (dj*dy)^q
     # Note: 0.0**0 == 1.0 in Python, so the constant monomial is handled correctly.
     V = np.array(
-        [[(di * dx) ** p * (dj * dy) ** q for p, q in monomials]
-         for di, dj in pts],
+        [[(di * dx) ** p * (dj * dy) ** q for p, q in monomials] for di, dj in pts],
         dtype=float,
-    )   # shape (n_pts, n_mono)
+    )  # shape (n_pts, n_mono)
 
-    Vp = np.linalg.pinv(V)   # shape (n_mono, n_pts)
+    Vp = np.linalg.pinv(V)  # shape (n_mono, n_pts)
 
     # Row of Vp corresponding to monomial x^a y^b gives the LS coefficient c_{ab}.
     # The derivative is a! b! c_{ab}.
@@ -124,26 +123,61 @@ def _deriv(f, Lx, Ly, a, b, deg, r):
     return _apply(f, _poly_kernel(a, b, deg, r, dx, dy))
 
 
+def _apply_prefilter(f, Lx, Ly, prefilter_sigma):
+    """Apply a periodic Gaussian prefilter to 2-D field `f`.
+
+    `prefilter_sigma` is specified in physical units (same as Lx/Ly).
+    If None or 0, the original array is returned.
+    """
+    if not prefilter_sigma:
+        return f
+    Nx, Ny = f.shape
+    # Build physical wavenumbers matching the spectral backend convention
+    kx = 2.0 * np.pi / Lx * np.fft.fftfreq(Nx) * Nx
+    ky = 2.0 * np.pi / Ly * np.fft.fftfreq(Ny) * Ny
+    KX, KY = np.meshgrid(kx, ky, indexing="ij")
+    if np.isscalar(prefilter_sigma):
+        sx = float(prefilter_sigma)
+        sy = float(prefilter_sigma)
+    else:
+        sx = float(prefilter_sigma[0])
+        sy = float(prefilter_sigma[1])
+    fh = np.fft.fft2(f)
+    G = np.exp(-0.5 * ((sx * KX) ** 2 + (sy * KY) ** 2))
+    return np.real(np.fft.ifft2(fh * G))
+
+
 # ---------------------------------------------------------------------------
 # Public APIs
 # ---------------------------------------------------------------------------
 
-def polynomial_grad(f, Lx, Ly):
-    """Gradient (f_x, f_y) via local degree-3 polynomial fit (5×5 stencil)."""
+
+def polynomial_grad(f, Lx, Ly, prefilter_sigma=None):
+    """Gradient (f_x, f_y) via local degree-3 polynomial fit (5×5 stencil).
+
+    Parameters
+    ----------
+    prefilter_sigma : float or (float, float), optional
+        If provided, apply a periodic Gaussian prefilter (sigma in physical
+        units) before fitting.
+    """
+    f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     deg, r = _DEFAULTS[1]
     fx = _deriv(f, Lx, Ly, 1, 0, deg, r)
     fy = _deriv(f, Lx, Ly, 0, 1, deg, r)
     return fx, fy
 
 
-def polynomial_laplacian(f, Lx, Ly):
+def polynomial_laplacian(f, Lx, Ly, prefilter_sigma=None):
     """Laplacian Δf = f_xx + f_yy via local degree-3 polynomial fit (5×5 stencil)."""
+    f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     deg, r = _DEFAULTS[2]
     return _deriv(f, Lx, Ly, 2, 0, deg, r) + _deriv(f, Lx, Ly, 0, 2, deg, r)
 
 
-def polynomial_hessian(f, Lx, Ly):
+def polynomial_hessian(f, Lx, Ly, prefilter_sigma=None):
     """Hessian (f_xx, f_xy, f_yy) via local degree-3 polynomial fit (5×5 stencil)."""
+    f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     deg, r = _DEFAULTS[2]
     fxx = _deriv(f, Lx, Ly, 2, 0, deg, r)
     fxy = _deriv(f, Lx, Ly, 1, 1, deg, r)
@@ -151,8 +185,9 @@ def polynomial_hessian(f, Lx, Ly):
     return fxx, fxy, fyy
 
 
-def polynomial_bilaplacian(f, Lx, Ly):
+def polynomial_bilaplacian(f, Lx, Ly, prefilter_sigma=None):
     """Bilaplacian Δ²f = f_xxxx + 2f_xxyy + f_yyyy via degree-5 fit (7×7 stencil)."""
+    f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     deg, r = _DEFAULTS[4]
     return (
         _deriv(f, Lx, Ly, 4, 0, deg, r)
@@ -161,25 +196,27 @@ def polynomial_bilaplacian(f, Lx, Ly):
     )
 
 
-def polynomial_trilaplacian(f, Lx, Ly):
+def polynomial_trilaplacian(f, Lx, Ly, prefilter_sigma=None):
     """Trilaplacian Δ³f via local degree-7 polynomial fit (9×9 stencil).
 
     Warning: sixth-order derivative estimation from local polynomials amplifies
     noise substantially.  For noisy-data experiments, consider restricting to
     max_p <= 2 (which avoids trilaplacian entirely).
     """
+    f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     deg, r = _DEFAULTS[6]
     return (
-          _deriv(f, Lx, Ly, 6, 0, deg, r)
+        _deriv(f, Lx, Ly, 6, 0, deg, r)
         + 3 * _deriv(f, Lx, Ly, 4, 2, deg, r)
         + 3 * _deriv(f, Lx, Ly, 2, 4, deg, r)
-        +     _deriv(f, Lx, Ly, 0, 6, deg, r)
+        + _deriv(f, Lx, Ly, 0, 6, deg, r)
     )
 
 
-def polynomial_third_order(f, Lx, Ly):
+def polynomial_third_order(f, Lx, Ly, prefilter_sigma=None):
     """Third-order partial derivatives (f_xxx, f_xxy, f_xyy, f_yyy)
     via local degree-4 polynomial fit (5×5 stencil)."""
+    f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     deg, r = _DEFAULTS[3]
     fxxx = _deriv(f, Lx, Ly, 3, 0, deg, r)
     fxxy = _deriv(f, Lx, Ly, 2, 1, deg, r)
@@ -269,12 +306,13 @@ def poly_partial_1d(u, L, d, deg=None, r=None):
     offsets = list(range(-r, r + 1))
 
     # 1-D Vandermonde: V[pt, mono] = (di*dx)^p for p = 0, ..., deg
-    V = np.array([[( di * dx) ** p for p in range(deg + 1)]
-                  for di in offsets], dtype=float)   # (2r+1, deg+1)
-    Vp = np.linalg.pinv(V)   # (deg+1, 2r+1)
+    V = np.array(
+        [[(di * dx) ** p for p in range(deg + 1)] for di in offsets], dtype=float
+    )  # (2r+1, deg+1)
+    Vp = np.linalg.pinv(V)  # (deg+1, 2r+1)
 
     # Row d of Vp gives the LS coefficient c_d; derivative = d! * c_d.
-    kernel = Vp[d] * factorial(d)   # shape (2r+1,)
+    kernel = Vp[d] * factorial(d)  # shape (2r+1,)
 
     # Apply as a periodic 1-D correlation.
     result = np.zeros(N, dtype=float)

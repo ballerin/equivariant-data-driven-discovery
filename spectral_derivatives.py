@@ -8,13 +8,14 @@ is a trigonometric polynomial (i.e. band-limited to the Nyquist frequency).
 
 Method
 ------
-Differentiation in Fourier space exploits the identity
+Differentiation in Fourier space exploits the derivative property for which
+derivatives correspond to multiplication by powers of i·k:
 
-    ∂^a_x ∂^b_y f  ↔  (i kx)^a (i ky)^b  f̂(kx, ky)
+    ∂^a_x ∂^b_y f  ↔  (i k_x)^a (i k_y)^b  f̂(k_x, k_y)
 
-where f̂ = FFT2(f) and kx, ky are the 2-D wavenumber grids.  The result is
+where f̂ = FFT2(f) and k_x, k_y are the 2-D wavenumber grids.  The result is
 obtained by a single forward FFT, multiplication by the appropriate polynomial
-in i·kx and i·ky, and one inverse FFT.
+in i·k_x and i·k_y, and one inverse FFT.
 
 Wavenumber convention
 ---------------------
@@ -35,116 +36,162 @@ Accuracy and limitations
   always periodic, so this is not an issue in practice).
 - For noisy data the spectral amplification factor |k|^order grows rapidly
   with derivative order, strongly amplifying high-frequency noise.  In that
-  regime consider switching to polynomial_derivatives.py via the
-  derivatives.set_backend('polynomial') call.
+  regime consider switching to other methods of differentiation.
 
 Derivative order → Fourier multiplier
 --------------------------------------
   Order 1  (grad)         : multiplier  i·k          (complex, real part taken)
-  Order 2  (Hessian, Δ)   : multiplier  −k²          (real)
-  Order 3  (3rd partials) : multiplier  −i·k³        (complex, real part taken)
+  Order 2  (Hessian, Δ)   : multiplier  -k²          (real)
+  Order 3  (3rd partials) : multiplier  -i·k³        (complex, real part taken)
   Order 4  (Δ²)           : multiplier  +k⁴          (real)
-  Order 6  (Δ³)           : multiplier  −k⁶          (real)
+  Order 6  (Δ³)           : multiplier  -k⁶          (real)
 """
 
 import numpy as np
 
 
 def _wavenumbers(N, L):
-    """1-D wavenumbers for an N-point FFT on a domain of length L.
+    """
+    1-D wavenumbers for an N-point FFT on a domain of length L.
 
     Returns k_j = (2π / L) · fftfreq(N) · N, matching NumPy's FFT ordering.
     """
     return 2.0 * np.pi / L * np.fft.fftfreq(N) * N
 
 
-def spectral_grad(f, Lx, Ly):
-    """Gradient (f_x, f_y) via FFT.
+def _apply_prefilter(f, Lx, Ly, prefilter_sigma):
+    """Apply a periodic Gaussian prefilter to `f`.
 
-    Fourier multiplier: (i·kx, i·ky).  One FFT2 forward, two IFFT2 back.
+    Parameters
+    ----------
+    f : ndarray
+        Input 2-D field.
+    Lx, Ly : float
+        Domain lengths.
+    prefilter_sigma : float or (float, float) or None
+        Gaussian standard deviation in physical units. If None or 0, no
+        filtering is performed. If a scalar is provided it is used for both
+        axes. The filter is applied with `mode='wrap'` to respect periodicity.
     """
+    if not prefilter_sigma:
+        return f
+    Nx, Ny = f.shape
+    # convert physical sigma to spectral multiplier: multiply FFT by
+    # exp(-0.5 * (sigma^2 * k^2)). Here kx,ky are physical wavenumbers.
+    kx = _wavenumbers(Nx, Lx)
+    ky = _wavenumbers(Ny, Ly)
+    KX, KY = np.meshgrid(kx, ky, indexing="ij")
+    if np.isscalar(prefilter_sigma):
+        sx = float(prefilter_sigma)
+        sy = float(prefilter_sigma)
+    else:
+        sx = float(prefilter_sigma[0])
+        sy = float(prefilter_sigma[1])
+    fh = np.fft.fft2(f)
+    G = np.exp(-0.5 * ((sx * KX) ** 2 + (sy * KY) ** 2))
+    return np.real(np.fft.ifft2(fh * G))
+
+
+def spectral_grad(f, Lx, Ly, prefilter_sigma=None):
+    """
+    Gradient (f_x, f_y) via FFT.
+
+    Fourier multiplier: (i·k_x, i·k_y).  One FFT2 forward, two IFFT2 back.
+    """
+    # optionally prefilter in physical units (same units as Lx/Ly)
+    f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     Nx, Ny = f.shape
     kx = _wavenumbers(Nx, Lx)
     ky = _wavenumbers(Ny, Ly)
-    KX, KY = np.meshgrid(kx, ky, indexing='ij')
+    KX, KY = np.meshgrid(kx, ky, indexing="ij")
     fh = np.fft.fft2(f)
     fx = np.real(np.fft.ifft2(1j * KX * fh))
     fy = np.real(np.fft.ifft2(1j * KY * fh))
     return fx, fy
 
 
-def spectral_laplacian(f, Lx, Ly):
-    """Laplacian Δf = f_xx + f_yy via FFT.
-
-    Fourier multiplier: −(kx² + ky²) = −|k|².
+def spectral_laplacian(f, Lx, Ly, prefilter_sigma=None):
     """
+    Laplacian Δf = f_xx + f_yy via FFT.
+
+    Fourier multiplier: −(k_x² + k_y²) = −|k|².
+    """
+    f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     Nx, Ny = f.shape
     kx = _wavenumbers(Nx, Lx)
     ky = _wavenumbers(Ny, Ly)
-    KX, KY = np.meshgrid(kx, ky, indexing='ij')
+    KX, KY = np.meshgrid(kx, ky, indexing="ij")
     K2 = KX**2 + KY**2
     return np.real(np.fft.ifft2(-K2 * np.fft.fft2(f)))
 
 
-def spectral_hessian(f, Lx, Ly):
-    """Hessian entries (f_xx, f_xy, f_yy) via FFT.
-
-    Fourier multipliers: −kx², −kx·ky, −ky².  One FFT2 forward, three IFFT2.
+def spectral_hessian(f, Lx, Ly, prefilter_sigma=None):
     """
+    Hessian entries (f_xx, f_xy, f_yy) via FFT.
+
+    Fourier multipliers: −k_x², −k_x·k_y, −k_y².  One FFT2 forward, three IFFT2.
+    """
+    f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     Nx, Ny = f.shape
     kx = _wavenumbers(Nx, Lx)
     ky = _wavenumbers(Ny, Ly)
-    KX, KY = np.meshgrid(kx, ky, indexing='ij')
+    KX, KY = np.meshgrid(kx, ky, indexing="ij")
     fh = np.fft.fft2(f)
-    fxx = np.real(np.fft.ifft2(-KX**2 * fh))
+    fxx = np.real(np.fft.ifft2(-(KX**2) * fh))
     fxy = np.real(np.fft.ifft2(-KX * KY * fh))
-    fyy = np.real(np.fft.ifft2(-KY**2 * fh))
+    fyy = np.real(np.fft.ifft2(-(KY**2) * fh))
     return fxx, fxy, fyy
 
 
-def spectral_bilaplacian(f, Lx, Ly):
-    """Bilaplacian Δ²f = f_xxxx + 2f_xxyy + f_yyyy via FFT.
-
-    Fourier multiplier: (kx² + ky²)² = |k|⁴  (positive — even order).
+def spectral_bilaplacian(f, Lx, Ly, prefilter_sigma=None):
     """
+    Bilaplacian Δ²f = f_xxxx + 2f_xxyy + f_yyyy via FFT.
+
+    Fourier multiplier: (k_x² + k_y²)² = |k|⁴  (positive — even order).
+    """
+    f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     Nx, Ny = f.shape
     kx = _wavenumbers(Nx, Lx)
     ky = _wavenumbers(Ny, Ly)
-    KX, KY = np.meshgrid(kx, ky, indexing='ij')
+    KX, KY = np.meshgrid(kx, ky, indexing="ij")
     K2 = KX**2 + KY**2
     return np.real(np.fft.ifft2(K2**2 * np.fft.fft2(f)))
 
 
-def spectral_trilaplacian(f, Lx, Ly):
-    """Trilaplacian Δ³f = f_xxxxxx + … via FFT.
-
-    Fourier multiplier: −(kx² + ky²)³ = −|k|⁶  (negative — odd power of Δ).
+def spectral_trilaplacian(f, Lx, Ly, prefilter_sigma=None):
     """
+    Trilaplacian Δ³f via FFT.
+
+    Fourier multiplier: −(k_x² + k_y²)³ = −|k|⁶  (negative — odd power of Δ).
+    """
+    f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     Nx, Ny = f.shape
     kx = _wavenumbers(Nx, Lx)
     ky = _wavenumbers(Ny, Ly)
-    KX, KY = np.meshgrid(kx, ky, indexing='ij')
+    KX, KY = np.meshgrid(kx, ky, indexing="ij")
     K2 = KX**2 + KY**2
-    return np.real(np.fft.ifft2(-K2**3 * np.fft.fft2(f)))
+    return np.real(np.fft.ifft2(-(K2**3) * np.fft.fft2(f)))
 
 
-def spectral_third_order(f, Lx, Ly):
-    """Third-order partial derivatives (f_xxx, f_xxy, f_xyy, f_yyy) via FFT.
+def spectral_third_order(f, Lx, Ly, prefilter_sigma=None):
+    """
+    Third-order partial derivatives (f_xxx, f_xxy, f_xyy, f_yyy) via FFT.
 
     Fourier multiplier for ∂^a_x ∂^b_y with a + b = 3:
 
-        (i·kx)^a (i·ky)^b = i³ · kx^a · ky^b = −i · kx^a · ky^b
+        (i·k_x)^a (i·k_y)^b = i³ · k_x^a · k_y^b = −i · k_x^a · k_y^b
 
-    so the multipliers are −i·kx³, −i·kx²·ky, −i·kx·ky², −i·ky³.
+    so the multipliers are −i·k_x³, −i·k_x²·k_y, −i·k_x·k_y², −i·k_y³.
     One FFT2 forward, four IFFT2 back.
     """
+    f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     Nx, Ny = f.shape
     kx = _wavenumbers(Nx, Lx)
     ky = _wavenumbers(Ny, Ly)
-    KX, KY = np.meshgrid(kx, ky, indexing='ij')
+    KX, KY = np.meshgrid(kx, ky, indexing="ij")
     fh = np.fft.fft2(f)
-    fxxx = np.real(np.fft.ifft2(-1j * KX**3         * fh))
-    fxxy = np.real(np.fft.ifft2(-1j * KX**2 * KY    * fh))
-    fxyy = np.real(np.fft.ifft2(-1j * KX    * KY**2 * fh))
-    fyyy = np.real(np.fft.ifft2(-1j *         KY**3 * fh))
+    fxxx = np.real(np.fft.ifft2(-1j * KX**3 * fh))
+    fxxy = np.real(np.fft.ifft2(-1j * KX**2 * KY * fh))
+    fxyy = np.real(np.fft.ifft2(-1j * KX * KY**2 * fh))
+    fyyy = np.real(np.fft.ifft2(-1j * KY**3 * fh))
     return fxxx, fxxy, fxyy, fyyy

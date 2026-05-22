@@ -55,15 +55,15 @@ independent in d≥3 (Theorem 2 of the paper).
 """
 
 import numpy as np
-from derivatives import (
-    grad,
-    laplacian,
-    hessian,
-    bilaplacian,
-    trilaplacian,
-    third_order,
-)
 
+from derivatives import (
+    bilaplacian,
+    grad,
+    hessian,
+    laplacian,
+    third_order,
+    trilaplacian,
+)
 
 # -----------------------------------------------------------------------
 # Private base operator functions  (no polynomial prefactor)
@@ -73,6 +73,7 @@ from derivatives import (
 
 # --- p = 0 ---
 
+
 def _op_const(f, Lx, Ly):
     """
     p=0, k=0. Empty graph: the constant 1.
@@ -80,6 +81,7 @@ def _op_const(f, Lx, Ly):
     Graph:  ∅
     """
     return np.ones_like(f)
+
 
 def _op_identity(f, Lx, Ly):
     """
@@ -89,7 +91,9 @@ def _op_identity(f, Lx, Ly):
     """
     return f.copy()
 
+
 # --- p = 1 ---
+
 
 def _op_Delta(f, Lx, Ly):
     """
@@ -116,6 +120,7 @@ def _op_grad_sq(f, Lx, Ly):
 
 
 # --- p = 2 ---
+
 
 def _op_bilap(f, Lx, Ly):
     """
@@ -170,6 +175,7 @@ def _op_hess_grad_grad(f, Lx, Ly):
 
 # --- p = 3 ---
 
+
 def _op_trilap(f, Lx, Ly):
     """
     p=3, k=1. One vertex with three loops: Δ³f.
@@ -198,6 +204,7 @@ def _op_hess_hess_Delta(f, Lx, Ly):
 
 # --- p = 3, connected operators ---
 
+
 def _op_nabla3_nabla3(f, Lx, Ly):
     """
     p=3, k=4. Star graph: one central vertex (degree 3) with three pendant vertices (degree 1).
@@ -211,7 +218,7 @@ def _op_nabla3_nabla3(f, Lx, Ly):
     """
     fxxx, fxxy, fxyy, fyyy = third_order(f, Lx, Ly)
     fx, fy = grad(f, Lx, Ly)
-    return fxxx*fx**3 + 3*fxxy*fx**2*fy + 3*fxyy*fx*fy**2 + fyyy*fy**3
+    return fxxx * fx**3 + 3 * fxxy * fx**2 * fy + 3 * fxyy * fx * fy**2 + fyyy * fy**3
 
 
 def _op_path_of_4(f, Lx, Ly):
@@ -225,7 +232,7 @@ def _op_path_of_4(f, Lx, Ly):
     """
     fx, fy = grad(f, Lx, Ly)
     fxx, fxy, fyy = hessian(f, Lx, Ly)
-    return (fxx*fx + fxy*fy)**2 + (fxy*fx + fyy*fy)**2
+    return (fxx * fx + fxy * fy) ** 2 + (fxy * fx + fyy * fy) ** 2
 
 
 def _op_triangle(f, Lx, Ly):
@@ -241,12 +248,13 @@ def _op_triangle(f, Lx, Ly):
               X---X
     """
     fxx, fxy, fyy = hessian(f, Lx, Ly)
-    return fxx**3 + fyy**3 + 3*fxy**2*(fxx + fyy)
+    return fxx**3 + fyy**3 + 3 * fxy**2 * (fxx + fyy)
 
 
 def _op_hess_inner_nabla3_grad(f, Lx, Ly):
     """
-    p=3, k=3. Double edge between two vertices, one of which also has a single edge to a third vertex.
+    p=3, k=3. Double edge between two vertices, one of which also has a single edge to a
+    third vertex.
     ⟨∇²f, ∇³f(·,·,∇f)⟩_F = Σ_{ijk} f_{ij} f_{ijk} f_k.
     Left vertex (degree 2) contributes ∇²f; center vertex (degree 3) contributes ∇³f;
     right pendant (degree 1) contributes ∇f contracted with the free index of the center.
@@ -257,9 +265,9 @@ def _op_hess_inner_nabla3_grad(f, Lx, Ly):
     fxxx, fxxy, fxyy, fyyy = third_order(f, Lx, Ly)
     fx, fy = grad(f, Lx, Ly)
     fxx, fxy, fyy = hessian(f, Lx, Ly)
-    gx = fxx*fxxx + 2*fxy*fxxy + fyy*fxyy  # Σ_{ij} f_{ij} f_{ijx}
-    gy = fxx*fxxy + 2*fxy*fxyy + fyy*fyyy   # Σ_{ij} f_{ij} f_{ijy}
-    return gx*fx + gy*fy
+    gx = fxx * fxxx + 2 * fxy * fxxy + fyy * fxyy  # Σ_{ij} f_{ij} f_{ijx}
+    gy = fxx * fxxy + 2 * fxy * fxyy + fyy * fyyy  # Σ_{ij} f_{ij} f_{ijy}
+    return gx * fx + gy * fy
 
 
 def _op_hess_grad_gradDelta(f, Lx, Ly):
@@ -277,7 +285,7 @@ def _op_hess_grad_gradDelta(f, Lx, Ly):
     Dfx, Dfy = grad(Df, Lx, Ly)
     fx, fy = grad(f, Lx, Ly)
     fxx, fxy, fyy = hessian(f, Lx, Ly)
-    return fxx*fx*Dfx + fxy*(fx*Dfy + fy*Dfx) + fyy*fy*Dfy
+    return fxx * fx * Dfx + fxy * (fx * Dfy + fy * Dfx) + fyy * fy * Dfy
 
 
 def _op_hessDelta_grad_grad(f, Lx, Ly):
@@ -293,7 +301,7 @@ def _op_hessDelta_grad_grad(f, Lx, Ly):
     Df = laplacian(f, Lx, Ly)
     Dfxx, Dfxy, Dfyy = hessian(Df, Lx, Ly)
     fx, fy = grad(f, Lx, Ly)
-    return Dfxx*fx**2 + 2*Dfxy*fx*fy + Dfyy*fy**2
+    return Dfxx * fx**2 + 2 * Dfxy * fx * fy + Dfyy * fy**2
 
 
 def _op_nabla3_norm_sq(f, Lx, Ly):
@@ -305,7 +313,7 @@ def _op_nabla3_norm_sq(f, Lx, Ly):
     Graph:  X≡≡≡X
     """
     fxxx, fxxy, fxyy, fyyy = third_order(f, Lx, Ly)
-    return fxxx**2 + 3*fxxy**2 + 3*fxyy**2 + fyyy**2
+    return fxxx**2 + 3 * fxxy**2 + 3 * fxyy**2 + fyyy**2
 
 
 def _op_gradDelta_sq(f, Lx, Ly):
@@ -325,7 +333,8 @@ def _op_gradDelta_sq(f, Lx, Ly):
 def _op_gradBilap_grad(f, Lx, Ly):
     """
     p=3, k=2. Single edge with two loops at one endpoint: ⟨∇Δ²f, ∇f⟩ = Σ_k (∂_k Δ²f) f_k.
-    The doubly-looped vertex (degree 5) contributes ∇Δ²f; the plain vertex (degree 1) contributes ∇f.
+    The doubly-looped vertex (degree 5) contributes ∇Δ²f; the plain vertex (degree 1)
+    contributes ∇f.
     Vertex degrees: 5, 1.
 
     Graph:  ↺↺
@@ -334,7 +343,7 @@ def _op_gradBilap_grad(f, Lx, Ly):
     Df2 = bilaplacian(f, Lx, Ly)
     Df2x, Df2y = grad(Df2, Lx, Ly)
     fx, fy = grad(f, Lx, Ly)
-    return Df2x*fx + Df2y*fy
+    return Df2x * fx + Df2y * fy
 
 
 # -----------------------------------------------------------------------
@@ -347,31 +356,31 @@ def _op_gradBilap_grad(f, Lx, Ly):
 
 CONNECTED_OPERATORS = {
     0: [
-        (_op_const,                  '1',                   0, False),  # empty graph
-        (_op_identity,               'f',                   1, False),  # isolated vertex
+        (_op_const, "1", 0, False),  # empty graph
+        (_op_identity, "f", 1, False),  # isolated vertex
     ],
     1: [
-        (_op_grad_sq,                '‖∇f‖²',               2, False),  # single edge
-        (_op_Delta,                  'Δf',                  1, False),  # single loop
+        (_op_grad_sq, "‖∇f‖²", 2, False),  # single edge
+        (_op_Delta, "Δf", 1, False),  # single loop
     ],
     2: [
-        (_op_hess_grad_grad,         '∇²f(∇f,∇f)',          3, False),  # path of length 2
-        (_op_hess_norm_sq,           '‖∇²f‖²',              2, False),  # double edge
-        (_op_grad_Delta_grad,        '⟨∇Δf,∇f⟩',            2, False),  # edge + loop
-        (_op_bilap,                  'Δ²f',                 1, False),  # double loop
+        (_op_hess_grad_grad, "∇²f(∇f,∇f)", 3, False),  # path of length 2
+        (_op_hess_norm_sq, "‖∇²f‖²", 2, False),  # double edge
+        (_op_grad_Delta_grad, "⟨∇Δf,∇f⟩", 2, False),  # edge + loop
+        (_op_bilap, "Δ²f", 1, False),  # double loop
     ],
     3: [
-        (_op_path_of_4,              '‖∇²f(∇f,·)‖²',        4, True),   # path-of-4 (P⁰, excluded)
-        (_op_nabla3_nabla3,          '∇³f(∇f,∇f,∇f)',       4, False),  # star
-        (_op_triangle,               'tr((∇²f)³)',          3, True),   # triangle  (Q⁰, excluded)
-        (_op_hess_inner_nabla3_grad, '⟨∇²f,∇³f(·,·,∇f)⟩',   3, False),  # double-edge + single-edge
-        (_op_hess_grad_gradDelta,    '∇²f(∇f,∇Δf)',         3, False),  # path + side loop
-        (_op_hessDelta_grad_grad,    '∇²Δf(∇f,∇f)',         3, False),  # path + central loop
-        (_op_nabla3_norm_sq,         '‖∇³f‖²',              2, False),  # triple edge
-        (_op_hess_hess_Delta,        '⟨∇²f,∇²Δf⟩',          2, False),  # double edge + loop
-        (_op_gradDelta_sq,           '‖∇Δf‖²',              2, False),  # edge + loops at both ends
-        (_op_gradBilap_grad,         '⟨∇Δ²f,∇f⟩',           2, False),  # edge + double loop
-        (_op_trilap,                 'Δ³f',                 1, False),  # triple loop
+        (_op_path_of_4, "‖∇²f(∇f,·)‖²", 4, True),  # path-of-4 (P⁰, excluded)
+        (_op_nabla3_nabla3, "∇³f(∇f,∇f,∇f)", 4, False),  # star
+        (_op_triangle, "tr((∇²f)³)", 3, True),  # triangle  (Q⁰, excluded)
+        (_op_hess_inner_nabla3_grad, "⟨∇²f,∇³f(·,·,∇f)⟩", 3, False),  # double-edge + single-edge
+        (_op_hess_grad_gradDelta, "∇²f(∇f,∇Δf)", 3, False),  # path + side loop
+        (_op_hessDelta_grad_grad, "∇²Δf(∇f,∇f)", 3, False),  # path + central loop
+        (_op_nabla3_norm_sq, "‖∇³f‖²", 2, False),  # triple edge
+        (_op_hess_hess_Delta, "⟨∇²f,∇²Δf⟩", 2, False),  # double edge + loop
+        (_op_gradDelta_sq, "‖∇Δf‖²", 2, False),  # edge + loops at both ends
+        (_op_gradBilap_grad, "⟨∇Δ²f,∇f⟩", 2, False),  # edge + double loop
+        (_op_trilap, "Δ³f", 1, False),  # triple loop
     ],
 }
 
@@ -380,15 +389,15 @@ CONNECTED_OPERATORS = {
 # Description helpers
 # -----------------------------------------------------------------------
 
-_SUPERSCRIPTS = {2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹'}
+_SUPERSCRIPTS = {2: "²", 3: "³", 4: "⁴", 5: "⁵", 6: "⁶", 7: "⁷", 8: "⁸", 9: "⁹"}
 
 
 def _poly_prefix(m):
     """Return the Unicode polynomial prefix string for exponent m >= 1."""
     if m == 1:
-        return 'f·'
-    sup = _SUPERSCRIPTS.get(m, f'^{m}')
-    return f'f{sup}·'
+        return "f·"
+    sup = _SUPERSCRIPTS.get(m, f"^{m}")
+    return f"f{sup}·"
 
 
 def _make_desc(base_desc, p, m):
@@ -397,15 +406,17 @@ def _make_desc(base_desc, p, m):
         return base_desc
     if p == 0:
         # Pure polynomial: base_desc is '1', so just show 'f', 'f²', ...
-        sup = _SUPERSCRIPTS.get(m, f'^{m}')
-        return 'f' if m == 1 else f'f{sup}'
+        sup = _SUPERSCRIPTS.get(m, f"^{m}")
+        return "f" if m == 1 else f"f{sup}"
     return _poly_prefix(m) + base_desc
 
 
 def _make_func(base_func, m):
     """Wrap base_func with an f^m polynomial factor (m >= 1)."""
+
     def wrapped(f, Lx, Ly, _bf=base_func, _m=m):
         return f**_m * _bf(f, Lx, Ly)
+
     return wrapped
 
 
@@ -458,21 +469,39 @@ def _all_base_operators(max_p, max_n):
                 break  # components sorted by p; all remaining p>=1 ones too expensive
             if p == 0:
                 # Isolated vertex: increment f-count, p-budget unchanged
-                recurse(remaining_p, remaining_k - k, ci, n_f + 1,
-                        base_func, base_desc, cur_k + k, cur_p)
+                recurse(
+                    remaining_p,
+                    remaining_k - k,
+                    ci,
+                    n_f + 1,
+                    base_func,
+                    base_desc,
+                    cur_k + k,
+                    cur_p,
+                )
             else:
                 # p >= 1 operator: extend the differential part
                 _cf, _fn = base_func, fn
-                if base_desc == '1':
+                if base_desc == "1":
                     new_base_func = fn
                     new_base_desc = desc
                 else:
-                    new_base_func = lambda f, Lx, Ly, _a=_cf, _b=_fn: _a(f, Lx, Ly) * _b(f, Lx, Ly)
-                    new_base_desc = base_desc + '·' + desc
-                recurse(remaining_p - p, remaining_k - k, ci, n_f,
-                        new_base_func, new_base_desc, cur_k + k, cur_p + p)
+                    def new_base_func(f, Lx, Ly, _a=_cf, _b=_fn):
+                        return _a(f, Lx, Ly) * _b(f, Lx, Ly)
 
-    recurse(max_p, max_n, 0, 0, _op_const, '1', 0, 0)
+                    new_base_desc = base_desc + "·" + desc
+                recurse(
+                    remaining_p - p,
+                    remaining_k - k,
+                    ci,
+                    n_f,
+                    new_base_func,
+                    new_base_desc,
+                    cur_k + k,
+                    cur_p + p,
+                )
+
+    recurse(max_p, max_n, 0, 0, _op_const, "1", 0, 0)
     results.sort(key=lambda x: (x[0], x[1]))
     return results
 
@@ -480,6 +509,7 @@ def _all_base_operators(max_p, max_n):
 # -----------------------------------------------------------------------
 # Public APIs
 # -----------------------------------------------------------------------
+
 
 def get_operators(max_p, max_n):
     """Return all equivariant operators with p <= max_p and degree <= max_n.
