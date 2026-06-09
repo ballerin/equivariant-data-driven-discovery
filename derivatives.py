@@ -129,3 +129,25 @@ def trilaplacian(f, Lx, Ly, prefilter_sigma=None):
 def third_order(f, Lx, Ly, prefilter_sigma=None):
     """Third-order partial derivatives (f_xxx, f_xxy, f_xyy, f_yyy) via the active backend."""
     return _DISPATCH[_active_name]["third_order"](f, Lx, Ly, prefilter_sigma)
+
+
+# -------------------- configuration helpers --------------------
+def set_polynomial_stencil(deg=None, r=None, order=None):
+    """Set the default polynomial stencil used by the polynomial backend.
+
+    Parameters
+    ----------
+    deg, r : int or None
+        If both provided, set the override to (deg, r). If either is None,
+        the override for the target `order` (or global) is removed.
+    order : int or None
+        If provided, set the override only for that total derivative order
+        (a+b). If None, set a global override used for all orders.
+    """
+    # delegate to polynomial backend module
+    _polynomial.set_default_stencil(deg=deg, r=r, order=order)
+
+
+def get_polynomial_stencil(order):
+    """Return the (deg, r) pair currently used for `order` by the polynomial backend."""
+    return _polynomial.get_default_stencil(order)

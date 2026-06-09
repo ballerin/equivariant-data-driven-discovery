@@ -502,7 +502,12 @@ def _all_base_operators(max_p, max_n):
                 )
 
     recurse(max_p, max_n, 0, 0, _op_const, "1", 0, 0)
-    results.sort(key=lambda x: (x[0], x[1]))
+    # Canonical ordering (three-level lexicographic):
+    #   1. total edge count p   — controls differential order (2p)
+    #   2. polynomial degree k  — total vertex count (non-isolated + isolated)
+    #   3. description string   — Unicode lexicographic order (tie-breaker)
+    # This order is documented in README.md and enforced by test_multigraph_operators.py.
+    results.sort(key=lambda x: (x[0], x[1], x[3]))
     return results
 
 
