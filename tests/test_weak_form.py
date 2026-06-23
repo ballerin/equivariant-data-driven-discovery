@@ -827,9 +827,12 @@ def test_mwsindy_symmetry_check_rejects_anisotropic():
 def test_mwsindy_pipeline_produces_valid_result():
     """MWSINDy produces valid fp/fn/E/n_samples on a real dataset."""
     import numpy as np
-    data = np.load(os.path.join(
+    data_path = os.path.join(
         os.path.dirname(__file__), "..", "data", "swift_hohenberg_clean.npz",
-    ))
+    )
+    if not os.path.exists(data_path):
+        pytest.skip("Data file not available (gitignored *.npz)")
+    data = np.load(data_path)
     f = data["snapshots"][20]
     Lx = float(data["Lx"]); Ly = float(data["Ly"])
 
