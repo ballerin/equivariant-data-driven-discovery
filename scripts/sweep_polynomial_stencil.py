@@ -30,7 +30,7 @@ import numpy as np
 # Ensure the sibling code directory is on sys.path (works when script is
 # executed from the repository or from the `code/` folder).
 THIS_DIR = os.path.dirname(__file__)
-CODE_DIR = os.path.abspath(os.path.join(THIS_DIR, ".."))
+CODE_DIR = os.path.abspath(os.path.join(THIS_DIR, "..", "src"))
 if CODE_DIR not in sys.path:
     sys.path.insert(0, CODE_DIR)
 

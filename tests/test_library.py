@@ -15,16 +15,16 @@ import sys
 import numpy as np
 import pytest
 
-CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
-import derivatives                                          # noqa: E402
-from library import (                                       # noqa: E402
+from equivariant_pde_find import derivatives                                          # noqa: E402
+from equivariant_pde_find.library import (                                       # noqa: E402
     build_equivariant_library,
     build_standard_library,
     build_standard_library_1d,
 )
-from multigraph_operators import get_operators              # noqa: E402
+from equivariant_pde_find.multigraph_operators import get_operators              # noqa: E402
 
 
 # ---------------------------------------------------------------------------

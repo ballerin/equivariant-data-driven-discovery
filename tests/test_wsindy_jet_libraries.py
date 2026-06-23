@@ -12,18 +12,18 @@ import sys
 import numpy as np
 import pytest
 
-CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
-import derivatives                                          # noqa: E402
-from library import (                                       # noqa: E402
-    build_wsindy_library,
+from equivariant_pde_find import derivatives                                          # noqa: E402
+from equivariant_pde_find.library import (                                       # noqa: E402
+    build_pointwise_wsindy_library,
     build_polynomial_jet_library,
-    _enumerate_jet_monomials,
+    enumerate_jet_monomials,
 )
-from wsindy import (                                        # noqa: E402
-    build_weak_wsindy_library_2d,
-    build_weak_polynomial_jet_library_2d,
+from equivariant_pde_find.weak_form import (                                        # noqa: E402
+    build_weak_wsindy_library,
+    build_weak_polynomial_jet_library,
 )
 
 
@@ -56,20 +56,20 @@ def _col(Theta, descs, name):
 # ======================================================================
 
 
-class TestWSINDyLibrary:
-    """Tests for build_wsindy_library."""
+class TestPointwiseWSINDyLibrary:
+    """Tests for build_pointwise_wsindy_library."""
 
     def test_column_count(self):
         """max_order=4, max_poly=3 → 1 + 14*3 + 3 (pure monomials) = 46."""
         f, L = _make_2d_field()
-        Theta, descs = build_wsindy_library(f, L, L, max_order=4, max_poly=3)
+        Theta, descs = build_pointwise_wsindy_library(f, L, L, max_order=4, max_poly=3)
         assert Theta.shape[1] == 46, f"Expected 46 columns, got {Theta.shape[1]}"
         assert len(descs) == 46
 
     def test_column_count_small(self):
         """max_order=2, max_poly=2 → 1 + 5*2 + 2 = 13."""
         f, L = _make_2d_field()
-        Theta, descs = build_wsindy_library(f, L, L, max_order=2, max_poly=2)
+        Theta, descs = build_pointwise_wsindy_library(f, L, L, max_order=2, max_poly=2)
         # multi_indices for max_order=2: (0,0),(1,0),(0,1),(2,0),(1,1),(0,2) → 6
         # Derivative columns: 5 * 2 = 10 (excluding a=b=0)
         # Pure monomials: f, f² → 2
@@ -80,14 +80,14 @@ class TestWSINDyLibrary:
     def test_constant_column_is_ones(self):
         """The '1' column must be identically 1."""
         f, L = _make_2d_field()
-        Theta, descs = build_wsindy_library(f, L, L)
+        Theta, descs = build_pointwise_wsindy_library(f, L, L)
         col = _col(Theta, descs, "1")
         np.testing.assert_allclose(col, np.ones_like(col), rtol=0, atol=1e-14)
 
     def test_f_column_equals_f(self):
         """The 'f' column must equal f."""
         f, L = _make_2d_field()
-        Theta, descs = build_wsindy_library(f, L, L, max_order=2, max_poly=2)
+        Theta, descs = build_pointwise_wsindy_library(f, L, L, max_order=2, max_poly=2)
         np.testing.assert_allclose(
             _col(Theta, descs, "f").reshape(f.shape), f,
             rtol=1e-12, atol=1e-12,
@@ -96,7 +96,7 @@ class TestWSINDyLibrary:
     def test_f2_column_equals_f_squared(self):
         """The 'f²' column must equal f²."""
         f, L = _make_2d_field()
-        Theta, descs = build_wsindy_library(f, L, L, max_order=2, max_poly=2)
+        Theta, descs = build_pointwise_wsindy_library(f, L, L, max_order=2, max_poly=2)
         np.testing.assert_allclose(
             _col(Theta, descs, "f²").reshape(f.shape), f ** 2,
             rtol=1e-12, atol=1e-12,
@@ -107,7 +107,7 @@ class TestWSINDyLibrary:
         """f_{x} (q=1, a=1, b=0) should equal ∂_x f."""
         f, L = _make_2d_field()
         with derivatives.use_backend(backend):
-            Theta, descs = build_wsindy_library(f, L, L, max_order=2, max_poly=2)
+            Theta, descs = build_pointwise_wsindy_library(f, L, L, max_order=2, max_poly=2)
 
         col = _col(Theta, descs, "f_{x}").reshape(f.shape)
 
@@ -123,7 +123,7 @@ class TestWSINDyLibrary:
         """(f²)_{x} should equal ∂_x(f²) = 2f·f_x."""
         f, L = _make_2d_field()
         with derivatives.use_backend(backend):
-            Theta, descs = build_wsindy_library(f, L, L, max_order=2, max_poly=2)
+            Theta, descs = build_pointwise_wsindy_library(f, L, L, max_order=2, max_poly=2)
 
         col = _col(Theta, descs, "(f²)_{x}").reshape(f.shape)
 
@@ -139,9 +139,9 @@ class TestWSINDyLibrary:
     def test_wsindy_and_standard_agree_on_linear_terms(self, backend):
         """For q=1, WSINDy ∂^α(f) should equal standard f^0·∂^α f."""
         f, L = _make_2d_field()
-        from library import build_standard_library as bsl
+        from equivariant_pde_find.library import build_standard_library as bsl
         with derivatives.use_backend(backend):
-            Tw, dw = build_wsindy_library(f, L, L, max_order=3, max_poly=1)
+            Tw, dw = build_pointwise_wsindy_library(f, L, L, max_order=3, max_poly=1)
             Ts, ds = bsl(f, L, L, max_order=3, max_poly=0)
 
         # Standard with max_poly=0: pure derivatives + '1'
@@ -165,7 +165,7 @@ class TestWSINDyLibrary:
     def test_no_identically_zero_columns(self):
         """No column should be identically zero (except possibly constant)."""
         f, L = _make_2d_field()
-        Theta, descs = build_wsindy_library(f, L, L, max_order=4, max_poly=3)
+        Theta, descs = build_pointwise_wsindy_library(f, L, L, max_order=4, max_poly=3)
         for j, d in enumerate(descs):
             col_norm = np.linalg.norm(Theta[:, j])
             assert col_norm > 0, f"Column '{d}' is identically zero"
@@ -279,7 +279,7 @@ class TestPolynomialJetLibrary:
     def test_contains_pde_find_terms(self):
         """All PDE-FIND library terms should appear in the polynomial jet library."""
         f, L = _make_2d_field()
-        from library import build_standard_library
+        from equivariant_pde_find.library import build_standard_library
         _, std_descs = build_standard_library(f, L, L, max_order=2, max_poly=2)
         _, jet_descs = build_polynomial_jet_library(f, L, L, max_order=2, max_degree=2)
 
@@ -317,7 +317,7 @@ class TestPolynomialJetLibrary:
 
 
 class TestJetEnumeration:
-    """Tests for _enumerate_jet_monomials."""
+    """Tests for enumerate_jet_monomials."""
 
     def _make_jet_vars(self, max_order):
         """Build jet_vars list matching build_polynomial_jet_library."""
@@ -332,30 +332,30 @@ class TestJetEnumeration:
 
     def test_count_max_order_4_degree_3(self):
         jet_vars = self._make_jet_vars(4)
-        results = _enumerate_jet_monomials(jet_vars, max_order=4, max_degree=3)
+        results = enumerate_jet_monomials(jet_vars, max_order=4, max_degree=3)
         assert len(results) == 105, f"Expected 105, got {len(results)}"
 
     def test_count_max_order_2_degree_2(self):
         jet_vars = self._make_jet_vars(2)
-        results = _enumerate_jet_monomials(jet_vars, max_order=2, max_degree=2)
+        results = enumerate_jet_monomials(jet_vars, max_order=2, max_degree=2)
         assert len(results) == 16, f"Expected 16, got {len(results)}"
 
     def test_count_max_order_1_degree_1(self):
         """Order≤1, degree≤1: vars f, f_x, f_y → monomials: 1, f, f_x, f_y (4)."""
         jet_vars = self._make_jet_vars(1)
-        results = _enumerate_jet_monomials(jet_vars, max_order=1, max_degree=1)
+        results = enumerate_jet_monomials(jet_vars, max_order=1, max_degree=1)
         assert len(results) == 4, f"Expected 4, got {len(results)}"
 
     def test_constant_is_first(self):
         jet_vars = self._make_jet_vars(2)
-        results = _enumerate_jet_monomials(jet_vars, max_order=2, max_degree=2)
+        results = enumerate_jet_monomials(jet_vars, max_order=2, max_degree=2)
         exponents, deg, order = results[0]
         assert deg == 0 and order == 0
         assert all(v == 0 for v in exponents.values())
 
     def test_all_satisfy_constraints(self):
         jet_vars = self._make_jet_vars(4)
-        results = _enumerate_jet_monomials(jet_vars, max_order=4, max_degree=3)
+        results = enumerate_jet_monomials(jet_vars, max_order=4, max_degree=3)
         for exponents, deg, order in results:
             assert deg <= 3, f"degree {deg} > 3"
             assert order <= 4, f"order {order} > 4"
@@ -374,30 +374,30 @@ class TestJetEnumeration:
 
 
 class TestWeakWSINDyLibrary:
-    """Tests for build_weak_wsindy_library_2d."""
+    """Tests for build_weak_wsindy_library."""
 
     def test_column_count(self):
         f, L = _make_2d_field()
-        Theta, descs = build_weak_wsindy_library_2d(f, L, L, max_order=4, max_poly=3, m=4, p=3)
+        Theta, descs = build_weak_wsindy_library(f, L, L, max_order=4, max_poly=3, m=4, p=3)
         assert Theta.shape[1] == 46
 
     def test_output_shape(self):
         """Valid grid should be (N-2m)²."""
         f, L = _make_2d_field(N=32)
-        Theta, _ = build_weak_wsindy_library_2d(f, L, L, max_order=2, max_poly=1, m=4, p=3)
+        Theta, _ = build_weak_wsindy_library(f, L, L, max_order=2, max_poly=1, m=4, p=3)
         expected_n = (32 - 8) ** 2  # 24² = 576
         assert Theta.shape[0] == expected_n
 
     def test_ibp_flag_accepted(self):
         """use_ibp=True should not crash."""
         f, L = _make_2d_field()
-        Theta, descs = build_weak_wsindy_library_2d(f, L, L, max_order=2, max_poly=1,
+        Theta, descs = build_weak_wsindy_library(f, L, L, max_order=2, max_poly=1,
                                                       m=4, p=3, use_ibp=True)
         assert Theta.shape[1] > 0
 
     def test_no_nan_or_inf(self):
         f, L = _make_2d_field()
-        Theta, _ = build_weak_wsindy_library_2d(f, L, L, max_order=4, max_poly=3, m=4, p=3)
+        Theta, _ = build_weak_wsindy_library(f, L, L, max_order=4, max_poly=3, m=4, p=3)
         assert not np.any(np.isnan(Theta))
         assert not np.any(np.isinf(Theta))
 
@@ -408,18 +408,18 @@ class TestWeakWSINDyLibrary:
 
 
 class TestWeakPolynomialJetLibrary:
-    """Tests for build_weak_polynomial_jet_library_2d."""
+    """Tests for build_weak_polynomial_jet_library."""
 
     def test_column_count(self):
         f, L = _make_2d_field()
-        Theta, descs = build_weak_polynomial_jet_library_2d(
+        Theta, descs = build_weak_polynomial_jet_library(
             f, L, L, max_order=4, max_degree=3, m=4, p=3,
         )
         assert Theta.shape[1] == 105
 
     def test_output_shape(self):
         f, L = _make_2d_field(N=32)
-        Theta, _ = build_weak_polynomial_jet_library_2d(
+        Theta, _ = build_weak_polynomial_jet_library(
             f, L, L, max_order=2, max_degree=1, m=4, p=3,
         )
         expected_n = (32 - 8) ** 2
@@ -427,14 +427,14 @@ class TestWeakPolynomialJetLibrary:
 
     def test_ibp_flag_accepted(self):
         f, L = _make_2d_field()
-        Theta, _ = build_weak_polynomial_jet_library_2d(
+        Theta, _ = build_weak_polynomial_jet_library(
             f, L, L, max_order=2, max_degree=2, m=4, p=3, use_ibp=True,
         )
         assert Theta.shape[1] > 0
 
     def test_no_nan_or_inf(self):
         f, L = _make_2d_field()
-        Theta, _ = build_weak_polynomial_jet_library_2d(
+        Theta, _ = build_weak_polynomial_jet_library(
             f, L, L, max_order=2, max_degree=2, m=4, p=3,
         )
         assert not np.any(np.isnan(Theta))

@@ -13,18 +13,18 @@ import sys
 import numpy as np
 import pytest
 
-CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
-from evaluation import (                                        # noqa: E402
+from equivariant_pde_find.evaluation import (                                        # noqa: E402
     evaluate_recovery, evaluate_from_theta, build_eval_theta, best_of_sweep,
     evaluate_standard,
 )
-from library import (                                           # noqa: E402
+from equivariant_pde_find.library import (                                           # noqa: E402
     build_equivariant_library, build_standard_library,
 )
-from simulations import make_regression_data                    # noqa: E402
-from simulations import allen_cahn                              # noqa: E402
+from equivariant_pde_find.simulations import make_regression_data                    # noqa: E402
+from equivariant_pde_find.simulations import allen_cahn                              # noqa: E402
 
 
 # ---------------------------------------------------------------------------

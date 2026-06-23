@@ -49,6 +49,8 @@ Derivative order → Fourier multiplier
 
 import numpy as np
 
+from .utils import _apply_prefilter
+
 
 def _wavenumbers(N, L):
     """
@@ -57,39 +59,6 @@ def _wavenumbers(N, L):
     Returns k_j = (2π / L) · fftfreq(N) · N, matching NumPy's FFT ordering.
     """
     return 2.0 * np.pi / L * np.fft.fftfreq(N) * N
-
-
-def _apply_prefilter(f, Lx, Ly, prefilter_sigma):
-    """Apply a periodic Gaussian prefilter to `f`.
-
-    Parameters
-    ----------
-    f : ndarray
-        Input 2-D field.
-    Lx, Ly : float
-        Domain lengths.
-    prefilter_sigma : float or (float, float) or None
-        Gaussian standard deviation in physical units. If None or 0, no
-        filtering is performed. If a scalar is provided it is used for both
-        axes. The filter is applied with `mode='wrap'` to respect periodicity.
-    """
-    if not prefilter_sigma:
-        return f
-    Nx, Ny = f.shape
-    # convert physical sigma to spectral multiplier: multiply FFT by
-    # exp(-0.5 * (sigma^2 * k^2)). Here kx,ky are physical wavenumbers.
-    kx = _wavenumbers(Nx, Lx)
-    ky = _wavenumbers(Ny, Ly)
-    KX, KY = np.meshgrid(kx, ky, indexing="ij")
-    if np.isscalar(prefilter_sigma):
-        sx = float(prefilter_sigma)
-        sy = float(prefilter_sigma)
-    else:
-        sx = float(prefilter_sigma[0])
-        sy = float(prefilter_sigma[1])
-    fh = np.fft.fft2(f)
-    G = np.exp(-0.5 * ((sx * KX) ** 2 + (sy * KY) ** 2))
-    return np.real(np.fft.ifft2(fh * G))
 
 
 def spectral_grad(f, Lx, Ly, prefilter_sigma=None):

@@ -24,7 +24,7 @@ import numpy as np
 
 # ── path setup ──────────────────────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CODE_DIR = os.path.dirname(SCRIPT_DIR)
+CODE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
 from simulations import (  # noqa: E402
@@ -35,7 +35,7 @@ from simulations import (  # noqa: E402
     swift_hohenberg,
 )
 
-DATA_DIR = os.path.join(CODE_DIR, "data")
+DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "data"))
 os.makedirs(DATA_DIR, exist_ok=True)
 
 NOISE_LEVELS = [0.0, 0.02, 0.05]

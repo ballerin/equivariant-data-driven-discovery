@@ -50,6 +50,8 @@ from math import factorial
 
 import numpy as np
 
+from .utils import _apply_prefilter
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -127,30 +129,6 @@ def _deriv(f, Lx, Ly, a, b, deg, r):
     dx = Lx / Nx
     dy = Ly / Ny
     return _apply(f, _poly_kernel(a, b, deg, r, dx, dy))
-
-
-def _apply_prefilter(f, Lx, Ly, prefilter_sigma):
-    """Apply a periodic Gaussian prefilter to 2-D field `f`.
-
-    `prefilter_sigma` is specified in physical units (same as Lx/Ly).
-    If None or 0, the original array is returned.
-    """
-    if not prefilter_sigma:
-        return f
-    Nx, Ny = f.shape
-    # Build physical wavenumbers matching the spectral backend convention
-    kx = 2.0 * np.pi / Lx * np.fft.fftfreq(Nx) * Nx
-    ky = 2.0 * np.pi / Ly * np.fft.fftfreq(Ny) * Ny
-    KX, KY = np.meshgrid(kx, ky, indexing="ij")
-    if np.isscalar(prefilter_sigma):
-        sx = float(prefilter_sigma)
-        sy = float(prefilter_sigma)
-    else:
-        sx = float(prefilter_sigma[0])
-        sy = float(prefilter_sigma[1])
-    fh = np.fft.fft2(f)
-    G = np.exp(-0.5 * ((sx * KX) ** 2 + (sy * KY) ** 2))
-    return np.real(np.fft.ifft2(fh * G))
 
 
 # ---------------------------------------------------------------------------

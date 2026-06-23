@@ -43,15 +43,16 @@ except ImportError:
 
 # ── path setup ──────────────────────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CODE_DIR = os.path.dirname(SCRIPT_DIR)
+CODE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
-import derivatives  # noqa: E402
-from library import build_equivariant_library, build_standard_library  # noqa: E402
-from regression import TrainSTRidge, TrainSR3  # noqa: E402
-from simulations import kuramoto_sivashinsky, make_regression_data  # noqa: E402
+from equivariant_pde_find import derivatives  # noqa: E402
+from equivariant_pde_find.library import build_equivariant_library, build_standard_library  # noqa: E402
+from equivariant_pde_find.regression import TrainSTRidge, TrainSR3  # noqa: E402
+from equivariant_pde_find.simulations import kuramoto_sivashinsky, make_regression_data  # noqa: E402
+from equivariant_pde_find.equation_configs import true_ks  # noqa: E402
 
-RESULTS_DIR = os.path.join(CODE_DIR, "results")
+RESULTS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "results"))
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 # ── hyperparameter grid ──────────────────────────────────────────────────────
@@ -123,19 +124,7 @@ KS_REGIMES = [
     ),
 ]
 
-# Ground truth: KS = -Δf - Δ²f - ½‖∇f‖²
-def _true_ks(desc_eq):
-    """True KS coefficients in the equivariant basis."""
-    def _find(name):
-        try:
-            return desc_eq.index(name)
-        except ValueError:
-            raise KeyError(f"{name!r} not found; available: {desc_eq}")
-    w = np.zeros(len(desc_eq))
-    w[_find('‖∇f‖²')] = -0.5
-    w[_find('Δf')]    = -1.0
-    w[_find('Δ²f')]   = -1.0
-    return w
+# Ground truth: KS = -Δf - Δ²f - ½‖∇f‖² (imported from equation_configs)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -315,7 +304,7 @@ def main():
             )
             print(f"  done in {time.time()-t0:.1f}s  ({len(Ft)} regression points)", flush=True)
 
-            true_eq  = _true_ks(desc_eq)
+            true_eq  = true_ks(desc_eq)
             true_std = np.zeros(len(desc_std))
 
             # condition numbers

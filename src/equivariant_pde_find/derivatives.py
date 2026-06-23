@@ -27,8 +27,8 @@ Available backends
 
 from contextlib import contextmanager
 
-import polynomial_derivatives as _polynomial
-import spectral_derivatives as _spectral
+from . import polynomial_derivatives as _polynomial
+from . import spectral_derivatives as _spectral
 
 # Dispatch table: backend name → dict of operation → function.
 # Each entry maps the neutral operation name to the backend-specific function.

@@ -41,11 +41,11 @@ import sys
 import numpy as np
 import pytest
 
-CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
-import derivatives as _derivatives
-from multigraph_operators import _op_bilap, _op_Delta, _op_grad_sq, _op_hess_norm_sq
+from equivariant_pde_find import derivatives as _derivatives
+from equivariant_pde_find.multigraph_operators import _op_bilap, _op_Delta, _op_grad_sq, _op_hess_norm_sq
 
 
 # ---------------------------------------------------------------------------
@@ -208,14 +208,14 @@ def test_translation_equivariance(op, name, dx, dy, field_and_domain):
 
 def _partial_x_spectral(f, L):
     """Compute ∂f/∂x via FFT (not O(2)-equivariant as a scalar operator)."""
-    import spectral_derivatives as sd
+    from equivariant_pde_find import spectral_derivatives as sd
     fx, _fy = sd.spectral_grad(f, L, L)
     return fx
 
 
 def _partial_xx_spectral(f, L):
     """Compute ∂²f/∂x² via FFT (not O(2)-equivariant as a scalar operator)."""
-    import spectral_derivatives as sd
+    from equivariant_pde_find import spectral_derivatives as sd
     fxx, _fxy, _fyy = sd.spectral_hessian(f, L, L)
     return fxx
 
@@ -266,7 +266,7 @@ def test_fx_maps_to_fy_under_rotation(field_and_domain):
     """
     f, L, _N = field_and_domain
 
-    import spectral_derivatives as sd
+    from equivariant_pde_find import spectral_derivatives as sd
 
     f_rot = rotation_90(f)
     lhs = _partial_x_spectral(f_rot, L)        # (f∘R)_x
@@ -291,7 +291,7 @@ def test_equivariant_library_rotated_field(field_and_domain):
     column-wise under rotations of the input field.
     """
     f, L, N = field_and_domain
-    from library import build_equivariant_library
+    from equivariant_pde_find.library import build_equivariant_library
 
     Theta, descs = build_equivariant_library(f, L, L, max_p=2, max_n=3)
     assert Theta.shape[1] == 20  # sanity
@@ -318,7 +318,7 @@ def test_standard_library_not_columnwise_equivariant(field_and_domain):
     isotropic derivatives destroys the structural sparsity.
     """
     f, L, N = field_and_domain
-    from library import build_standard_library
+    from equivariant_pde_find.library import build_standard_library
 
     Theta, descs = build_standard_library(f, L, L)
     f_rot = rotation_90(f)
@@ -346,7 +346,7 @@ def test_all_equivariant_operators_rotation_equivariant(field_and_domain):
     """Every operator returned by get_operators(max_p=2, max_n=3) must be
     equivariant under 90° rotation.  This is the exhaustive check."""
     f, L, N = field_and_domain
-    from multigraph_operators import get_operators
+    from equivariant_pde_find.multigraph_operators import get_operators
 
     ops = get_operators(2, 3)
     assert len(ops) == 20
@@ -365,7 +365,7 @@ def test_all_equivariant_operators_rotation_equivariant(field_and_domain):
 def test_all_equivariant_operators_reflection_equivariant(field_and_domain):
     """Every operator in the basis must be equivariant under x-axis reflection."""
     f, L, N = field_and_domain
-    from multigraph_operators import get_operators
+    from equivariant_pde_find.multigraph_operators import get_operators
 
     ops = get_operators(2, 3)
     f_refl = reflect_x(f)
@@ -395,8 +395,8 @@ def test_regression_coefficients_rotation_invariant(field_and_domain):
     to keep the test fast and deterministic.
     """
     f, L, N = field_and_domain
-    from library import build_equivariant_library
-    from regression import STRidge
+    from equivariant_pde_find.library import build_equivariant_library
+    from equivariant_pde_find.regression import STRidge
 
     # Build a synthetic f_t from the true Allen-Cahn operators.
     Theta, descs = build_equivariant_library(f, L, L, max_p=2, max_n=3)
@@ -444,7 +444,7 @@ def test_regression_coefficients_rotation_invariant(field_and_domain):
 def test_identity_and_constant_equivariant(field_and_domain):
     """f and 1 are trivially equivariant under all transformations."""
     f, L, _N = field_and_domain
-    from multigraph_operators import _op_const, _op_identity
+    from equivariant_pde_find.multigraph_operators import _op_const, _op_identity
 
     for tf_name, tf in ALL_TRANSFORMS:
         # Identity: id(f∘T) = (id f)∘T  →  f∘T = f∘T  (tautology)

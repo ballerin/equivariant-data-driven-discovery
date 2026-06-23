@@ -56,7 +56,7 @@ independent in d≥3 (Theorem 2 of the paper).
 
 import numpy as np
 
-from derivatives import (
+from .derivatives import (
     bilaplacian,
     grad,
     hessian,
@@ -543,3 +543,25 @@ def get_operators(max_p, max_n):
             f"max_p={max_p} is not implemented. Available: 0..{max(CONNECTED_OPERATORS)}"
         )
     return [(func, desc) for _, _, func, desc in _all_base_operators(max_p, max_n)]
+
+
+def get_operator_metadata(max_p, max_n):
+    """Return ``(p, k)`` metadata for each operator in canonical order.
+
+    Parameters
+    ----------
+    max_p : int
+    max_n : int
+
+    Returns
+    -------
+    meta : list of (int, int)
+        ``(p, k)`` per operator, where ``p`` is the edge count (differential
+        order = 2p) and ``k`` is the polynomial degree (total vertex count).
+        Ordering matches ``get_operators(max_p, max_n)`` exactly.
+    """
+    if max_p > max(CONNECTED_OPERATORS):
+        raise ValueError(
+            f"max_p={max_p} is not implemented. Available: 0..{max(CONNECTED_OPERATORS)}"
+        )
+    return [(total_p, k) for total_p, k, _, _ in _all_base_operators(max_p, max_n)]

@@ -11,10 +11,10 @@ import sys
 import numpy as np
 import pytest
 
-CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
-from multigraph_operators import get_operators  # noqa: E402
+from equivariant_pde_find.multigraph_operators import get_operators  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +100,7 @@ def test_operator_ordering_rule_2_3():
 def test_operator_ordering_is_sorted(max_p, max_n):
     """For any (max_p, max_n), the returned list must be sorted by desc strings
     within each (p, k) bucket — verified by re-sorting and comparing."""
-    from multigraph_operators import _all_base_operators
+    from equivariant_pde_find.multigraph_operators import _all_base_operators
 
     raw = _all_base_operators(max_p, max_n)
     # raw entries: (total_p, k, func, desc)

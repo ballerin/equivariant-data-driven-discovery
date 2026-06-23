@@ -12,8 +12,10 @@ build_equivariant_library    — O(2)-equivariant multigraph operator basis via
 build_standard_library       — coordinate-based library (all partial derivatives
                                up to a given order × polynomial prefactors),
                                i.e. the PDE-FIND library f^p · ∂^a f.
-build_wsindy_library         — WSINDy library ∂^α(f^q): partial derivatives
-                               applied to monomial powers of f.
+build_pointwise_wsindy_library — WSINDy library ∂^α(f^q): partial derivatives
+                               applied to monomial powers of f (pointwise, not
+                               weak-form; for the weak-form version see
+                               weak_form.build_weak_wsindy_library).
 build_polynomial_jet_library — all monomials in jet variables (f, f_x, f_y,
                                f_{xx}, …) up to given degree and order.
 build_standard_library_1d    — same as build_standard_library for 1-D fields.
@@ -26,18 +28,18 @@ Sparse regression and utilities live in separate modules:
 
 import numpy as np
 
-import derivatives as _derivatives
+from . import derivatives as _derivatives
 
 
 # Unicode superscript digits for polynomial exponents in descriptions.
 _SUP = {2: "²", 3: "³", 4: "⁴", 5: "⁵", 6: "⁶", 7: "⁷", 8: "⁸", 9: "⁹"}
 
 
-def _sup(n: int) -> str:
+def sup(n: int) -> str:
     """Return a Unicode superscript string for integer n >= 2."""
     return _SUP.get(n, f"^{n}")
-from multigraph_operators import get_operators
-from polynomial_derivatives import poly_partial, poly_partial_1d
+from .multigraph_operators import get_operators
+from .polynomial_derivatives import poly_partial, poly_partial_1d
 
 
 def _wavenumbers_2d(Nx, Ny, Lx, Ly):
@@ -174,15 +176,15 @@ def build_standard_library(f, Lx, Ly, max_order=4, max_poly=3):
             elif p == 1:
                 desc = f"f·{dname}" if dname != "1" else "f"
             else:
-                desc = f"f{_sup(p)}·{dname}" if dname != "1" else f"f{_sup(p)}"
+                desc = f"f{sup(p)}·{dname}" if dname != "1" else f"f{sup(p)}"
             cols.append(col)
             descs.append(desc)
 
     return np.column_stack(cols), descs
 
 
-def build_wsindy_library(f, Lx, Ly, max_order=4, max_poly=3):
-    """Build the WSINDy library: ∂_x^a ∂_y^b (f^q).
+def build_pointwise_wsindy_library(f, Lx, Ly, max_order=4, max_poly=3):
+    """Build the pointwise WSINDy library: ∂_x^a ∂_y^b (f^q).
 
     Columns = all derivative combinations ∂_x^a ∂_y^b applied to monomial
     powers f^q, for 0 ≤ a+b ≤ max_order and 1 ≤ q ≤ max_poly, plus the
@@ -248,13 +250,13 @@ def build_wsindy_library(f, Lx, Ly, max_order=4, max_poly=3):
             if q == 1:
                 desc = f"f_{{{dx_part}}}"
             else:
-                desc = f"(f{_sup(q)})_{{{dx_part}}}"
+                desc = f"(f{sup(q)})_{{{dx_part}}}"
             descs.append(desc)
 
     # Add pure monomials f^q for q ≥ 1
     for q in range(1, max_poly + 1):
         cols.append((f ** q).ravel())
-        descs.append("f" if q == 1 else f"f{_sup(q)}")
+        descs.append("f" if q == 1 else f"f{sup(q)}")
 
     return np.column_stack(cols), descs
 
@@ -318,7 +320,7 @@ def build_polynomial_jet_library(f, Lx, Ly, max_order=4, max_degree=3):
             jet_fields[(a, b)] = poly_partial(f, Lx, Ly, a, b)
 
     # --- 2. Enumerate all monomials ---
-    monomials = _enumerate_jet_monomials(jet_vars, max_order, max_degree)
+    monomials = enumerate_jet_monomials(jet_vars, max_order, max_degree)
 
     # --- 3. Build each column ---
     cols, descs = [], []
@@ -341,7 +343,7 @@ def build_polynomial_jet_library(f, Lx, Ly, max_order=4, max_degree=3):
             if exp == 1:
                 parts.append(var_name)
             else:
-                parts.append(f"{var_name}{_sup(exp)}")
+                parts.append(f"{var_name}{sup(exp)}")
         if not parts:
             descs.append("1")
         else:
@@ -350,7 +352,7 @@ def build_polynomial_jet_library(f, Lx, Ly, max_order=4, max_degree=3):
     return np.column_stack(cols), descs
 
 
-def _enumerate_jet_monomials(jet_vars, max_order, max_degree):
+def enumerate_jet_monomials(jet_vars, max_order, max_degree):
     """Enumerate all monomials in jet variables satisfying constraints.
 
     Parameters
@@ -448,7 +450,7 @@ def build_standard_library_1d(u, L, max_deriv=3, max_poly=3):
             elif p == 1:
                 desc = f"u·{d_name}" if d_name != "1" else "u"
             else:
-                desc = f"u{_sup(p)}·{d_name}" if d_name != "1" else f"u{_sup(p)}"
+                desc = f"u{sup(p)}·{d_name}" if d_name != "1" else f"u{sup(p)}"
             cols.append(col)
             descs.append(desc)
 

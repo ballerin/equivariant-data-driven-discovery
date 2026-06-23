@@ -23,10 +23,10 @@ import numpy as np
 
 # ── path setup ──────────────────────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CODE_DIR = os.path.dirname(SCRIPT_DIR)
+CODE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
-from evaluation import best_of_sweep  # noqa: E402
+from equivariant_pde_find.evaluation import best_of_sweep  # noqa: E402
 import math                                      # noqa: E402
 
 
@@ -107,7 +107,7 @@ def print_table(best_rows, group_keys):
     """Print a human-readable summary table."""
     # Columns to display
     display_cols = group_keys + [
-        "method", "algorithm", "wsindy_m",
+        "method", "algorithm", "weak_m",
         "d_tol", "fp", "fn", "exact_recovery", "E", "cond_theta",
     ]
     # Filter to columns that exist
@@ -142,8 +142,8 @@ def print_table(best_rows, group_keys):
                 else:
                     parts.append(f"{int(float(val)):>5}")
             elif c == "d_tol":
-                if _is_nan(val):
-                    parts.append(f"{'nan':>12}")
+                if _is_nan(val) or val == "" or val is None:
+                    parts.append(f"{'':>12}")
                 else:
                     parts.append(f"{float(val):12.4f}")
             else:

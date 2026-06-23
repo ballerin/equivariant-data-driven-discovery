@@ -1,110 +1,306 @@
-# Porous Medium equation — recovery summary
+# Porous Medium equation
 
-## Equation and ground truth
+The equation under consideration is
 
-$$f_t = \Delta(f^2) = \nabla\cdot(2f\nabla f) = 2f\Delta f + 2\|\nabla f\|^2$$
+$$f_t = \nabla\cdot(f^2\nabla f) = f^2\Delta f + 2f\|\nabla f\|^2$$
 
-Two active equivariant operators:
+which can be written in terms of $O(2)$-equivariant terms
 
 | Operator | True coefficient |
 |---|---|
-| $f^2 \cdot \Delta f$ | $1.0$ |
-| $f \cdot \|\nabla f\|^2$ | $2.0$ |
+| $f^2\cdot\Delta f$ | $+1.0$ |
+| $f\cdot\|\nabla f\|^2$ | $+2.0$ |
 
-Standard libraries:
-| Operator | True coefficient | PDE-FIND | WSINDy |
-|---|---|---|---|
-| $f \cdot f_{xx}$ | $2.0$ | ✅ | ✅ |
-| $f \cdot f_{yy}$ | $2.0$ | ✅ | ✅ |
-| $f_x^2$ | $2.0$ | ❌ | ❌ |
-| $f_y^2$ | $2.0$ | ❌ | ❌ |
+or standard terms (polynomial jet basis)
 
-PME contains $f\|\nabla f\|^2$ — the standard library cannot represent it.
-
-## Current source of truth
-
-`results/unified_sweep_20260607_225223_efit_full.csv` (unified ablation sweep, 2026-06-07).
-
-Simulation: N=64, L=6π, T_end=2, dt=0.002, save_every=25.  Spatial mask
-excludes f < 0.05 (degenerate support boundary where D = f² → 0).
-
-## Results — equivariant library (exact recovery at all noise levels)
-
-| Noise | Best method | d_tol | E | n_active | cond(Θ) |
+| Operator | True coeff | PDE-FIND | WSINDy | Poly jet | Multigraph |
 |---|---|---|---|---|---|
-| 0% | WSINDy direct (m=8) | 0.05 | 0.0009 | 2 | 2.4×10⁶ |
-| 2% | WSINDy direct (m=8) | 5.0 | 0.0032 | 2 | 1.9×10⁴ |
-| 5% | WSINDy direct SR3 (m=8) | 0.01 | 0.14 | 2 | 6.9×10³ |
+| $f^2\cdot\partial_{xx} f$ | | 🟢 | 🟢 | 🟢 | 🟢 |
+| $f^2\cdot\partial_{yy} f$ | | 🟢 | 🟢 | 🟢 | 🟢 |
+| $f\cdot f_x^2$ | | 🔴 | 🟢 | 🟢 | 🟢 |
+| $f\cdot f_y^2$ | | 🔴 | 🟢 | 🟢 | 🟢 |
 
-PME achieves **exact recovery at all noise levels**.  This is the only
-equation besides Allen–Cahn to do so.  The second-order dynamics and
-only 2 active terms make it robust.
+All libraries are evaluated in the common polynomial-jet basis (105 monomials,
+max order 4, max degree 3).  fp/fn/E are computed against the same 4-term
+ground truth for every library.  PDE-FIND cannot represent $f\cdot f_x^2$ or $f\cdot f_y^2$ (products of derivatives), so its minimum fn is 2.  WSINDy represents PME exactly via the chain rule: $f_t = \frac13\partial_x^2(f^3) + \frac13\partial_y^2(f^3)$, which expands to all 4 jet terms.
 
-## Results — standard library (structurally missing $f\|\nabla f\|^2$)
+Sweep configuration: all 4 libraries, 3 algorithms (STRidge, SR3, MSTLS),
+3 methods (pointwise, weak-direct, weak-IBP), 2 backends (spectral, polynomial),
+3 noise levels (clean, 2%, 5%).
 
-| Noise | Best method | n_active | E_fit |
-|---|---|---|---|
-| 0% | WSINDy direct (m=8) | 2 | **0.109** |
-| 2% | WSINDy direct (m=8) | 60 | **0.334** |
-| 5% | WSINDy direct (m=8) | 58 | **0.623** |
+### Legend for summary table
 
-**Key**: on clean data, the standard library manages E_fit=0.11 with only
-2 active terms — it picks two partial-derivative columns that approximate
-$f^2\Delta f$ and $f\|\nabla f\|^2$ imperfectly.  At noise, it needs
-58–60 columns and still leaves 33–62% of variance unexplained.
+| Symbol | Meaning |
+|---|---|
+| 🟢 | Equivariant **clear** win |
+| 🟩 | Equivariant **marginal** win |
+| ⚪ | Tie  |
+| 🟥 | Non-equivariant **marginal** win |
+| 🔴 | Non-equivariant **clear** win |
+| — | Both methods failed, no comparison |
+| ✓ | Exact recovery (fp = fn = 0) |
+| ✗ | Failed |
 
-## Standard-library decomposition
 
-The simulated PME is $f_t = \nabla\!\cdot\!(f^2\nabla f)$, which expands as:
+## Summary: equivariant vs best non-equivariant
 
-$$f_t = f^2\Delta f + 2f\|\nabla f\|^2 = f^2(f_{xx} + f_{yy}) + 2f(f_x^2 + f_y^2)$$
+| Noise | Method | Backend | Eq. wins? | Multigraphs fp/fn | Multigraphs E | Non-eq best | Non-eq fp/fn | Non-eq E |
+|---|---|---|---|---|---|---|---|---|
+| Clean | pointwise | spectral | 🟩 | 0/0 ✓ | 0.0009 | WSINDy | 0/0 ✓ | 0.0010 |
+| Clean | pointwise | polynomial | 🟩 | 0/0 ✓ | 0.0006 | Polynomial jet | 0/0 ✓ | 0.0007 |
+| Clean | weak (no IBP) | spectral | 🟩 | 0/0 ✓ | 0.0002 | Polynomial jet | 0/0 ✓ | 0.0004 |
+| Clean | weak (no IBP) | polynomial | 🟩 | 0/0 ✓ | 0.0002 | Polynomial jet | 0/0 ✓ | 0.0004 |
+| Clean | weak (IBP) | spectral | 🟩 | 0/0 ✓ | 0.0002 | Polynomial jet | 0/0 ✓ | 0.0004 |
+| Clean | weak (IBP) | polynomial | 🟩 | 0/0 ✓ | 0.0002 | Polynomial jet | 0/0 ✓ | 0.0004 |
+| 2% | pointwise | spectral | — | 0/4 ✗ | 1.0000 | — | — | — |
+| 2% | pointwise | polynomial | 🔴 | 0/4 ✗ | 1.0000 | WSINDy | 0/0 ✓ | 0.0453 |
+| 2% | weak (no IBP) | spectral | 🟥 | 0/0 ✓ | 0.0019 | WSINDy | 0/0 ✓ | 0.0012 |
+| 2% | weak (no IBP) | polynomial | 🟥 | 0/0 ✓ | 0.0017 | WSINDy | 0/0 ✓ | 0.0012 |
+| 2% | weak (IBP) | spectral | 🟥 | 0/0 ✓ | 0.0019 | WSINDy | 0/0 ✓ | 0.0012 |
+| 2% | weak (IBP) | polynomial | 🟥 | 0/0 ✓ | 0.0017 | WSINDy | 0/0 ✓ | 0.0012 |
+| 5% | pointwise | spectral | — | 0/4 ✗ | 1.0000 | — | — | — |
+| 5% | pointwise | polynomial | — | 0/4 ✗ | 1.0000 | — | — | — |
+| 5% | weak (no IBP) | spectral | 🟥 | 0/0 ✓ | 0.0022 | WSINDy | 0/0 ✓ | 0.0017 |
+| 5% | weak (no IBP) | polynomial | 🔴 | 0/0 ✓ | 0.0051 | WSINDy | 0/0 ✓ | 0.0018 |
+| 5% | weak (IBP) | spectral | ⚪ | 0/0 ✓ | 0.0022 | WSINDy | 0/0 ✓ | 0.0022 |
+| 5% | weak (IBP) | polynomial | 🔴 | 0/0 ✓ | 0.0051 | WSINDy | 0/0 ✓ | 0.0018 |
 
-(Note: this differs from the more common $f_t = \Delta(f^2) = 2f\Delta f + 2\|\nabla f\|^2$.)
+## Pointwise formulation
 
-| Equivariant term | True coeff | Standard-library columns | Representable? |
-|---|---|---|---|
-| $f^2\Delta f$ | $+1.0$ | $f^2\!\cdot\!f_{xx}$ (col 35) $+$ $f^2\!\cdot\!f_{yy}$ (col 33), coeff $+1.0$ each | ✅ 2 columns |
-| $f\|\nabla f\|^2$ | $+2.0$ | **NOT REPRESENTABLE** — same reason as KS and CH: $f\!(f_x)^2$ is a product of derivatives that the $f^p\!\cdot\!\partial^a f$ library lacks. | ❌ Missing |
-| **Total** | — | 2 representable, 2 missing | ❌ Incomplete |
+### Spectral derivatives backend
 
-## Remaining work
+| Library | Noise | Algorithm | d_tol/α | fp/fn | n_active | E | Exact? |
+|---|---|---|---|---|---|---|---|
+| PDE-FIND | Clean | STRidge | 0.5 | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | Clean | SR3 | 0.005 | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | Clean | MSTLS | 0.0 | 2/4 | 2 | 0.2585 | 🔴 |
+| PDE-FIND | 2% | STRidge | 0.5 | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | 2% | SR3 | 0.05 | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | 2% | MSTLS | 0.0 | 2/4 | 2 | 0.9285 | 🔴 |
+| PDE-FIND | 5% | STRidge | 0.2 | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | 5% | SR3 | 0.05 | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | 5% | MSTLS | 0.0 | 4/4 | 4 | 0.9946 | 🔴 |
+| WSINDy | Clean | STRidge | 0.001 | 0/0 | 2 | 0.0010 | 🟢 |
+| WSINDy | Clean | SR3 | 0.001 | 0/0 | 2 | 0.5622 | 🟢 |
+| WSINDy | Clean | MSTLS | 0.25 | 0/0 | 2 | 0.0010 | 🟢 |
+| WSINDy | 2% | STRidge | 0.2 | 0/4 | 0 | 1.0000 | 🔴 |
+| WSINDy | 2% | SR3 | 0.05 | 0/4 | 0 | 1.0000 | 🔴 |
+| WSINDy | 2% | MSTLS | 0.0 | 2/4 | 2 | 0.9285 | 🔴 |
+| WSINDy | 5% | STRidge | 0.2 | 0/4 | 0 | 1.0000 | 🔴 |
+| WSINDy | 5% | SR3 | 0.05 | 0/4 | 0 | 1.0000 | 🔴 |
+| WSINDy | 5% | MSTLS | 0.0 | 4/4 | 4 | 0.9946 | 🔴 |
+| Polynomial jet | Clean | STRidge | 0.005 | 0/0 | 4 | 0.0010 | 🟢 |
+| Polynomial jet | Clean | SR3 | 0.001 | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | Clean | MSTLS | 0.25 | 0/0 | 4 | 0.0011 | 🟢 |
+| Polynomial jet | 2% | STRidge | 0.5 | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | 2% | SR3 | 0.05 | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | 2% | MSTLS | 0.0 | 2/4 | 2 | 0.9285 | 🔴 |
+| Polynomial jet | 5% | STRidge | 0.5 | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | 5% | SR3 | 0.01 | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | 5% | MSTLS | 0.0 | 3/4 | 3 | 1.0083 | 🔴 |
+| Multigraphs | Clean | STRidge | 0.05 | 0/0 | 2 | 0.0009 | 🟢 |
+| Multigraphs | Clean | SR3 | 0.005 | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | Clean | MSTLS | 0.0 | 0/0 | 2 | 0.0011 | 🟢 |
+| Multigraphs | 2% | STRidge | 0.5 | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | 2% | SR3 | 0.05 | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | 2% | MSTLS | 0.0 | 2/4 | 2 | 0.9285 | 🔴 |
+| Multigraphs | 5% | STRidge | 0.5 | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | 5% | SR3 | 0.01 | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | 5% | MSTLS | 0.0 | 2/4 | 2 | 0.9805 | 🔴 |
 
-1. Forward-simulate recovered PME at 5% noise to verify dynamics.
-2. The 5% recovery (E=0.14) has correct sparsity but noisy coefficients.
+### Polynomial stencils backend
 
-### Standard library
+| Library | Noise | Algorithm | d_tol/α | fp/fn | n_active | E | Exact? |
+|---|---|---|---|---|---|---|---|
+| PDE-FIND | Clean | STRidge | 0.5 | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | Clean | SR3 | 0.005 | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | Clean | MSTLS | 0.0 | 2/4 | 2 | 0.2585 | 🔴 |
+| PDE-FIND | 2% | STRidge | 0.5 | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | 2% | SR3 | 0.01 | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | 2% | MSTLS | 0.0 | 2/4 | 2 | 0.9285 | 🔴 |
+| PDE-FIND | 5% | STRidge | 0.5 | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | 5% | SR3 | 0.05 | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | 5% | MSTLS | 0.0 | 2/3 | 4 | 0.5502 | 🔴 |
+| WSINDy | Clean | STRidge | 0.005 | 0/0 | 2 | 0.0012 | 🟢 |
+| WSINDy | Clean | SR3 | 0.001 | 0/0 | 2 | 0.6394 | 🟢 |
+| WSINDy | Clean | MSTLS | 0.25 | 0/0 | 2 | 0.0012 | 🟢 |
+| WSINDy | 2% | STRidge | 0.1 | 0/0 | 2 | 0.0453 | 🟢 |
+| WSINDy | 2% | SR3 | 0.001 | 0/0 | 2 | 0.5716 | 🟢 |
+| WSINDy | 2% | MSTLS | 0.0 | 0/4 | 0 | 1.0000 | 🔴 |
+| WSINDy | 5% | STRidge | 0.5 | 0/4 | 0 | 1.0000 | 🔴 |
+| WSINDy | 5% | SR3 | 0.005 | 0/4 | 0 | 1.0000 | 🔴 |
+| WSINDy | 5% | MSTLS | 0.0 | 2/4 | 2 | 0.9805 | 🔴 |
+| Polynomial jet | Clean | STRidge | 0.005 | 0/0 | 4 | 0.0007 | 🟢 |
+| Polynomial jet | Clean | SR3 | 0.001 | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | Clean | MSTLS | 0.25 | 0/0 | 4 | 0.0008 | 🟢 |
+| Polynomial jet | 2% | STRidge | 0.5 | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | 2% | SR3 | 0.005 | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | 2% | MSTLS | 0.0 | 2/4 | 2 | 0.9285 | 🔴 |
+| Polynomial jet | 5% | STRidge | 0.2 | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | 5% | SR3 | 0.005 | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | 5% | MSTLS | 0.0 | 2/4 | 2 | 0.9819 | 🔴 |
+| Multigraphs | Clean | STRidge | 0.05 | 0/0 | 2 | 0.0006 | 🟢 |
+| Multigraphs | Clean | SR3 | 0.005 | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | Clean | MSTLS | 0.25 | 0/0 | 2 | 0.0008 | 🟢 |
+| Multigraphs | 2% | STRidge | 0.5 | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | 2% | SR3 | 0.005 | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | 2% | MSTLS | 0.0 | 2/4 | 2 | 0.9285 | 🔴 |
+| Multigraphs | 5% | STRidge | 0.5 | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | 5% | SR3 | 0.01 | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | 5% | MSTLS | 0.0 | 2/4 | 2 | 0.9805 | 🔴 |
 
-At small thresholds the standard library selects all 60 columns. fp/fn are not computed (true-coefficient vector not mapped to standard library columns). The standard library is expected to fail structurally because $f^2 f_{xx}$, $f^2 f_{yy}$, $f f_x^2$, $f f_y^2$ appear as separate columns rather than the two equivariant operators $f^2\Delta f$ and $f\|\nabla f\|^2$.
+## Weak formulation
 
-### Standard library
+### Spectral derivatives backend
 
-The standard library has not been specifically analysed for PME. Since the true operators ($f^2\Delta f$ and $f\|\nabla f\|^2$) involve nonlinear products with derivatives, their coordinate-basis representations require multiple cross-product columns (e.g., $f^2 f_{xx}$, $f^2 f_{yy}$, $f f_x^2$, $f f_y^2$, ...). The standard library is expected to spread these across many columns, requiring more active terms even in the correctly identified equation.
+| Library | Noise | Algorithm | d_tol/α | m | IBP | fp/fn | n_active | E | Exact? |
+|---|---|---|---|---|---|---|---|---|---|
+| PDE-FIND | Clean | STRidge | 0.2 | 8 | no | 0/2 | 4 | 0.8389 | 🔴 |
+| PDE-FIND | Clean | SR3 | 0.2 | 4 | no | 0/2 | 4 | 0.9712 | 🔴 |
+| PDE-FIND | Clean | MSTLS | 0.0 | 4 | no | 2/4 | 2 | 0.2586 | 🔴 |
+| PDE-FIND | Clean | STRidge | 0.5 | 8 | yes | 0/2 | 3 | 0.7949 | 🔴 |
+| PDE-FIND | Clean | SR3 | 0.05 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | Clean | MSTLS | 0.0 | 12 | yes | 5/2 | 7 | 0.3752 | 🔴 |
+| PDE-FIND | 2% | STRidge | 0.2 | 8 | no | 0/2 | 4 | 0.8205 | 🔴 |
+| PDE-FIND | 2% | SR3 | 0.1 | 4 | no | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | 2% | MSTLS | 0.0 | 4 | no | 2/3 | 4 | 0.5617 | 🔴 |
+| PDE-FIND | 2% | STRidge | 0.2 | 8 | yes | 0/2 | 4 | 0.8205 | 🔴 |
+| PDE-FIND | 2% | SR3 | 0.05 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | 2% | MSTLS | 0.0 | 12 | yes | 5/2 | 7 | 1.3576 | 🔴 |
+| PDE-FIND | 5% | STRidge | 0.1 | 4 | no | 0/4 | 2 | 1.0000 | 🔴 |
+| PDE-FIND | 5% | SR3 | 0.1 | 4 | no | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | 5% | MSTLS | 0.75 | 4 | no | 2/2 | 6 | 0.2743 | 🔴 |
+| PDE-FIND | 5% | STRidge | 0.5 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | 5% | SR3 | 0.1 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | 5% | MSTLS | 0.5 | 12 | yes | 2/2 | 5 | 1.5476 | 🔴 |
+| WSINDy | Clean | STRidge | 0.05 | 12 | no | 0/0 | 2 | 0.0006 | 🟢 |
+| WSINDy | Clean | SR3 | 0.01 | 4 | no | 0/0 | 2 | 0.6544 | 🟢 |
+| WSINDy | Clean | MSTLS | 0.25 | 12 | no | 0/0 | 2 | 0.0006 | 🟢 |
+| WSINDy | Clean | STRidge | 0.05 | 12 | yes | 0/0 | 2 | 0.0006 | 🟢 |
+| WSINDy | Clean | SR3 | 0.01 | 4 | yes | 0/0 | 2 | 0.6341 | 🟢 |
+| WSINDy | Clean | MSTLS | 0.25 | 12 | yes | 0/0 | 2 | 0.0006 | 🟢 |
+| WSINDy | 2% | STRidge | 0.5 | 12 | no | 0/0 | 2 | 0.0012 | 🟢 |
+| WSINDy | 2% | SR3 | 0.005 | 4 | no | 0/0 | 2 | 0.4190 | 🟢 |
+| WSINDy | 2% | MSTLS | 0.25 | 12 | no | 0/0 | 2 | 0.0013 | 🟢 |
+| WSINDy | 2% | STRidge | 0.5 | 12 | yes | 0/0 | 2 | 0.0012 | 🟢 |
+| WSINDy | 2% | SR3 | 0.005 | 4 | yes | 0/0 | 2 | 0.4083 | 🟢 |
+| WSINDy | 2% | MSTLS | 0.25 | 12 | yes | 0/0 | 2 | 0.0013 | 🟢 |
+| WSINDy | 5% | STRidge | 1.0 | 12 | no | 0/0 | 2 | 0.0017 | 🟢 |
+| WSINDy | 5% | SR3 | 0.05 | 4 | no | 0/0 | 2 | 0.6330 | 🟢 |
+| WSINDy | 5% | MSTLS | 0.25 | 12 | no | 0/0 | 2 | 0.0022 | 🟢 |
+| WSINDy | 5% | STRidge | 0.2 | 8 | yes | 0/0 | 2 | 0.0043 | 🟢 |
+| WSINDy | 5% | SR3 | 0.01 | 4 | yes | 0/0 | 2 | 0.5038 | 🟢 |
+| WSINDy | 5% | MSTLS | 0.25 | 12 | yes | 0/0 | 2 | 0.0022 | 🟢 |
+| Polynomial jet | Clean | STRidge | 0.2 | 12 | no | 0/0 | 4 | 0.0004 | 🟢 |
+| Polynomial jet | Clean | SR3 | 0.01 | 4 | no | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | Clean | MSTLS | 0.25 | 12 | no | 0/0 | 4 | 0.0007 | 🟢 |
+| Polynomial jet | Clean | STRidge | 0.2 | 12 | yes | 0/0 | 4 | 0.0004 | 🟢 |
+| Polynomial jet | Clean | SR3 | 0.005 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | Clean | MSTLS | 0.25 | 12 | yes | 0/0 | 4 | 0.0007 | 🟢 |
+| Polynomial jet | 2% | STRidge | 0.5 | 8 | no | 0/0 | 4 | 0.0037 | 🟢 |
+| Polynomial jet | 2% | SR3 | 0.005 | 4 | no | 0/0 | 4 | 0.5623 | 🟢 |
+| Polynomial jet | 2% | MSTLS | 0.25 | 8 | no | 0/0 | 4 | 0.0043 | 🟢 |
+| Polynomial jet | 2% | STRidge | 0.5 | 8 | yes | 0/0 | 4 | 0.0037 | 🟢 |
+| Polynomial jet | 2% | SR3 | 0.01 | 4 | yes | 0/0 | 4 | 0.6677 | 🟢 |
+| Polynomial jet | 2% | MSTLS | 0.25 | 8 | yes | 0/0 | 4 | 0.0043 | 🟢 |
+| Polynomial jet | 5% | STRidge | 0.5 | 8 | no | 0/0 | 4 | 0.0202 | 🟢 |
+| Polynomial jet | 5% | SR3 | 0.05 | 8 | no | 0/0 | 4 | 0.7120 | 🟢 |
+| Polynomial jet | 5% | MSTLS | 0.0 | 8 | no | 2/2 | 4 | 50.9075 | 🔴 |
+| Polynomial jet | 5% | STRidge | 0.2 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | 5% | SR3 | 0.05 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | 5% | MSTLS | 0.0 | 4 | yes | 5/4 | 5 | 7.3139 | 🔴 |
+| Multigraphs | Clean | STRidge | 0.2 | 12 | no | 0/0 | 2 | 0.0002 | 🟢 |
+| Multigraphs | Clean | SR3 | 0.05 | 4 | no | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | Clean | MSTLS | 0.0 | 12 | no | 0/0 | 2 | 0.0007 | 🟢 |
+| Multigraphs | Clean | STRidge | 0.2 | 12 | yes | 0/0 | 2 | 0.0002 | 🟢 |
+| Multigraphs | Clean | SR3 | 0.05 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | Clean | MSTLS | 0.0 | 12 | yes | 0/0 | 2 | 0.0007 | 🟢 |
+| Multigraphs | 2% | STRidge | 0.5 | 8 | no | 0/0 | 2 | 0.0026 | 🟢 |
+| Multigraphs | 2% | SR3 | 0.05 | 8 | no | 0/2 | 1 | 0.7542 | 🔴 |
+| Multigraphs | 2% | MSTLS | 0.0 | 12 | no | 0/0 | 2 | 0.0019 | 🟢 |
+| Multigraphs | 2% | STRidge | 0.5 | 8 | yes | 0/0 | 2 | 0.0026 | 🟢 |
+| Multigraphs | 2% | SR3 | 0.05 | 8 | yes | 0/2 | 1 | 0.7543 | 🔴 |
+| Multigraphs | 2% | MSTLS | 0.0 | 12 | yes | 0/0 | 2 | 0.0019 | 🟢 |
+| Multigraphs | 5% | STRidge | 1.0 | 8 | no | 0/0 | 2 | 0.0375 | 🟢 |
+| Multigraphs | 5% | SR3 | 0.05 | 4 | no | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | 5% | MSTLS | 0.0 | 12 | no | 0/0 | 2 | 0.0022 | 🟢 |
+| Multigraphs | 5% | STRidge | 0.5 | 8 | yes | 0/0 | 2 | 0.0375 | 🟢 |
+| Multigraphs | 5% | SR3 | 0.05 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | 5% | MSTLS | 0.0 | 12 | yes | 0/0 | 2 | 0.0022 | 🟢 |
 
-## Additional notes
+### Polynomial stencils backend
 
-**Sharp transition in active set**: the drop from 15 to 2 active operators between d_tol = 0.005 and d_tol = 0.01 (spectral) is striking. It suggests that most of the 15 false-positive operators have normalised coefficients clustered around the threshold range 5–25 × 0.005 = 0.125–0.625, while the two surviving operators (fp=1, fn=1) have larger normalised coefficients. Understanding which operators survive and why would clarify the regression behaviour.
-
-**Mask effectiveness**: the quality of the support mask directly affects the regression. An overly tight mask may exclude valid data; an overly loose mask includes degenerate points that distort the regression. The current mask threshold has not been optimised.
-
-**Short simulation time**: T_end = 2 with save_every = 25 produces only 41 snapshots. The PME evolves quickly and the support expands; after T_end = 2 the solution may be approaching the boundary of the periodic domain. More snapshots from a longer or repeated simulation might improve recovery.
-
-## Noisy data results
-
-The older summary stopped at clean data. The comprehensive sweep now adds 2% and 5% observation noise:
-
-| Noise | Best result | Best recorded configuration |
-|---|---|---|
-| 2% | `fp=1, fn=0` | polynomial SR3 + cutoff 3.0 (`d_tol=0.005`, `lam=0.1`) |
-| 5% | `fp=1, fn=0` | spectral SR3 + cutoff 3.0 (`d_tol=0.01`, `lam=0.1`) |
-
-PME is therefore no longer "untested under noise". It remains close to exact recovery, but not exact, in the saved noisy runs.
-
-## What needs to be done
-
-1. Identify the single recurring false-positive operator in the noisy PME runs.
-2. Add a quantitative standard-library comparison once the coordinate-basis mapping is implemented.
-3. Test whether mask tuning can turn the `fp=1, fn=0` noisy cases into exact recovery.
-
-## Status
-
-**✅ Clean exact recovery achieved; noisy recovery is close but not exact.** Both spectral and polynomial equivariant backends recover the correct 2 operators on clean data. The saved noisy sweeps reach `fp=1, fn=0` at both 2% and 5% noise.
+| Library | Noise | Algorithm | d_tol/α | m | IBP | fp/fn | n_active | E | Exact? |
+|---|---|---|---|---|---|---|---|---|---|
+| PDE-FIND | Clean | STRidge | 0.2 | 8 | no | 0/2 | 4 | 0.8389 | 🔴 |
+| PDE-FIND | Clean | SR3 | 0.2 | 4 | no | 0/2 | 4 | 0.9713 | 🔴 |
+| PDE-FIND | Clean | MSTLS | 0.0 | 4 | no | 2/4 | 2 | 0.2586 | 🔴 |
+| PDE-FIND | Clean | STRidge | 0.5 | 8 | yes | 0/2 | 3 | 0.7949 | 🔴 |
+| PDE-FIND | Clean | SR3 | 0.01 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | Clean | MSTLS | 0.0 | 12 | yes | 5/2 | 7 | 0.3755 | 🔴 |
+| PDE-FIND | 2% | STRidge | 0.2 | 8 | no | 0/2 | 4 | 0.8144 | 🔴 |
+| PDE-FIND | 2% | SR3 | 0.1 | 4 | no | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | 2% | MSTLS | 0.0 | 4 | no | 2/4 | 2 | 0.9287 | 🔴 |
+| PDE-FIND | 2% | STRidge | 1.0 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | 2% | SR3 | 0.05 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | 2% | MSTLS | 0.0 | 12 | yes | 5/2 | 8 | 4.6131 | 🔴 |
+| PDE-FIND | 5% | STRidge | 0.1 | 4 | no | 0/4 | 2 | 1.0000 | 🔴 |
+| PDE-FIND | 5% | SR3 | 0.5 | 8 | no | 0/2 | 4 | 0.9705 | 🔴 |
+| PDE-FIND | 5% | MSTLS | 0.5 | 4 | no | 2/3 | 4 | 0.5028 | 🔴 |
+| PDE-FIND | 5% | STRidge | 0.1 | 4 | yes | 0/2 | 3 | 0.7244 | 🔴 |
+| PDE-FIND | 5% | SR3 | 0.1 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| PDE-FIND | 5% | MSTLS | 0.0 | 12 | yes | 5/2 | 8 | 2.8699 | 🔴 |
+| WSINDy | Clean | STRidge | 0.05 | 12 | no | 0/0 | 2 | 0.0006 | 🟢 |
+| WSINDy | Clean | SR3 | 0.01 | 4 | no | 0/0 | 2 | 0.6575 | 🟢 |
+| WSINDy | Clean | MSTLS | 0.25 | 12 | no | 0/0 | 2 | 0.0006 | 🟢 |
+| WSINDy | Clean | STRidge | 0.05 | 12 | yes | 0/0 | 2 | 0.0006 | 🟢 |
+| WSINDy | Clean | SR3 | 0.01 | 4 | yes | 0/0 | 2 | 0.6369 | 🟢 |
+| WSINDy | Clean | MSTLS | 0.25 | 12 | yes | 0/0 | 2 | 0.0006 | 🟢 |
+| WSINDy | 2% | STRidge | 0.2 | 12 | no | 0/0 | 2 | 0.0012 | 🟢 |
+| WSINDy | 2% | SR3 | 0.01 | 4 | no | 0/0 | 2 | 0.4963 | 🟢 |
+| WSINDy | 2% | MSTLS | 0.25 | 12 | no | 0/0 | 2 | 0.0013 | 🟢 |
+| WSINDy | 2% | STRidge | 1.0 | 12 | yes | 0/0 | 2 | 0.0012 | 🟢 |
+| WSINDy | 2% | SR3 | 0.005 | 4 | yes | 0/0 | 2 | 0.4379 | 🟢 |
+| WSINDy | 2% | MSTLS | 0.25 | 12 | yes | 0/0 | 2 | 0.0013 | 🟢 |
+| WSINDy | 5% | STRidge | 0.5 | 12 | no | 0/0 | 2 | 0.0018 | 🟢 |
+| WSINDy | 5% | SR3 | 0.005 | 4 | no | 0/0 | 2 | 0.3573 | 🟢 |
+| WSINDy | 5% | MSTLS | 0.25 | 12 | no | 0/0 | 2 | 0.0022 | 🟢 |
+| WSINDy | 5% | STRidge | 1.0 | 12 | yes | 0/0 | 2 | 0.0018 | 🟢 |
+| WSINDy | 5% | SR3 | 0.005 | 4 | yes | 0/0 | 2 | 0.3113 | 🟢 |
+| WSINDy | 5% | MSTLS | 0.25 | 12 | yes | 0/0 | 2 | 0.0022 | 🟢 |
+| Polynomial jet | Clean | STRidge | 0.5 | 12 | no | 0/0 | 4 | 0.0004 | 🟢 |
+| Polynomial jet | Clean | SR3 | 0.01 | 4 | no | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | Clean | MSTLS | 0.25 | 12 | no | 0/0 | 4 | 0.0006 | 🟢 |
+| Polynomial jet | Clean | STRidge | 0.2 | 12 | yes | 0/0 | 4 | 0.0004 | 🟢 |
+| Polynomial jet | Clean | SR3 | 0.01 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | Clean | MSTLS | 0.25 | 12 | yes | 0/0 | 4 | 0.0006 | 🟢 |
+| Polynomial jet | 2% | STRidge | 0.5 | 8 | no | 0/0 | 4 | 0.0040 | 🟢 |
+| Polynomial jet | 2% | SR3 | 0.005 | 4 | no | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | 2% | MSTLS | 0.25 | 8 | no | 0/0 | 4 | 0.0048 | 🟢 |
+| Polynomial jet | 2% | STRidge | 0.5 | 8 | yes | 0/0 | 4 | 0.0040 | 🟢 |
+| Polynomial jet | 2% | SR3 | 0.005 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | 2% | MSTLS | 0.25 | 12 | yes | 0/0 | 4 | 0.0209 | 🟢 |
+| Polynomial jet | 5% | STRidge | 0.1 | 4 | no | 0/0 | 4 | 0.0443 | 🟢 |
+| Polynomial jet | 5% | SR3 | 0.005 | 4 | no | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | 5% | MSTLS | 0.25 | 4 | no | 0/0 | 4 | 0.0352 | 🟢 |
+| Polynomial jet | 5% | STRidge | 0.1 | 4 | yes | 0/0 | 4 | 0.0413 | 🟢 |
+| Polynomial jet | 5% | SR3 | 0.01 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| Polynomial jet | 5% | MSTLS | 0.25 | 4 | yes | 3/0 | 7 | 14.2391 | 🔴 |
+| Multigraphs | Clean | STRidge | 0.2 | 12 | no | 0/0 | 2 | 0.0002 | 🟢 |
+| Multigraphs | Clean | SR3 | 0.05 | 4 | no | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | Clean | MSTLS | 0.0 | 12 | no | 0/0 | 2 | 0.0006 | 🟢 |
+| Multigraphs | Clean | STRidge | 0.2 | 12 | yes | 0/0 | 2 | 0.0002 | 🟢 |
+| Multigraphs | Clean | SR3 | 0.05 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | Clean | MSTLS | 0.0 | 12 | yes | 0/0 | 2 | 0.0006 | 🟢 |
+| Multigraphs | 2% | STRidge | 1.0 | 4 | no | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | 2% | SR3 | 0.01 | 4 | no | 0/2 | 1 | 0.9992 | 🔴 |
+| Multigraphs | 2% | MSTLS | 0.0 | 4 | no | 0/0 | 2 | 0.0017 | 🟢 |
+| Multigraphs | 2% | STRidge | 0.5 | 4 | yes | 0/4 | 0 | 1.0000 | 🔴 |
+| Multigraphs | 2% | SR3 | 0.01 | 4 | yes | 0/2 | 1 | 0.9992 | 🔴 |
+| Multigraphs | 2% | MSTLS | 0.0 | 4 | yes | 0/0 | 2 | 0.0017 | 🟢 |
+| Multigraphs | 5% | STRidge | 1.0 | 12 | no | 0/0 | 2 | 0.0051 | 🟢 |
+| Multigraphs | 5% | SR3 | 0.05 | 8 | no | 0/2 | 1 | 0.9188 | 🔴 |
+| Multigraphs | 5% | MSTLS | 0.0 | 12 | no | 0/0 | 2 | 0.0053 | 🟢 |
+| Multigraphs | 5% | STRidge | 1.0 | 12 | yes | 0/0 | 2 | 0.0051 | 🟢 |
+| Multigraphs | 5% | SR3 | 0.05 | 8 | yes | 0/2 | 1 | 0.9191 | 🔴 |
+| Multigraphs | 5% | MSTLS | 0.0 | 12 | yes | 0/0 | 2 | 0.0053 | 🟢 |

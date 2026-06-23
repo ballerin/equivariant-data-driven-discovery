@@ -21,10 +21,10 @@ import numpy as np
 import pytest
 
 # Ensure the code directory is importable when tests are run from the repo root.
-CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
-import spectral_derivatives as sd  # noqa: E402
+from equivariant_pde_find import spectral_derivatives as sd  # noqa: E402
 
 
 def make_grid(Nx, Ny, Lx, Ly):
