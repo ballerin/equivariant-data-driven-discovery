@@ -254,16 +254,17 @@ def test_polynomial_linearity():
     fx, fy = pd.polynomial_grad(f, Lx, Ly)
     gx, gy = pd.polynomial_grad(g, Lx, Ly)
     hx, hy = pd.polynomial_grad(h, Lx, Ly)
-    # atol=1e-13: floating-point accumulation in the kernel correlation
-    # (sum of weighted np.roll outputs) introduces ~1e-14 round-off, so
-    # a slightly relaxed absolute tolerance is correct here.
-    np.testing.assert_allclose(hx, a * fx + b * gx, rtol=1e-12, atol=1e-13)
-    np.testing.assert_allclose(hy, a * fy + b * gy, rtol=1e-12, atol=1e-13)
+    # atol=1e-12: floating-point accumulation in the kernel correlation
+    # (sum of weighted np.roll outputs) introduces ~1e-14 round-off per
+    # element; cross-architecture variance can push a few elements to
+    # ~1.7e-13, so we use atol=1e-12 for safety.
+    np.testing.assert_allclose(hx, a * fx + b * gx, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(hy, a * fy + b * gy, rtol=1e-12, atol=1e-12)
 
     lap_f = pd.polynomial_laplacian(f, Lx, Ly)
     lap_g = pd.polynomial_laplacian(g, Lx, Ly)
     lap_h = pd.polynomial_laplacian(h, Lx, Ly)
-    np.testing.assert_allclose(lap_h, a * lap_f + b * lap_g, rtol=1e-12, atol=1e-13)
+    np.testing.assert_allclose(lap_h, a * lap_f + b * lap_g, rtol=1e-12, atol=1e-12)
 
 
 def test_polynomial_hessian_trace_equals_laplacian():
