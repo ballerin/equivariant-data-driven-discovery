@@ -103,6 +103,56 @@ def true_pme(descriptions):
     return w
 
 
+# -----------------------------------------------------------------------
+# Modified Multigraph (IBP-friendly) ground truth
+# -----------------------------------------------------------------------
+# For equations whose terms are all in the unchanged set (AC, SH, KS),
+# the ground truth is identical.  For CH and PME, the changed operator
+# f²·Δf is replaced by Δf³, and coefficients are transformed via the
+# change-of-basis matrix.
+
+
+def true_allen_cahn_mod_multigraph(descriptions, eps=0.15):
+    """Allen-Cahn in the modified multigraph basis.  Identical to original."""
+    return true_allen_cahn(descriptions, eps=eps)
+
+
+def true_swift_hohenberg_mod_multigraph(descriptions, r=0.3):
+    """Swift-Hohenberg in the modified multigraph basis.  Identical to original."""
+    return true_swift_hohenberg(descriptions, r=r)
+
+
+def true_ks_mod_multigraph(descriptions):
+    """Kuramoto-Sivashinsky in the modified multigraph basis.  Identical to original."""
+    return true_ks(descriptions)
+
+
+def true_cahn_hilliard_mod_multigraph(descriptions, eps=0.2):
+    """Cahn-Hilliard in the modified multigraph basis.
+
+    In the original basis:  -Δf + 3·f²·Δf + 6·f·‖∇f‖² - ε²·Δ²f.
+    In the mod. basis: Δf³ = 3·f²·Δf + 6·f·‖∇f‖², so the coefficient
+    at Δf³ is 1.0 and f·‖∇f‖² is zero.
+    """
+    w = np.zeros(len(descriptions))
+    w[find_op(descriptions, 'Δf')] = -1.0
+    w[find_op(descriptions, 'Δf³')] = 1.0
+    w[find_op(descriptions, 'Δ²f')] = -(eps ** 2)
+    return w
+
+
+def true_pme_mod_multigraph(descriptions):
+    """Porous Medium Equation (m=2) in the modified multigraph basis.
+
+    Original: f²·Δf + 2·f·‖∇f‖².
+    Δf³ = 3·f²·Δf + 6·f·‖∇f‖², so:
+      w[Δf³] = 1/3,  w[f·‖∇f‖²] = 0.
+    """
+    w = np.zeros(len(descriptions))
+    w[find_op(descriptions, 'Δf³')] = 1.0 / 3.0
+    return w
+
+
 def true_pme_wsindy(descriptions):
     """Ground-truth coefficients for PME in the WSINDy basis ∂^α(f^q).
 

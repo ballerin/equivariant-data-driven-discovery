@@ -295,8 +295,40 @@ def _cached_kernel_1d(m, p):
 # ---------------------------------------------------------------------------
 
 
-# Operators that can be handled via IBP (purely linear differential operators).
-_IBP_OPERATORS = {"Δf", "Δ²f"}
+def _is_laplacian_of(desc):
+    """Determine whether a (modified) multigraph operator is of the form
+    Δ(something) or Δ²(something), and if so, return the appropriate
+    IBP tag and the callable that computes the *inner* argument.
+
+    Returns
+    -------
+    (operator_type, inner_func)  or  None
+        operator_type is ``'laplacian'`` or ``'bilaplacian'``.
+        ``inner_func(f, Lx, Ly)`` computes the argument of Δ / Δ².
+    """
+    # Laplacian-of operators: Δf, Δf², Δf³, Δ‖∇f‖², Δ(f·‖∇f‖²)
+    if desc == "Δf":
+        return ("laplacian", lambda f, Lx, Ly: f)
+    if desc == "Δf²":
+        return ("laplacian", lambda f, Lx, Ly: f**2)
+    if desc == "Δf³":
+        return ("laplacian", lambda f, Lx, Ly: f**3)
+    if desc == "Δ‖∇f‖²":
+        from .multigraph_operators import _op_grad_sq
+        return ("laplacian", _op_grad_sq)
+    if desc == "Δ(f·‖∇f‖²)":
+        from .multigraph_operators import _op_grad_sq
+        return ("laplacian", lambda f, Lx, Ly: f * _op_grad_sq(f, Lx, Ly))
+
+    # Bilaplacian-of operators: Δ²f, Δ²f², Δ²f³
+    if desc == "Δ²f":
+        return ("bilaplacian", lambda f, Lx, Ly: f)
+    if desc == "Δ²f²":
+        return ("bilaplacian", lambda f, Lx, Ly: f**2)
+    if desc == "Δ²f³":
+        return ("bilaplacian", lambda f, Lx, Ly: f**3)
+
+    return None
 
 
 def build_weak_library(f, Lx, Ly, max_p=2, max_n=3, m=8, p=4,
@@ -315,10 +347,10 @@ def build_weak_library(f, Lx, Ly, max_p=2, max_n=3, m=8, p=4,
     p : int
         Test function polynomial degree.
     use_ibp : bool
-        If True, use integration by parts for linear differential operators
-        (Δf, Δ²f).  This moves derivatives off the (possibly noisy) data
-        and onto the analytically-known test function, eliminating the
-        |k|² and |k|⁴ noise amplification.  Default False (direct weak-form).
+        If True, use integration by parts for operators of the form
+        Δ(something) or Δ²(something).  The Δ/Δ² is moved onto the
+        analytically-known test function, eliminating |k|² and |k|⁴
+        noise amplification.  Default False (direct weak-form).
 
     Returns
     -------
@@ -331,20 +363,68 @@ def build_weak_library(f, Lx, Ly, max_p=2, max_n=3, m=8, p=4,
 
     cols = []
     for func, desc in ops:
-        if use_ibp and desc in _IBP_OPERATORS:
-            # IBP path: convolve raw f with differentiated test function.
-            # No derivatives of f are computed — the differential operator
-            # is moved onto ψ via Green's identities.
-            if desc == "Δf":
-                col_weak = weak_laplacian_ibp(f, m, p, Lx, Ly)
-            elif desc == "Δ²f":
-                col_weak = weak_bilaplacian_ibp(f, m, p, Lx, Ly)
+        ibp_info = _is_laplacian_of(desc) if use_ibp else None
+        if ibp_info is not None:
+            op_type, inner_func = ibp_info
+            inner_field = inner_func(f, Lx, Ly)
+            if op_type == "laplacian":
+                col_weak = weak_laplacian_ibp(inner_field, m, p, Lx, Ly)
+            elif op_type == "bilaplacian":
+                col_weak = weak_bilaplacian_ibp(inner_field, m, p, Lx, Ly)
             else:
-                # Should not reach here, but fall back to direct.
+                # Fallback
                 col_raw = func(f, Lx, Ly)
                 col_weak = weak_convolution(col_raw, kernel, kernel)
         else:
             # Direct path: compute operator on data, then convolve.
+            col_raw = func(f, Lx, Ly)
+            col_weak = weak_convolution(col_raw, kernel, kernel)
+        cols.append(col_weak.ravel())
+
+    descriptions = [desc for _, desc in ops]
+    return np.column_stack(cols), descriptions
+
+
+def build_weak_mod_multigraph_library(f, Lx, Ly, max_p=2, max_n=3,
+                                         m=8, p=4, use_ibp=False):
+    """Build the weak-form **modified multigraph** library matrix.
+
+    Like ``build_weak_library`` but uses the IBP-friendly operator basis
+    from Lemma 1 / Table 4.  When ``use_ibp=True``, up to 8 operators
+    (Δf, Δf², Δf³, Δ‖∇f‖², Δ(f·‖∇f‖²), Δ²f, Δ²f², Δ²f³) are evaluated
+    via integration by parts instead of by differentiating noisy data.
+
+    Parameters
+    ----------
+    f : ndarray of shape (Nx, Ny)
+    Lx, Ly : float
+    max_p, max_n : int
+    m, p : int — test function parameters
+    use_ibp : bool
+
+    Returns
+    -------
+    Theta_weak : ndarray of shape (N_valid, K)
+    descriptions : list of K str
+    """
+    from .multigraph_operators import get_mod_multigraph_operators
+    ops = get_mod_multigraph_operators(max_p, max_n)
+    kernel = _cached_kernel_1d(m, p)
+
+    cols = []
+    for func, desc in ops:
+        ibp_info = _is_laplacian_of(desc) if use_ibp else None
+        if ibp_info is not None:
+            op_type, inner_func = ibp_info
+            inner_field = inner_func(f, Lx, Ly)
+            if op_type == "laplacian":
+                col_weak = weak_laplacian_ibp(inner_field, m, p, Lx, Ly)
+            elif op_type == "bilaplacian":
+                col_weak = weak_bilaplacian_ibp(inner_field, m, p, Lx, Ly)
+            else:
+                col_raw = func(f, Lx, Ly)
+                col_weak = weak_convolution(col_raw, kernel, kernel)
+        else:
             col_raw = func(f, Lx, Ly)
             col_weak = weak_convolution(col_raw, kernel, kernel)
         cols.append(col_weak.ravel())

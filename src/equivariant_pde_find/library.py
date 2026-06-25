@@ -110,6 +110,36 @@ def build_equivariant_library(f, Lx, Ly, max_p=2, max_n=3):
     return np.column_stack(cols), descs
 
 
+def build_mod_multigraph_library(f, Lx, Ly, max_p=2, max_n=3):
+    """Build the modified multigraph (IBP-friendly) library matrix.
+
+    Uses the operator basis from Lemma 1 / Table 4 of the paper, which
+    replaces 6 operators of the form f·(derivative) with Δ(something)
+    or Δ²(something) forms.  This basis spans the same 20-dimensional
+    space as ``build_equivariant_library`` but is designed for use with
+    the weak-form integration-by-parts mechanism.
+
+    Parameters
+    ----------
+    f     : ndarray, shape (Nx, Ny)
+    Lx, Ly : float
+    max_p : int — maximum edge count (0, 1, or 2)
+    max_n : int — maximum polynomial degree (0..3)
+
+    Returns
+    -------
+    Theta        : ndarray, shape (Nx*Ny, K)
+    descriptions : list of K strings
+    """
+    from .multigraph_operators import get_mod_multigraph_operators
+    ops = get_mod_multigraph_operators(max_p, max_n)
+    cols, descs = [], []
+    for op, name in ops:
+        cols.append(op(f, Lx, Ly).ravel())
+        descs.append(name)
+    return np.column_stack(cols), descs
+
+
 def build_standard_library(f, Lx, Ly, max_order=4, max_poly=3):
     """Build a coordinate-based library as used in PDE-Find.
 

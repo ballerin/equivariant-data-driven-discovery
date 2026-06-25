@@ -374,7 +374,7 @@ For `get_operators(max_p=2, max_n=3)` the 20 operators are, in order:
 
 [2] Ballerin, F. & Grong, E. (2026). Equivariant nonlinear partial differential operators on constant curvature spaces. *arXiv preprint arXiv:2605.16847*. https://arxiv.org/abs/2605.16847
 
-[3]      Samuel H. Rudy et al. ,Data-driven discovery of partial differential equations.Sci. Adv.3,e1602614(2017). DOI:10.1126/sciadv.1602614 (PDE-FIND)
+[3] Samuel H. Rudy et al. ,Data-driven discovery of partial differential equations.Sci. Adv.3,e1602614(2017). DOI:10.1126/sciadv.1602614 (PDE-FIND)
 
 [4] Messenger, D. A. & Bortz, D. M. (2021). Weak SINDy for Partial Differential Equations. *J. Comput. Phys.*, 443, 110525. https://arxiv.org/abs/2007.02848 (WSINDy)
 

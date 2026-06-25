@@ -274,6 +274,20 @@ def map_equivariant_to_jet_from_w(w_eq, desc_eq, desc_jet):
     return w_jet
 
 
+def map_mod_multigraph_to_jet_from_w(w_mod, desc_mod, desc_jet):
+    """Map modified multigraph coefficients to jet coefficients using the
+    analytical decomposition in _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION."""
+    w_jet = np.zeros(len(desc_jet))
+    for j, (name, coeff) in enumerate(zip(desc_mod, w_mod)):
+        if abs(coeff) < 1e-14:
+            continue
+        if name not in _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION:
+            continue
+        for jet_name, mult in _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION[name]:
+            w_jet[desc_jet.index(jet_name)] += coeff * mult
+    return w_jet
+
+
 def evaluate_unified(w, library, desc_lib, desc_jet, Theta_jet, Ft,
                      true_jet, M_ws_to_jet=None):
     """Evaluate a recovery from any library against the polynomial-jet truth.
@@ -283,6 +297,8 @@ def evaluate_unified(w, library, desc_lib, desc_jet, Theta_jet, Ft,
     """
     if library == "equivariant":
         w_jet = map_equivariant_to_jet_from_w(w, desc_lib, desc_jet)
+    elif library == "mod_multigraph":
+        w_jet = map_mod_multigraph_to_jet_from_w(w, desc_lib, desc_jet)
     elif library == "standard":
         w_jet = map_standard_to_jet(w, desc_lib, desc_jet)
     elif library in ("wsindy", "wsindy_proj", "mwsindy") and M_ws_to_jet is not None:
@@ -599,6 +615,76 @@ _EQUIV_TO_JET_DECOMPOSITION = {
 }
 
 
+# ── Modified Multigraph → polynomial jet library decomposition ────────────
+
+# Maps modified multigraph operator name → list of (jet_monomial, coefficient).
+# The 14 unchanged operators reuse entries from _EQUIV_TO_JET_DECOMPOSITION;
+# the 6 new operators use corrected formulas from Lemma 1 (see lemma1-errata.md).
+_MOD_MULTIGRAPH_TO_JET_DECOMPOSITION = {
+    # --- Unchanged operators (identical to _EQUIV_TO_JET_DECOMPOSITION) ---
+    "1":                [("1", 1.0)],
+    "f":                [("f", 1.0)],
+    "f²":               [("f²", 1.0)],
+    "f³":               [("f³", 1.0)],
+    "Δf":               [("f_xx", 1.0), ("f_yy", 1.0)],
+    "‖∇f‖²":           [("f_x²", 1.0), ("f_y²", 1.0)],
+    "f·‖∇f‖²":         [("f·f_x²", 1.0), ("f·f_y²", 1.0)],
+    "Δ²f":              [("f_xxxx", 1.0), ("f_xxyy", 2.0), ("f_yyyy", 1.0)],
+    "‖∇²f‖²":          [("f_xx²", 1.0), ("f_xy²", 2.0), ("f_yy²", 1.0)],
+    "Δf·Δf":            [("f_xx²", 1.0), ("f_yy·f_xx", 2.0), ("f_yy²", 1.0)],
+    "f·‖∇²f‖²":        [("f·f_xx²", 1.0), ("f·f_xy²", 2.0),
+                         ("f·f_yy²", 1.0)],
+    "f·Δf·Δf":          [("f·f_xx²", 1.0), ("f·f_yy·f_xx", 2.0),
+                         ("f·f_yy²", 1.0)],
+    "∇²f(∇f,∇f)":      [("f_x²·f_xx", 1.0), ("f_y·f_x·f_xy", 2.0),
+                         ("f_y²·f_yy", 1.0)],
+    "‖∇f‖²·Δf":        [("f_x²·f_xx", 1.0), ("f_x²·f_yy", 1.0),
+                         ("f_y²·f_xx", 1.0), ("f_y²·f_yy", 1.0)],
+
+    # --- Modified operators (6 replacements, corrected coefficients) ---
+    # Δf² = 2f·Δf + 2‖∇f‖²
+    "Δf²":              [("f·f_xx", 2.0), ("f·f_yy", 2.0),
+                         ("f_x²", 2.0), ("f_y²", 2.0)],
+
+    # Δf³ = 3f²·Δf + 6f·‖∇f‖²
+    "Δf³":              [("f²·f_xx", 3.0), ("f²·f_yy", 3.0),
+                         ("f·f_x²", 6.0), ("f·f_y²", 6.0)],
+
+    # Δ‖∇f‖² = 2⟨∇Δf,∇f⟩ + 2‖∇²f‖²
+    "Δ‖∇f‖²":          [("f_x·f_xxx", 2.0), ("f_x·f_xyy", 2.0),
+                         ("f_y·f_xxy", 2.0), ("f_y·f_yyy", 2.0),
+                         ("f_xx²", 2.0), ("f_xy²", 4.0), ("f_yy²", 2.0)],
+
+    # Δ(f·‖∇f‖²) = 2f·⟨∇Δf,∇f⟩ + 2f·‖∇²f‖² + ‖∇f‖²·Δf + 4∇²f(∇f,∇f)
+    "Δ(f·‖∇f‖²)":      [("f·f_x·f_xxx", 2.0), ("f·f_x·f_xyy", 2.0),
+                         ("f·f_y·f_xxy", 2.0), ("f·f_y·f_yyy", 2.0),
+                         ("f·f_xx²", 2.0), ("f·f_xy²", 4.0), ("f·f_yy²", 2.0),
+                         ("f_x²·f_xx", 5.0), ("f_x²·f_yy", 1.0),
+                         ("f_y²·f_xx", 1.0), ("f_y²·f_yy", 5.0),
+                         ("f_y·f_x·f_xy", 8.0)],
+
+    # Δ²f² = 2f·Δ²f + 8⟨∇Δf,∇f⟩ + 4‖∇²f‖² + 2(Δf)²  (CORRECTED: 4‖∇²f‖²)
+    "Δ²f²":             [("f·f_xxxx", 2.0), ("f·f_xxyy", 4.0),
+                         ("f·f_yyyy", 2.0),
+                         ("f_x·f_xxx", 8.0), ("f_x·f_xyy", 8.0),
+                         ("f_y·f_xxy", 8.0), ("f_y·f_yyy", 8.0),
+                         ("f_xx²", 6.0), ("f_xy²", 8.0), ("f_yy²", 6.0),
+                         ("f_yy·f_xx", 4.0)],
+
+    # Δ²f³ = 3f²·Δ²f + 24f·⟨∇Δf,∇f⟩ + 12f·‖∇²f‖² + 6f·(Δf)²
+    #        + 24∇²f(∇f,∇f) + 12‖∇f‖²·Δf  (CORRECTED: 24f⟨∇Δf,∇f⟩)
+    "Δ²f³":             [("f²·f_xxxx", 3.0), ("f²·f_xxyy", 6.0),
+                         ("f²·f_yyyy", 3.0),
+                         ("f·f_x·f_xxx", 24.0), ("f·f_x·f_xyy", 24.0),
+                         ("f·f_y·f_xxy", 24.0), ("f·f_y·f_yyy", 24.0),
+                         ("f·f_xx²", 18.0), ("f·f_xy²", 24.0),
+                         ("f·f_yy²", 18.0), ("f·f_yy·f_xx", 12.0),
+                         ("f_x²·f_xx", 36.0), ("f_y·f_x·f_xy", 48.0),
+                         ("f_y²·f_yy", 36.0),
+                         ("f_x²·f_yy", 12.0), ("f_y²·f_xx", 12.0)],
+}
+
+
 def decompose_equivariant_to_jet(true_eq, desc_eq, desc_jet):
     """Decompose equivariant ground truth into polynomial-jet coefficients.
 
@@ -626,6 +712,40 @@ def decompose_equivariant_to_jet(true_eq, desc_eq, desc_jet):
                 f"Available: {list(_EQUIV_TO_JET_DECOMPOSITION)}"
             )
         for jet_name, mult in _EQUIV_TO_JET_DECOMPOSITION[name]:
+            try:
+                j = desc_jet.index(jet_name)
+            except ValueError:
+                raise KeyError(
+                    f"Jet monomial {jet_name!r} not found in library. "
+                    f"Available (first 10): {desc_jet[:10]}..."
+                )
+            true_jet[j] += coeff * mult
+    return true_jet
+
+
+def decompose_mod_multigraph_to_jet(true_mod, desc_mod, desc_jet):
+    """Decompose mod. multigraph ground truth into polynomial-jet coefficients.
+
+    Parameters
+    ----------
+    true_mod : ndarray (K_mod,)
+    desc_mod : list of K_mod str
+    desc_jet : list of K_jet str
+
+    Returns
+    -------
+    true_jet : ndarray (K_jet,)
+    """
+    true_jet = np.zeros(len(desc_jet), dtype=float)
+    for i, (name, coeff) in enumerate(zip(desc_mod, true_mod)):
+        if abs(coeff) < 1e-12:
+            continue
+        if name not in _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION:
+            raise KeyError(
+                f"Mod. multigraph operator {name!r} has no jet decomposition. "
+                f"Available: {list(_MOD_MULTIGRAPH_TO_JET_DECOMPOSITION)}"
+            )
+        for jet_name, mult in _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION[name]:
             try:
                 j = desc_jet.index(jet_name)
             except ValueError:

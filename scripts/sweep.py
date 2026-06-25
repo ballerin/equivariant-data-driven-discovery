@@ -65,6 +65,7 @@ from equivariant_pde_find.equation_configs import (  # noqa: E402
 from equivariant_pde_find.library import (  # noqa: E402
     build_equivariant_library, build_standard_library,
     build_polynomial_jet_library, build_pointwise_wsindy_library,
+    build_mod_multigraph_library,
     spectral_lowpass,
 )
 from equivariant_pde_find.regression import TrainSTRidge, TrainSR3, mstls_sweep  # noqa: E402
@@ -132,6 +133,8 @@ def build_pointwise(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend):
         for s in range(len(f_snaps)):
             if library == "equivariant":
                 T, desc = build_equivariant_library(f_snaps[s], Lx, Ly)
+            elif library == "mod_multigraph":
+                T, desc = build_mod_multigraph_library(f_snaps[s], Lx, Ly)
             elif library == "polynomial_jet":
                 T, desc = build_polynomial_jet_library(
                     f_snaps[s], Lx, Ly, max_order=4, max_degree=3,
@@ -161,6 +164,11 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
             ft = ft_snaps[s]
             if library == "equivariant":
                 G, desc = wf.build_weak_library(
+                    f, Lx, Ly, max_p=2, max_n=3, m=m, p=WEAK_P,
+                    use_ibp=use_ibp,
+                )
+            elif library == "mod_multigraph":
+                G, desc = wf.build_weak_mod_multigraph_library(
                     f, Lx, Ly, max_p=2, max_n=3, m=m, p=WEAK_P,
                     use_ibp=use_ibp,
                 )
@@ -261,7 +269,7 @@ def main():
     parser.add_argument(
         "--libraries", nargs="+",
         default=["equivariant", "standard", "polynomial_jet", "wsindy", "wsindy_proj", "mwsindy"],
-        choices=["equivariant", "standard", "polynomial_jet", "wsindy", "wsindy_proj", "mwsindy"],
+        choices=["equivariant", "mod_multigraph", "standard", "polynomial_jet", "wsindy", "wsindy_proj", "mwsindy"],
     )
     parser.add_argument(
         "--backends", nargs="+",

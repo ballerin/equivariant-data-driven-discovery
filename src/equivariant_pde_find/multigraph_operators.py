@@ -173,6 +173,97 @@ def _op_hess_grad_grad(f, Lx, Ly):
     return fxx * fx**2 + 2 * fxy * fx * fy + fyy * fy**2
 
 
+# --- p = 2, modified multigraph operators (Lemma 1 / Table 4) ---
+# These are the 6 operators in the IBP-friendly basis that differ from
+# the original multigraph basis.  All are computed via product-rule
+# expansion to avoid compounding numerical errors.
+#
+# NOTE: The paper's Lemma 1 proof contains two numerical errors that
+# are corrected here (see lemma1-errata.md):
+#   - Δ²f² uses 4‖∇²f‖² (not 2)
+#   - Δ²f³ uses 24f·⟨∇Δf,∇f⟩ (not 6)
+
+
+def _op_Delta_f2(f, Lx, Ly):
+    """Δ(f²) = 2f·Δf + 2‖∇f‖².  Replacement for f·Δf (N₁;₀²)."""
+    fx, fy = grad(f, Lx, Ly)
+    lap = laplacian(f, Lx, Ly)
+    return 2.0 * f * lap + 2.0 * (fx**2 + fy**2)
+
+
+def _op_Delta_f3(f, Lx, Ly):
+    """Δ(f³) = 3f²·Δf + 6f·‖∇f‖².  Replacement for f²·Δf (N₁;₀³)."""
+    fx, fy = grad(f, Lx, Ly)
+    lap = laplacian(f, Lx, Ly)
+    return 3.0 * f**2 * lap + 6.0 * f * (fx**2 + fy**2)
+
+
+def _op_Delta_grad_sq(f, Lx, Ly):
+    """Δ(‖∇f‖²) = 2⟨∇Δf,∇f⟩ + 2‖∇²f‖².  Replacement for ⟨∇Δf,∇f⟩ (N₂;₁²)."""
+    Df = laplacian(f, Lx, Ly)
+    Dfx, Dfy = grad(Df, Lx, Ly)
+    fx, fy = grad(f, Lx, Ly)
+    fxx, fxy, fyy = hessian(f, Lx, Ly)
+    return 2.0 * (Dfx * fx + Dfy * fy) + 2.0 * (fxx**2 + 2.0 * fxy**2 + fyy**2)
+
+
+def _op_Delta_f_grad_sq(f, Lx, Ly):
+    """Δ(f·‖∇f‖²) = 2f·⟨∇Δf,∇f⟩ + 2f·‖∇²f‖² + ‖∇f‖²·Δf + 4∇²f(∇f,∇f).
+    Replacement for f·⟨∇Δf,∇f⟩ (N₂;₁³)."""
+    Df = laplacian(f, Lx, Ly)
+    Dfx, Dfy = grad(Df, Lx, Ly)
+    fx, fy = grad(f, Lx, Ly)
+    fxx, fxy, fyy = hessian(f, Lx, Ly)
+    grad_sq = fx**2 + fy**2
+    hess_norm_sq = fxx**2 + 2.0 * fxy**2 + fyy**2
+    hess_grad_grad = fxx * fx**2 + 2.0 * fxy * fx * fy + fyy * fy**2
+    return (
+        2.0 * f * (Dfx * fx + Dfy * fy)
+        + 2.0 * f * hess_norm_sq
+        + grad_sq * Df
+        + 4.0 * hess_grad_grad
+    )
+
+
+def _op_Delta2_f2(f, Lx, Ly):
+    """Δ²(f²) = 2f·Δ²f + 8⟨∇Δf,∇f⟩ + 4‖∇²f‖² + 2(Δf)².
+    Replacement for f·Δ²f (N₂;₀²).  CORRECTED: 4‖∇²f‖² (paper has 2)."""
+    Df = laplacian(f, Lx, Ly)
+    D2f = bilaplacian(f, Lx, Ly)
+    Dfx, Dfy = grad(Df, Lx, Ly)
+    fx, fy = grad(f, Lx, Ly)
+    fxx, fxy, fyy = hessian(f, Lx, Ly)
+    hess_norm_sq = fxx**2 + 2.0 * fxy**2 + fyy**2
+    return (
+        2.0 * f * D2f
+        + 8.0 * (Dfx * fx + Dfy * fy)
+        + 4.0 * hess_norm_sq
+        + 2.0 * Df**2
+    )
+
+
+def _op_Delta2_f3(f, Lx, Ly):
+    """Δ²(f³) = 3f²·Δ²f + 24f·⟨∇Δf,∇f⟩ + 12f·‖∇²f‖² + 6f·(Δf)²
+    + 24∇²f(∇f,∇f) + 12‖∇f‖²·Δf.
+    Replacement for f²·Δ²f (N₂;₀³).  CORRECTED: 24f⟨∇Δf,∇f⟩ (paper has 6)."""
+    Df = laplacian(f, Lx, Ly)
+    D2f = bilaplacian(f, Lx, Ly)
+    Dfx, Dfy = grad(Df, Lx, Ly)
+    fx, fy = grad(f, Lx, Ly)
+    fxx, fxy, fyy = hessian(f, Lx, Ly)
+    grad_sq = fx**2 + fy**2
+    hess_norm_sq = fxx**2 + 2.0 * fxy**2 + fyy**2
+    hess_grad_grad = fxx * fx**2 + 2.0 * fxy * fx * fy + fyy * fy**2
+    return (
+        3.0 * f**2 * D2f
+        + 24.0 * f * (Dfx * fx + Dfy * fy)
+        + 12.0 * f * hess_norm_sq
+        + 6.0 * f * Df**2
+        + 24.0 * hess_grad_grad
+        + 12.0 * grad_sq * Df
+    )
+
+
 # --- p = 3 ---
 
 
@@ -565,3 +656,87 @@ def get_operator_metadata(max_p, max_n):
             f"max_p={max_p} is not implemented. Available: 0..{max(CONNECTED_OPERATORS)}"
         )
     return [(total_p, k) for total_p, k, _, _ in _all_base_operators(max_p, max_n)]
+
+
+# -----------------------------------------------------------------------
+# Modified Multigraph operators  (IBP-friendly basis, Lemma 1 / Table 4)
+# -----------------------------------------------------------------------
+
+# The 20 operators in the modified basis for max_p=2, max_n=3.
+# Each entry: (callable, description, total_p, k).
+# The 6 replacements (marked ←) use the new _op_Delta_* / _op_Delta2_*
+# functions defined above.  The 14 unchanged operators reuse the existing
+# base functions, with polynomial prefactors applied where needed via
+# _make_func.
+_MOD_MULTIGRAPH_SPEC = [
+    # --- p=0 ---
+    (_op_const,          "1",               0, 0),
+    (_op_identity,       "f",               0, 1),
+    # Pure polynomials: use direct f^m, not _make_func(_op_identity, m)
+    # because _make_func multiplies the base result (f) by f^m, giving f^(m+1).
+    (lambda f, Lx, Ly: f**2, "f²",          0, 2),
+    (lambda f, Lx, Ly: f**3, "f³",          0, 3),
+    # --- p=1 ---
+    (_op_Delta,          "Δf",              1, 1),
+    (_op_Delta_f2,       "Δf²",             1, 2),   # ← replacement
+    (_op_grad_sq,        "‖∇f‖²",          1, 2),
+    (_op_Delta_f3,       "Δf³",             1, 3),   # ← replacement
+    (_make_func(_op_grad_sq, 1), "f·‖∇f‖²", 1, 3),
+    # --- p=2 ---
+    (_op_bilap,          "Δ²f",             2, 1),
+    (_op_Delta2_f2,      "Δ²f²",            2, 2),   # ← replacement
+    (_op_Delta_grad_sq,  "Δ‖∇f‖²",         2, 2),   # ← replacement
+    (_op_hess_norm_sq,   "‖∇²f‖²",         2, 2),
+    # (Δf)²: use _op_Delta square wrapped — note: original basis calls this "Δf·Δf"
+    (lambda f, Lx, Ly: laplacian(f, Lx, Ly)**2, "Δf·Δf", 2, 2),
+    (_op_Delta2_f3,      "Δ²f³",            2, 3),   # ← replacement
+    (_op_Delta_f_grad_sq,"Δ(f·‖∇f‖²)",      2, 3),   # ← replacement
+    (_make_func(_op_hess_norm_sq, 1), "f·‖∇²f‖²", 2, 3),
+    # f·(Δf)²: f * Δf² — original calls this "f·Δf·Δf"
+    (lambda f, Lx, Ly: f * laplacian(f, Lx, Ly)**2, "f·Δf·Δf", 2, 3),
+    (_op_hess_grad_grad, "∇²f(∇f,∇f)",      2, 3),
+    # ‖∇f‖²·Δf = ‖∇f‖² * Δf
+    (lambda f, Lx, Ly: (_op_grad_sq(f, Lx, Ly) * laplacian(f, Lx, Ly)),
+     "‖∇f‖²·Δf", 2, 3),
+]
+
+
+def get_mod_multigraph_operators(max_p=2, max_n=3):
+    """Return all operators in the modified multigraph (IBP-friendly) basis.
+
+    This is the basis from Lemma 1 / Table 4, specialised to R² with
+    G = O(2).  It spans the same 20-dimensional space as the original
+    multigraph basis (``get_operators``) but replaces 6 operators with
+    Δ(something) or Δ²(something) forms that are better suited for
+    integration by parts in the weak formulation.
+
+    Parameters
+    ----------
+    max_p : int  — maximum edge count (0, 1, or 2 only)
+    max_n : int  — maximum polynomial degree (0..3 only)
+
+    Returns
+    -------
+    ops : list of (callable, str)
+        Each entry is ``(func, description)`` where ``func(f, Lx, Ly)``
+        evaluates the operator.  Operators are ordered by
+        ``(total_p, k, description)``.
+
+    Examples
+    --------
+    >>> ops = get_mod_multigraph_operators()            # 20 operators
+    >>> ops = get_mod_multigraph_operators(max_p=2, max_n=2)  # 12 operators
+    """
+    if max_p > 2:
+        raise ValueError(
+            f"max_p={max_p} not supported for modified multigraph. "
+            f"Available: 0..2"
+        )
+    # Build {description: (p, k)} lookup for sorting.
+    _pk = {desc: (p, k) for _, desc, p, k in _MOD_MULTIGRAPH_SPEC}
+    results = [
+        (func, desc) for func, desc, p, k in _MOD_MULTIGRAPH_SPEC
+        if p <= max_p and k <= max_n
+    ]
+    results.sort(key=lambda x: (_pk[x[1]][0], _pk[x[1]][1], x[1]))
+    return results
