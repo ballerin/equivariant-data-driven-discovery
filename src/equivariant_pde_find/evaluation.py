@@ -295,7 +295,7 @@ def evaluate_unified(w, library, desc_lib, desc_jet, Theta_jet, Ft,
     Maps the recovered coefficients to the jet basis, then computes
     fp, fn, E in the common jet space.
     """
-    if library == "equivariant":
+    if library in ("equivariant", "multigraph"):
         w_jet = map_equivariant_to_jet_from_w(w, desc_lib, desc_jet)
     elif library == "mod_multigraph":
         w_jet = map_mod_multigraph_to_jet_from_w(w, desc_lib, desc_jet)
