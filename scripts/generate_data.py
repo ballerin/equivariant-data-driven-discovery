@@ -27,7 +27,11 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CODE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
-from simulations import (  # noqa: E402
+from equivariant_pde_find.utils import (  # noqa: E402
+    make_spatial_grid, build_noise_profile, normalize_profile,
+    apply_anisotropic_noise,
+)
+from equivariant_pde_find.simulations import (  # noqa: E402
     allen_cahn,
     cahn_hilliard,
     kuramoto_sivashinsky,
@@ -87,6 +91,19 @@ EQUATIONS = [
     ),
 ]
 
+# ── anisotropic noise configurations ────────────────────────────────────────
+
+ANISOTROPIC_NOISE_LEVELS = [0.02, 0.05]        # clean data is the same regardless
+ANISOTROPIC_NOISE_LABELS = {0.02: "noise2pct", 0.05: "noise5pct"}
+ANISOTROPIC_EQUATIONS = ["allen_cahn", "swift_hohenberg"]
+
+ANISOTROPIC_PROFILES = [
+    dict(profile_type="gaussian_decay", direction="radial", label="radial_decay"),
+    dict(profile_type="gaussian_growth", direction="radial", label="radial_growth"),
+    dict(profile_type="gaussian_decay", direction="axial", label="axial_decay"),
+    dict(profile_type="gaussian_growth", direction="axial", label="axial_growth"),
+]
+
 
 def generate_one(eq_entry, obs_noise, data_dir):
     """Simulate one (equation, noise) pair and save as .npz."""
@@ -120,6 +137,87 @@ def generate_one(eq_entry, obs_noise, data_dir):
         N=N,
         dt_snap=dt_snap,
         obs_noise=obs_noise,
+        eq_name=name,
+    )
+
+    n_snaps = snapshots.shape[0]
+    has_nan = bool(np.any(np.isnan(snapshots)))
+    print(
+        f"  SAVED {filename}  "
+        f"({n_snaps} snaps, {N}×{N}, "
+        f"range=[{snapshots.min():.3f}, {snapshots.max():.3f}], "
+        f"std={snapshots.std():.3f}, "
+        f"nan={has_nan}, "
+        f"{elapsed:.1f}s)",
+        flush=True,
+    )
+    return path, False
+
+
+def generate_anisotropic_one(eq_entry, obs_noise, profile_spec, data_dir):
+    """Simulate clean, apply anisotropic noise, and save as .npz.
+
+    Parameters
+    ----------
+    eq_entry : dict
+        Equation config with keys ``name``, ``simulate_fn``, ``sim_kwargs``.
+    obs_noise : float
+        Overall noise fraction (e.g. 0.02).
+    profile_spec : dict
+        Keys ``profile_type``, ``direction``, ``label``.
+    data_dir : str
+        Output directory.
+    """
+    name = eq_entry["name"]
+    sim_fn = eq_entry["simulate_fn"]
+    kwargs = eq_entry["sim_kwargs"].copy()
+    kwargs["obs_noise"] = 0.0  # always simulate clean
+
+    noise_label = ANISOTROPIC_NOISE_LABELS[obs_noise]
+    label = profile_spec["label"]
+    filename = f"{name}_aniso_{label}_{noise_label}.npz"
+    path = os.path.join(data_dir, filename)
+
+    if os.path.exists(path):
+        print(f"  SKIP {filename} (already exists)", flush=True)
+        return path, True
+
+    t0 = time.time()
+
+    # Simulate clean data
+    clean, times = sim_fn(**kwargs)
+
+    # Build and normalise spatial profile
+    N = clean.shape[1]
+    L = kwargs["L"]
+    X, Y = make_spatial_grid(N, L, L)
+    P_raw = build_noise_profile(
+        X, Y,
+        profile_type=profile_spec["profile_type"],
+        direction=profile_spec["direction"],
+    )
+    P = normalize_profile(P_raw)
+
+    # Apply anisotropic noise
+    rng = np.random.default_rng(kwargs["seed"])
+    snapshots = apply_anisotropic_noise(clean, obs_noise, P, rng)
+
+    elapsed = time.time() - t0
+    dt_snap = times[1] - times[0]
+
+    np.savez_compressed(
+        path,
+        snapshots=snapshots.astype(np.float64),
+        times=times.astype(np.float64),
+        Lx=L,
+        Ly=L,
+        N=N,
+        dt_snap=dt_snap,
+        obs_noise=obs_noise,
+        eq_name=name,
+        profile_type=profile_spec["profile_type"],
+        profile_direction=profile_spec["direction"],
+        profile_label=label,
     )
 
     n_snaps = snapshots.shape[0]
@@ -152,6 +250,13 @@ def main():
         type=float,
         default=NOISE_LEVELS,
         help="Noise levels to generate (default: 0.0 0.02 0.05).",
+    )
+    parser.add_argument(
+        "--anisotropic",
+        action="store_true",
+        default=False,
+        help="Also generate anisotropic (space-dependent) noise datasets "
+             "for Allen-Cahn and Swift-Hohenberg.",
     )
     parser.add_argument(
         "--data-dir",
@@ -201,13 +306,61 @@ def main():
                 noise_label=NOISE_LABELS[noise],
                 file=os.path.basename(path),
                 path=path,
+                profile_type="",
+                profile_direction="",
+                profile_label="",
             ))
         print()
+
+    # ── anisotropic datasets ──────────────────────────────────────────────
+    if args.anisotropic:
+        aniso_eqs = [e for e in EQUATIONS
+                     if e["name"] in ANISOTROPIC_EQUATIONS]
+        # If --equations was specified, only generate for those that also
+        # appear in ANISOTROPIC_EQUATIONS.
+        if args.equations is not None:
+            req = set(args.equations)
+            aniso_eqs = [e for e in aniso_eqs if e["name"] in req]
+
+        if aniso_eqs:
+            n_profiles = len(ANISOTROPIC_PROFILES)
+            n_aniso = (len(aniso_eqs)
+                       * len(ANISOTROPIC_NOISE_LEVELS)
+                       * n_profiles)
+            print(f"Anisotropic: {len(aniso_eqs)} equations "
+                  f"× {len(ANISOTROPIC_NOISE_LEVELS)} noise levels "
+                  f"× {n_profiles} profiles → {n_aniso} files")
+            print()
+
+            for eq_entry in aniso_eqs:
+                name = eq_entry["name"]
+                print(f"[{name} anisotropic]", flush=True)
+                for noise in ANISOTROPIC_NOISE_LEVELS:
+                    for prof in ANISOTROPIC_PROFILES:
+                        path, skipped = generate_anisotropic_one(
+                            eq_entry, noise, prof, data_dir,
+                        )
+                        if skipped:
+                            n_skipped += 1
+                        else:
+                            n_generated += 1
+                        manifest_rows.append(dict(
+                            equation=name,
+                            noise=noise,
+                            noise_label=ANISOTROPIC_NOISE_LABELS[noise],
+                            file=os.path.basename(path),
+                            path=path,
+                            profile_type=prof["profile_type"],
+                            profile_direction=prof["direction"],
+                            profile_label=prof["label"],
+                        ))
+                print()
 
     # Write manifest
     with open(manifest_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=[
             "equation", "noise", "noise_label", "file", "path",
+            "profile_type", "profile_direction", "profile_label",
         ])
         writer.writeheader()
         writer.writerows(manifest_rows)

@@ -329,7 +329,7 @@ def _eq_best(eq, mw):
         return "\U0001f7e2"   # MWSINDy clear win
     else:
         # Same fp/fn — decide by E (marginal if close, tie if identical)
-        if abs(eq_E - mw_E) < 1e-8:
+        if abs(eq_E - mw_E) < 1e-4:
             return "\u26aa"
         elif mw_E < eq_E:
             return "\U0001f7e9"   # MWSINDy marginal
@@ -342,7 +342,7 @@ def eq_wins(eq, ne):
 
     Clear win  = one method has strictly fewer total fp+fn than the other.
     Marginal   = same fp+fn totals, but one method has lower E.
-    Tie        = same fp+fn and same E (within 1e-8).
+    Tie        = same fp+fn and same E (within 1e-4).
 
     Returns
     -------
@@ -374,7 +374,7 @@ def eq_wins(eq, ne):
         return "\U0001f534"   # non-eq clear win
     else:
         # Same fp/fn — decide by E (marginal)
-        if abs(eq_E - ne_E) < 1e-8:
+        if abs(eq_E - ne_E) < 1e-4:
             return "\u26aa"
         elif eq_E < ne_E:
             return "\U0001f7e9"   # eq marginal

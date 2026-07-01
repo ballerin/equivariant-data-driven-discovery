@@ -106,7 +106,13 @@ def _get_meta(name):
 
 
 def load_dataset(npz_path):
-    """Load a .npz data file."""
+    """Load a .npz data file.
+
+    Returns
+    -------
+    snapshots, times, Lx, Ly, N, dt_snap, obs_noise, eq_name,
+    profile_type, profile_direction
+    """
     data = np.load(npz_path)
     snapshots = data["snapshots"]
     times = data["times"]
@@ -115,12 +121,24 @@ def load_dataset(npz_path):
     N = int(data["N"])
     dt_snap = float(data["dt_snap"])
     obs_noise = float(data["obs_noise"])
-    eq_name = os.path.basename(npz_path).rsplit("_", 1)[0]
-    for suffix in ["_clean", "_noise2pct", "_noise5pct"]:
-        if eq_name.endswith(suffix):
-            eq_name = eq_name[: -len(suffix)]
-            break
-    return snapshots, times, Lx, Ly, N, dt_snap, obs_noise, eq_name
+
+    # eq_name: prefer .npz metadata (added 2026-06-30), fall back to
+    # filename parsing for older datasets.
+    if "eq_name" in data:
+        eq_name = str(data["eq_name"])
+    else:
+        eq_name = os.path.basename(npz_path).rsplit("_", 1)[0]
+        for suffix in ["_clean", "_noise2pct", "_noise5pct"]:
+            if eq_name.endswith(suffix):
+                eq_name = eq_name[: -len(suffix)]
+                break
+
+    # Anisotropic noise metadata (absent for isotropic datasets)
+    profile_type = str(data["profile_type"]) if "profile_type" in data else ""
+    profile_direction = str(data["profile_direction"]) if "profile_direction" in data else ""
+
+    return (snapshots, times, Lx, Ly, N, dt_snap, obs_noise, eq_name,
+            profile_type, profile_direction)
 
 
 # ── method builders ─────────────────────────────────────────────────────────
@@ -350,6 +368,7 @@ def main():
         "n_active", "fp", "fn", "exact_recovery", "E", "max_coeff_err",
         "E_fit", "cond_theta", "n_samples",
         "post_hoc_noise", "spectral_cutoff", "ch_eps",
+        "profile_type", "profile_direction",
         "time_ms",
     ]
 
@@ -369,8 +388,8 @@ def main():
             print(f"{'='*70}")
 
             # Load
-            snapshots_orig, times, Lx, Ly, N, dt_snap, obs_noise, eq_name = \
-                load_dataset(npz_path)
+            snapshots_orig, times, Lx, Ly, N, dt_snap, obs_noise, eq_name, \
+                profile_type, profile_direction = load_dataset(npz_path)
             true_fn, skip_frac, mask_fn = _get_meta(eq_name)
 
             # Determine CH epsilon sweep if applicable
@@ -624,6 +643,8 @@ def main():
                                                 if args.spectral_cutoff
                                                 else ""),
                                             ch_eps=(ch_eps if ch_eps else ""),
+                                            profile_type=profile_type,
+                                            profile_direction=profile_direction,
                                             time_ms=f"{dt_ms:.1f}",
                                         )
                                         writer.writerow(row)
@@ -693,6 +714,8 @@ def main():
                                                 if args.spectral_cutoff
                                                 else ""),
                                             ch_eps=(ch_eps if ch_eps else ""),
+                                            profile_type=profile_type,
+                                            profile_direction=profile_direction,
                                             time_ms=f"{dt_ms:.1f}",
                                         )
                                         writer.writerow(row)
