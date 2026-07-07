@@ -85,7 +85,7 @@ tests/                          # pytest test suite
 | `polynomial_derivatives.py` | Local least-squares polynomial fit differentiation. Fits a 2-D polynomial of degree `deg` on a $(2r+1)\times(2r+1)$ stencil and extracts derivatives from the coefficients. More noise-robust than spectral at the cost of a small bias. Default stencil parameters are tuned per derivative order (e.g. order-2 uses deg=9, r=5 for <1e-5 relative error at typical wavenumbers). Based on the isotropic stencil construction method of Patra & Karttunen [5]. |
 | `library.py` | Pointwise library construction. Builds the design matrix $\Theta$ from field snapshots. Five builders: `build_equivariant_library` (multigraph basis), `build_standard_library` (PDE-FIND: $f^p \cdot \partial^a f$), `build_pointwise_wsindy_library` ($\partial^\alpha(f^\beta)$), `build_polynomial_jet_library` (monomials in jet variables), and `build_standard_library_1d` (1-D variant). Also provides `spectral_lowpass` for isotropic Fourier filtering. |
 | `weak_form.py` | Weak-form PDE discovery via convolution with compactly-supported polynomial-bump test functions. Five builders: `build_weak_library` (equivariant), `build_weak_standard_library` (PDE-FIND), `build_weak_wsindy_library` ($\partial^\alpha(f^q)$), `build_weak_polynomial_jet_library` (monomials in jet variables), and `build_weak_rhs` (weak RHS only). Includes integration by parts for linear operators, automatic test-function parameter selection via the changepoint method [4], and PDE scale-invariance rescaling ($\gamma_x, \gamma_t, \gamma_u$) for improved conditioning. |
-| `regression.py` | Sparse regression algorithms: `STRidge` (sequential threshold ridge regression), `TrainSTRidge` (STRidge with CV over tolerance), `SR3` (sparse relaxed regularized regression), `TrainSR3` (SR3 with CV over L₁ penalty), `mstls` (multi-start thresholded least squares), `mstls_sweep` (MSTLS with λ sweep). |
+| `regression.py` | Sparse regression algorithms: `STRidge` (sequential threshold ridge regression), `TrainSTRidge` (STRidge with CV over tolerance), `SR3` (sparse relaxed regularized regression), `TrainSR3` (SR3 with CV over L₁ penalty), `mstls` (modified sequential thresholding least squares), `TrainMSTLS` (MSTLS with λ sweep). |
 | `evaluation.py` | Recovery evaluation. `build_eval_theta` pre-builds a universal pointwise Θ for fast repeated evaluation. `evaluate_from_theta` computes fp, fn, and relative $L_2$ error $E$. `best_of_sweep` selects the best row using the lexicographic criterion (exact match → fp → fn → $E$). Also supports standard-library evaluation via `evaluate_standard` / `evaluate_standard_with_truth` and operator decomposition via `decompose_equivariant_to_standard`. |
 | `simulations.py` | PDE simulators for benchmark datasets. Uses IMEX (implicit-explicit) and ETDRK4 time-steppers. Supports observation noise (additive Gaussian post-simulation) and dynamical noise (Euler-Maruyama stochastic forcing). Generates $(t, x, y)$ snapshots for five PDEs: `allen_cahn`, `swift_hohenberg`, `kuramoto_sivashinsky` (three regimes: cellular / weak-chaotic / chaotic), `cahn_hilliard`, and `porous_medium`. Also provides `make_regression_data` for spatial subsampling. |
 | `equation_configs.py` | Shared equation metadata. Provides ground-truth coefficient vectors (`true_allen_cahn`, `true_swift_hohenberg`, `true_ks`, `true_cahn_hilliard`, `true_pme`), a `find_op` helper for looking up operator indices by name, spatial masks (e.g. `mask_pme` for porous medium), and the `EQUATION_META` registry mapping equation names to (truth_fn, skip_fraction, mask_fn) tuples. |
@@ -302,12 +302,13 @@ We compare classes of libraries with maximum order `max_p=2` and maximum polynom
 
 Notice that in general the terms in the library are not linearly independent. In particular, the equivariant library has 20 operators but only 18 are linearly independent as shown in [1].
 
-| Library | Form | # terms | $O(2)$-equivariant | Linear | Spanning | In sweep |
-|---|---|---|---|---|---|---|---|
-| PDE-FIND | $f^p \cdot \partial^a f$ | 60 | ❌ | ❌ | ❌ | ✅ (standard) |
-| WSINDy | $\partial^\alpha f^\beta$ | 46 | ❌ | ✅ | ❌ | ✅ |
-| Polynomial jet | monomials in jet variables | 105 | ❌ | ❌ | ✅ | ✅ |
-| Multigraph | multigraph operators | 20 | ✅ | ❌ | ✅ | ✅ (equivariant) |
+| Library | Form | # terms | $O(2)$-equivariant | Linear | Spanning |
+|---|---|---|---|---|---|
+| PDE-FIND | $f^p \cdot \partial^a f$ | 60 | ❌ | ❌ | ❌ |
+| WSINDy | $\partial^\alpha f^\beta$ | 46 | ❌ | ✅ | ❌ |
+| Polynomial jet | monomials in jet variables | 105 | ❌ | ❌ | ✅ |
+| Multigraph | multigraph operators | 20 | ✅ | ❌ | ✅ |
+| Modified Multigraph | multigraph operators | 20 | ✅ | ~ | ✅ |
 
 ### Overlap between PDE-FIND and WSINDy
 
