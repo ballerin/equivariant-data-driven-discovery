@@ -68,7 +68,7 @@ from equivariant_pde_find.library import (  # noqa: E402
     build_mod_multigraph_library,
     spectral_lowpass,
 )
-from equivariant_pde_find.regression import TrainSTRidge, TrainSR3, mstls_sweep  # noqa: E402
+from equivariant_pde_find.regression import TrainSTRidge, TrainSR3, TrainMSTLS  # noqa: E402
 from equivariant_pde_find.simulations import make_regression_data  # noqa: E402
 from equivariant_pde_find import weak_form as wf  # noqa: E402
 
@@ -232,16 +232,16 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
 # ── sweep one ───────────────────────────────────────────────────────────────
 
 
-def sweep_one(Theta, Ft, true_eq, lam, d_tol, algorithm, mstls_alpha=0.5):
+def sweep_one(Theta, Ft, true_eq, lam, d_tol, algorithm, mstls_alpha=0.5, mstls_M=None):
     """Run regression and return (n_active, w, lam_out)."""
     if algorithm == "sr3":
         w = TrainSR3(Theta, Ft, lam, d_tol)
         lam_out = lam
     elif algorithm == "mstls":
         # MSTLS does its own internal λ sweep; lam/d_tol are ignored
-        w, lam_out, _ = mstls_sweep(
-            Theta, Ft, lambdas=None, n_lambdas=MSTLS_N_LAMBDAS,
-            maxits=MSTLS_MAXITS, alpha=mstls_alpha,
+        w, lam_out, _ = TrainMSTLS(
+            Theta, Ft, lambdas=None, M=mstls_M, n_lambdas=MSTLS_N_LAMBDAS,
+            maxit=MSTLS_MAXITS, alpha=mstls_alpha,
         )
     else:
         w = TrainSTRidge(Theta, Ft, lam, d_tol)
@@ -584,6 +584,11 @@ def main():
 
                             for algorithm in algorithms:
                                 if algorithm == "mstls":
+                                    # Compute dominant-balance M for weak-form data
+                                    mstls_M = None
+                                    if method != "pointwise":
+                                        mstls_M = wf.compute_m_scale(Theta, Ft)
+
                                     # MSTLS does its own internal λ sweep;
                                     # iterate over α values
                                     for mstls_alpha in mstls_alphas:
@@ -592,6 +597,7 @@ def main():
                                             Theta, Ft, true_eq, 0.0, 0.0,
                                             algorithm,
                                             mstls_alpha=mstls_alpha,
+                                            mstls_M=mstls_M,
                                         )
 
                                         eval_result = evaluate_unified(

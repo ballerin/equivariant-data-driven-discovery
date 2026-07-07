@@ -1,7 +1,7 @@
 """
 Tests for MSTLS — Modified Sequential Thresholding Least Squares.
 
-Covers ``mstls``, ``mstls_sweep``, and ``select_lambda_grid`` from
+Covers ``mstls``, ``TrainMSTLS``, and ``select_lambda_grid`` from
 ``regression.py``.
 
 Reference: Messenger & Bortz (2021), J. Comput. Phys., Section 3.2.
@@ -18,7 +18,7 @@ sys.path.insert(0, CODE_DIR)
 
 from equivariant_pde_find.regression import (
     mstls,
-    mstls_sweep,
+    TrainMSTLS,
     select_lambda_grid,
     STRidge,
 )
@@ -77,7 +77,7 @@ def test_mstls_perfect_recovery_noiseless():
     """MSTLS with λ well-chosen should recover the true sparse vector."""
     G, b, w_true, nz_idx = _sparse_system(n=300, d=20, nz=3, noise=0.0)
     # λ = 0.1 is generous for noiseless data with column-normed G
-    w = mstls(G, b, lam=0.1, maxits=50, normalize=2)
+    w = mstls(G, b, lam=0.1, maxit=50, normalize=2)
     nonzero = np.abs(w) > 1e-8
     # At least recover all true terms
     assert set(nz_idx).issubset(set(np.where(nonzero)[0]))
@@ -90,7 +90,7 @@ def test_mstls_sparsity_enforced():
     G, b, w_true, nz_idx = _sparse_system(n=300, d=20, nz=5, noise=0.0)
     # λ ≈ min |coeff| gives tight bounds that exclude terms below that magnitude
     min_coeff = np.min(np.abs(w_true[nz_idx]))
-    w = mstls(G, b, lam=min_coeff * 0.9, maxits=50, normalize=2)
+    w = mstls(G, b, lam=min_coeff * 0.9, maxit=50, normalize=2)
     # Should drop at least one term with coefficient near the bound
     assert np.count_nonzero(w) <= 5
 
@@ -106,7 +106,7 @@ def test_mstls_large_lambda_keeps_most():
     w_true[[1, 4, 7]] = [0.5, -0.3, 0.7]  # small coefficients, well-scaled
     b = G @ w_true
 
-    w = mstls(G, b, lam=0.99, maxits=50, normalize=0)
+    w = mstls(G, b, lam=0.99, maxit=50, normalize=0)
     # With λ=0.99 and ||b||≈0.8, bounds are L≈0.99*0.8≈0.8, U≈1.01
     # Should keep only terms with |coeff| in [~0.8, ~1.01], i.e. may drop some
     # But the projection should not be totally wrong
@@ -115,23 +115,23 @@ def test_mstls_large_lambda_keeps_most():
 
 
 def test_mstls_converges_in_few_iters():
-    """MSTLS should converge in far fewer than maxits on clean data."""
+    """MSTLS should converge in far fewer than maxit on clean data."""
     G, b, _, _ = _sparse_system(n=300, d=20, nz=4, noise=0.0)
     # We can't easily count iters from the outside, but at least it doesn't crash
-    w = mstls(G, b, lam=0.1, maxits=5, normalize=2)
+    w = mstls(G, b, lam=0.1, maxit=5, normalize=2)
     assert np.all(np.isfinite(w))
 
 
 def test_mstls_no_normalize():
     G, b, w_true, nz_idx = _sparse_system(n=300, d=20, nz=3, noise=0.0)
-    w = mstls(G, b, lam=0.1, maxits=50, normalize=0)
+    w = mstls(G, b, lam=0.1, maxit=50, normalize=0)
     assert set(nz_idx).issubset(set(np.where(np.abs(w) > 1e-8)[0]))
 
 
 def test_mstls_noisy_data():
     """On noisy data, MSTLS should still identify the correct support."""
     G, b, w_true, nz_idx = _sparse_system(n=500, d=20, nz=4, noise=0.01)
-    w = mstls(G, b, lam=0.1, maxits=50, normalize=2)
+    w = mstls(G, b, lam=0.1, maxit=50, normalize=2)
     nonzero = np.abs(w) > 1e-8
     # May miss some terms at this noise level, but should have no false positives
     fp = set(np.where(nonzero)[0]) - set(nz_idx)
@@ -139,14 +139,14 @@ def test_mstls_noisy_data():
 
 
 # ======================================================================
-# mstls_sweep — auto λ
+# TrainMSTLS — auto λ
 # ======================================================================
 
 
-def test_mstls_sweep_perfect_noiseless():
-    """mstls_sweep auto-selects λ and recovers the true vector."""
+def test_TrainMSTLS_perfect_noiseless():
+    """TrainMSTLS auto-selects λ and recovers the true vector."""
     G, b, w_true, nz_idx = _sparse_system(n=300, d=20, nz=4, noise=0.0)
-    w, lam_best, losses = mstls_sweep(G, b, n_lambdas=50, alpha=0.5)
+    w, lam_best, losses = TrainMSTLS(G, b, n_lambdas=50, alpha=0.5)
     nonzero = np.abs(w) > 1e-8
     assert set(nz_idx).issubset(set(np.where(nonzero)[0]))
     np.testing.assert_allclose(w[nz_idx], w_true[nz_idx], rtol=1e-5)
@@ -154,32 +154,32 @@ def test_mstls_sweep_perfect_noiseless():
     assert np.all(np.isfinite(losses))
 
 
-def test_mstls_sweep_custom_lambdas():
-    """mstls_sweep accepts a user-supplied λ grid."""
+def test_TrainMSTLS_custom_lambdas():
+    """TrainMSTLS accepts a user-supplied λ grid."""
     G, b, w_true, nz_idx = _sparse_system(n=300, d=20, nz=3, noise=0.0)
     custom_lam = np.logspace(-3, 0, 30)
-    w, lam_best, losses = mstls_sweep(G, b, lambdas=custom_lam, alpha=0.5)
+    w, lam_best, losses = TrainMSTLS(G, b, lambdas=custom_lam, alpha=0.5)
     assert len(losses) == 30
     assert lam_best in custom_lam
     nonzero = np.abs(w) > 1e-8
     assert set(nz_idx).issubset(set(np.where(nonzero)[0]))
 
 
-def test_mstls_sweep_noisy():
-    """mstls_sweep on mildly noisy data."""
+def test_TrainMSTLS_noisy():
+    """TrainMSTLS on mildly noisy data."""
     G, b, w_true, nz_idx = _sparse_system(n=500, d=20, nz=4, noise=0.02)
-    w, lam_best, losses = mstls_sweep(G, b, n_lambdas=50, alpha=0.5)
+    w, lam_best, losses = TrainMSTLS(G, b, n_lambdas=50, alpha=0.5)
     nonzero = np.abs(w) > 1e-8
     # At mild noise, should have no false positives
     fp = set(np.where(nonzero)[0]) - set(nz_idx)
     assert len(fp) == 0
 
 
-def test_mstls_sweep_alpha_extremes():
+def test_TrainMSTLS_alpha_extremes():
     """α=0 (all sparsity) vs α=1 (all projection) produce different results."""
     G, b, _, _ = _sparse_system(n=300, d=20, nz=4, noise=0.0)
-    w0, _, _ = mstls_sweep(G, b, n_lambdas=50, alpha=0.0)
-    w1, _, _ = mstls_sweep(G, b, n_lambdas=50, alpha=1.0)
+    w0, _, _ = TrainMSTLS(G, b, n_lambdas=50, alpha=0.0)
+    w1, _, _ = TrainMSTLS(G, b, n_lambdas=50, alpha=1.0)
     # α=0 prefers sparsity → fewer or equal terms
     assert np.count_nonzero(w0) <= np.count_nonzero(w1)
 
@@ -204,7 +204,7 @@ def test_mstls_handles_column_scale_disparity():
     b = G @ w_true + 0.01 * rng.standard_normal(n)
 
     # MSTLS with normalize=2
-    w_ms, lam_best, _ = mstls_sweep(G, b, n_lambdas=50, alpha=0.5, normalize=2)
+    w_ms, lam_best, _ = TrainMSTLS(G, b, n_lambdas=50, alpha=0.5, normalize=2)
     nz_ms = np.where(np.abs(w_ms) > 1e-8)[0]
     # Should not have false positives
     assert len(set(nz_ms) - set(nz_idx)) == 0
@@ -224,7 +224,7 @@ def test_mstls_upper_bound_prevents_large_spurious():
     b = G @ w_true  # ||b|| = 1.0 exactly
 
     # λ=0.5: L=0.5, U=2 for all columns (since unit-norm, ||b||/||G_j||=1)
-    w = mstls(G, b, lam=0.5, maxits=50, normalize=0)
+    w = mstls(G, b, lam=0.5, maxit=50, normalize=0)
     nonzero = np.where(np.abs(w) > 1e-8)[0]
     assert 0 in nonzero
     for j in nonzero:
@@ -236,7 +236,7 @@ def test_mstls_upper_bound_prevents_large_spurious():
 # ======================================================================
 
 
-def test_mstls_sweep_one_pointwise():
+def test_TrainMSTLS_one_pointwise():
     """sweep_one with algorithm='mstls' on synthetic pointwise-like data."""
     rng = np.random.default_rng(123)
     n, d = 1000, 10
@@ -260,7 +260,7 @@ def test_mstls_sweep_one_pointwise():
     assert abs(w[3] + 0.5) < 0.2
 
 
-def test_mstls_sweep_one_weak_form():
+def test_TrainMSTLS_one_weak_form():
     """sweep_one with algorithm='mstls' on synthetic weak-form-like data."""
     rng = np.random.default_rng(456)
     n, d = 500, 8
@@ -282,7 +282,7 @@ def test_mstls_sweep_one_weak_form():
     assert abs(w[5] + 2.0) < 0.3
 
 
-def test_mstls_sweep_cli_accepts_mstls():
+def test_TrainMSTLS_cli_accepts_mstls():
     """Verify that --algorithms mstls is accepted by the CLI parser."""
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, os.path.join(SCRIPT_DIR, "..", "scripts"))
@@ -318,3 +318,109 @@ def test_mstls_vs_strridge_clean():
     # Both should be sparse
     assert np.count_nonzero(np.abs(w_s) > 1e-8) >= 2
     assert np.count_nonzero(np.abs(w_m) > 1e-8) >= 2
+
+
+# ======================================================================
+# Dominant-balance MSTLS (M parameter, sparsifyDynamics path A)
+# ======================================================================
+
+
+def test_mstls_dominant_balance_perfect():
+    """With M=np.ones(d), dominant-balance MSTLS recovers true support."""
+    rng = np.random.default_rng(42)
+    n, d = 500, 15
+    X = rng.standard_normal((n, d))
+    # Use columns with roughly similar norms so bounds are comparable
+    X = X / np.sqrt(np.sum(X ** 2, axis=0))[np.newaxis, :] * 3.0
+    w_true = np.zeros(d)
+    w_true[1] = 1.5
+    w_true[10] = -1.2
+    y = X @ w_true
+
+    M = np.ones(d)
+    w = mstls(X, y, lam=0.1, M=M, maxit=50, normalize=0)
+
+    # Should recover both true terms
+    nonzero = np.abs(w) > 1e-8
+    assert 1 in np.where(nonzero)[0]
+    assert 10 in np.where(nonzero)[0]
+    # No false positives
+    fp = set(np.where(nonzero)[0]) - {1, 10}
+    assert len(fp) == 0
+
+
+def test_mstls_dominant_balance_upper_bound():
+    """The upper bound should zero coefficients that are too large."""
+    rng = np.random.default_rng(99)
+    n, d = 300, 10
+    X = rng.standard_normal((n, d))
+    w_true = np.zeros(d)
+    w_true[0] = 100.0  # very large coefficient
+    y = X @ w_true
+
+    # With lam=0.01: ||y||/||X_0|| ≈ 100*17/17 = 100,
+    # bnds_0 = 100, UBs_0 = (1/0.01) * min(1, 100) = 1
+    # |w_0| = 100 > UBs_0 = 1 → zeroed
+    M = np.ones(d)
+    w = mstls(X, y, lam=0.01, M=M, maxit=50, normalize=0)
+    assert abs(w[0]) < 1e-8  # eliminated by upper bound
+
+
+def test_mstls_dominant_balance_lower_bound():
+    """The lower bound zeros coefficients below λ when bnds <= 1."""
+    rng = np.random.default_rng(123)
+    n, d = 300, 10
+    X = rng.standard_normal((n, d))
+    X = X / np.sqrt(np.sum(X ** 2, axis=0))[np.newaxis, :]  # unit-norm
+    w_true = np.zeros(d)
+    w_true[0] = 0.05  # below lam=0.1
+    w_true[1] = 0.8   # above lam=0.1
+    y = X @ w_true
+
+    # With unit-norm columns: ||y|| ≈ 0.8, bnds_j ≈ 0.8,
+    # LBs_j = lam * max(1, 0.8) = lam = 0.1
+    M = np.ones(d)
+    w = mstls(X, y, lam=0.1, M=M, maxit=50, normalize=0)
+    assert abs(w[0]) < 1e-8  # 0.05 < 0.1 → zeroed
+    assert abs(w[1]) > 0.1   # 0.8 > 0.1 → survives
+
+
+def test_mstls_dominant_balance_vs_simple():
+    """With uniform column norms, dominant-balance ≈ simple thresholding."""
+    rng = np.random.default_rng(555)
+    n, d = 400, 10
+    X = rng.standard_normal((n, d))
+    X = X / np.sqrt(np.sum(X ** 2, axis=0))[np.newaxis, :]  # unit-norm columns
+    w_true = np.zeros(d)
+    w_true[2] = 0.8
+    w_true[7] = -0.6
+    y = X @ w_true
+
+    # Both paths should recover the same support on normalized columns
+    w_simple = mstls(X, y, lam=0.1, maxit=50, normalize=2)
+    M = np.ones(d)
+    w_db = mstls(X, y, lam=0.1, M=M, maxit=50, normalize=0)
+
+    # Same active set
+    active_simple = set(np.where(np.abs(w_simple) > 1e-8)[0])
+    active_db = set(np.where(np.abs(w_db) > 1e-8)[0])
+    assert active_simple == active_db
+
+
+def test_TrainMSTLS_with_M():
+    """TrainMSTLS accepts M and passes it through."""
+    rng = np.random.default_rng(777)
+    n, d = 500, 10
+    X = rng.standard_normal((n, d))
+    w_true = np.zeros(d)
+    w_true[3] = 0.7
+    w_true[8] = -0.5
+    y = X @ w_true
+
+    M = np.ones(d)
+    w, lam_best, losses = TrainMSTLS(
+        X, y, M=M, n_lambdas=30, alpha=0.5, normalize=0
+    )
+    nonzero = np.abs(w) > 1e-8
+    assert set([3, 8]).issubset(set(np.where(nonzero)[0]))
+    assert len(losses) == 30

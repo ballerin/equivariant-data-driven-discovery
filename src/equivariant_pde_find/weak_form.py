@@ -780,6 +780,40 @@ def build_weak_rhs(ft, kernel_x=None, kernel_y=None, m=8, p=4):
 
 
 # ---------------------------------------------------------------------------
+# MSTLS dominant-balance scale factors
+# ---------------------------------------------------------------------------
+
+
+def compute_m_scale(G, b):
+    """Compute per-column scale factors for the MSTLS dominant-balance bounds.
+
+    Following the WSINDy pipeline (``get_scales.m`` → ``wsindy_pde_RGLS_seq``),
+    the scale vector *M* captures the relative expected magnitude of each
+    library column compared to the RHS::
+
+        M_j = ‖G_j‖ / ‖b‖
+
+    where *G_j* is the *j*-th column of the weak library and *b* is the weak
+    RHS.  This is a first-order approximation to the original ``M_scale``
+    (which depends on test function parameters and library structure via
+    ``get_scales.m``).  When passed to ``mstls``, it enables per-column
+    dominant-balance bounds ``[λ·max(1,bnds_j), (1/λ)·min(1,bnds_j)]``.
+
+    Parameters
+    ----------
+    G : ndarray, shape (n, d) — weak library matrix
+    b : ndarray, shape (n,)   — weak RHS vector
+
+    Returns
+    -------
+    M : ndarray, shape (d,)
+    """
+    col_norms = np.linalg.norm(G, axis=0)
+    b_norm = np.linalg.norm(b)
+    return col_norms / max(b_norm, 1e-30)
+
+
+# ---------------------------------------------------------------------------
 # Weak regression data (multiple snapshots + optional subsampling)
 # ---------------------------------------------------------------------------
 
