@@ -523,3 +523,124 @@ def TrainMSTLS(Theta, ut, lambdas=None, M=None, n_lambdas=50, maxit=50, alpha=0.
             best_lambda = lam
 
     return best_w, best_lambda, loss_vals
+
+
+# ==================================================================================================
+# RFE — Recursive Feature Elimination
+#
+# Stephany & Earls (2022), "PDE-READ: Human-readable Partial Differential Equation
+# Discovery using Deep Learning", 10.1016/j.neunet.2022.07.008.
+#
+# RFE is a parameter-free sparse regression algorithm.  It iteratively eliminates the smallest 
+# OLS (Ordinary Least Squares) coefficient, tracks the residual at each step, and selects the model 
+# at the step that maximises the relative residual increase:
+#
+#     j* = argmax_j  (RLS[j+1] - RLS[j]) / RLS[j]
+#
+# This is equivalent to selecting the step where removing a feature causes the largest
+# relative jump in residual, i.e. the "elbow" in the residual curve.
+#
+# Code inspired by github.com/punkduckable/PDE-READ
+# ==================================================================================================
+
+
+def RFE(X0, y, normalize=2):
+    """Recursive Feature Elimination.
+
+    Parameter-free sparse regression for PDE discovery.  Iteratively eliminates
+    the smallest OLS (Ordinary Least Squares) coefficient, tracks the residual 
+    at each step, and selects the model at the step that maximises the relative 
+    residual increase.
+
+    The algorithm:
+        1. Normalises columns to unit norm (default: L2).
+        2. Fits OLS on all features; records residual.
+        3. Eliminates the feature with smallest |coefficient|.
+        4. Re-fits OLS on remaining features; records new residual.
+        5. Repeats until zero features remain (residual = ‖y‖²).
+        6. Selects step j* = argmax_j (RLS[j+1] - RLS[j]) / RLS[j].
+        7. Returns coefficients from step j*, rescaled to original units.
+
+    Parameters
+    ----------
+    X0        : ndarray, shape (N, d) - design matrix
+    y         : ndarray, shape (N,)   - target vector
+    normalize : int - norm order for column normalisation (0 = none, 2 = L²)
+
+    Returns
+    -------
+    w : ndarray, shape (d,) — sparse coefficient vector (original scale)
+    """
+    N, d = X0.shape
+    y = y.ravel()
+
+    # Column normalisation
+    if normalize != 0:
+        scale = np.array(
+            [np.linalg.norm(X0[:, i], normalize) for i in range(d)]
+        )
+        # Guard against zero columns
+        scale = np.maximum(scale, 1e-30)
+        X = X0 / scale[np.newaxis, :]
+    else:
+        X = X0.copy()
+        scale = np.ones(d)
+
+    # Precompute normal equations
+    XtX = X.T @ X   # (d, d)
+    Xty = X.T @ y   # (d,)
+
+    # Initial OLS on all features
+    try:
+        w = np.linalg.solve(XtX, Xty)
+    except np.linalg.LinAlgError:
+        w = np.linalg.lstsq(X, y, rcond=None)[0]
+
+    Xi = np.zeros((d, d))
+    Xi[:, 0] = w
+    RLS = [np.sum((y - X @ w) ** 2)]
+
+    # Active-set elimination loop
+    S = np.ones(d, dtype=bool)      # True = active
+    for j in range(d - 1):          # d-1 eliminations. Last one is trivial residual
+        # Find smallest |coefficient| among active features
+        active_coeffs = np.where(S, np.abs(w), np.inf)
+        k_min = int(np.argmin(active_coeffs))
+        S[k_min] = False
+
+        # Re-fit OLS on remaining active features
+        idx = np.where(S)[0]
+        w_new = np.zeros(d)
+        try:
+            w_new[idx] = np.linalg.solve(
+                XtX[np.ix_(idx, idx)], Xty[idx],
+            )
+        except np.linalg.LinAlgError:
+            w_new[idx] = np.linalg.lstsq(X[:, idx], y, rcond=None)[0]
+
+        Xi[:, j + 1] = w_new
+        RLS.append(np.sum((y - X @ w_new) ** 2))
+        w = w_new
+
+    # Zero-feature residual is just the squared norm of y (zero coefficients)
+    RLS.append(np.sum(y ** 2))
+
+    # Select best step via relative residual jump
+    RLS_arr = np.array(RLS, dtype=float)
+    ratios = np.zeros(d)
+    for j in range(d):
+        denom = max(RLS_arr[j], 1e-30)
+        ratios[j] = (RLS_arr[j + 1] - RLS_arr[j]) / denom
+    j_max = int(np.argmax(ratios))
+
+    # Rescale to original units
+    w_out = Xi[:, j_max] / scale
+    return w_out
+
+
+def TrainRFE(Theta, ut, **kwargs):
+    """Thin wrapper: RFE is parameter-free, so this just calls ``RFE`` directly.
+
+    Provided for API consistency with other regression methods (STRidge, SR3, MSTLS).
+    """
+    return RFE(Theta, ut)
