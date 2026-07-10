@@ -1,7 +1,7 @@
 import numpy as np
 
 # ==================================================================================================
-# STRidge — Sequential Thresholding Ridge Regression
+# STRidge - Sequential Thresholding Ridge Regression
 #
 # Brunton, Proctor, Kutz (2016), "Discovering governing equations from data by sparse identification
 # of nonlinear dynamical systems", doi: 10.1073/pnas.1517384113.
@@ -107,7 +107,7 @@ def TrainSTRidge(
     normalize  : int   - column normalisation norm order (passed to STRidge)
     split      : float - fraction of data used for training
     seed       : int   - RNG seed for reproducible train/test splits
-    early_stop : bool  — passed through to STRidge (default True)
+    early_stop : bool  - passed through to STRidge (default True)
     unbias     : bool  - passed through to STRidge (default True)
 
     Returns
@@ -149,7 +149,7 @@ def TrainSTRidge(
 
 
 # ==================================================================================================
-# SR3 — Sparse Relaxed Regularized Regression
+# SR3 - Sparse Relaxed Regularized Regression
 #
 # Zheng, Peng, et al. (2018), "A unified framework for sparse relaxed regularized regression:
 # SR3", IEEE Access 7 (2018): 1404-1423, doi: 10.1109/ACCESS.2018.2886528.
@@ -186,17 +186,17 @@ def SR3(X0, y, lam_l1, kappa=1.0, maxit=100, normalize=2, tol=1e-8):
 
     Parameters
     ----------
-    X0     : ndarray, shape (n, d) — design matrix
-    y      : ndarray, shape (n,)   — target
-    lam_l1 : float — L₁ penalty λ (sparsity)
-    kappa  : float — relaxation strength κ (larger → tighter ξ≈w coupling)
-    maxit  : int   — coordinate-descent iterations
-    normalize : int — column normalisation norm order (0 = none)
-    tol    : float — convergence tolerance on coefficient change
+    X0     : ndarray, shape (n, d) - design matrix
+    y      : ndarray, shape (n,)   - target
+    lam_l1 : float - L₁ penalty λ (sparsity)
+    kappa  : float - relaxation strength κ (larger → tighter ξ≈w coupling)
+    maxit  : int   - coordinate-descent iterations
+    normalize : int - column normalisation norm order (0 = none)
+    tol    : float - convergence tolerance on coefficient change
 
     Returns
     -------
-    w : ndarray, shape (d,) — sparse coefficient vector
+    w : ndarray, shape (d,) - sparse coefficient vector
     """
     n, d = X0.shape
     y = y.ravel()
@@ -247,19 +247,19 @@ def TrainSR3(
 
     Parameters
     ----------
-    Theta : ndarray, shape (M, K) — library (design) matrix
-    ut    : ndarray, shape (M,)   — time-derivative vector
-    lam   : float — κ, the SR3 relaxation parameter
-    d_tol : float — initial L1 penalty λ_L1
-    maxit     : int — number of cross-validation steps
-    SR3_iters : int — inner SR3 coordinate-descent iterations per step
-    normalize : int — column normalisation (passed to SR3)
-    split     : float — train/test split fraction
-    seed      : int — RNG seed for reproducible train/test splits
+    Theta : ndarray, shape (M, K) - library (design) matrix
+    ut    : ndarray, shape (M,)   - time-derivative vector
+    lam   : float - κ, the SR3 relaxation parameter
+    d_tol : float - initial L1 penalty λ_L1
+    maxit     : int - number of cross-validation steps
+    SR3_iters : int - inner SR3 coordinate-descent iterations per step
+    normalize : int - column normalisation (passed to SR3)
+    split     : float - train/test split fraction
+    seed      : int - RNG seed for reproducible train/test splits
 
     Returns
     -------
-    w : ndarray, shape (K,) — best sparse coefficient vector
+    w : ndarray, shape (K,) - best sparse coefficient vector
     """
     rng = np.random.default_rng(seed)
     n = Theta.shape[0]
@@ -291,7 +291,7 @@ def TrainSR3(
 
 
 # ==================================================================================================
-# MSTLS — Modified Sequential Thresholding Least Squares
+# MSTLS - Modified Sequential Thresholding Least Squares
 #
 # Messenger & Bortz (2021), "Weak SINDy for Partial Differential Equations",
 # J. Comput. Phys., 443, 110525, doi: 10.1016/j.jcp.2021.110525.
@@ -304,98 +304,79 @@ def TrainSR3(
 # ==================================================================================================
 
 
-def mstls(X, y, lam, M=None, maxit=50, normalize=2):
-    """Modified Sequential Thresholding Least-Squares (single λ).
+def mstls(X, y, lam, M=None, maxit=None):
+    """Single-λ MSTLS iteration - dominant-balance thresholding.
 
-    Implements the sequential thresholding from the WSINDy paper
-    (Messenger & Bortz, 2021).
+    Implements the sequential thresholding from Messenger & Bortz (2021),
+    matching the reference ``_mstls_iterate`` from the WSINDy codebase
+    (MathBioCU/WSciML-SIAMWorkshop2026,
+    ``libs/pywsindy_base/wsindy_obj/_weakform.py``).
 
-    When *M* is None (default), columns are normalised and simple
-    STRidge-style thresholding ``|w_j| < λ`` is used (matching the
-    MATLAB ``sparsifyDynamics`` fallback when ``M_scale`` is not
-    provided).
+    Always uses per-column dominant-balance bounds.  When *M* is None
+    it defaults to ``M = ones(d)``, matching the reference behaviour
+    (the MATLAB ``sparsifyDynamics`` only uses simple thresholding when
+    ``M_scale`` is empty, but the higher-level ``wsindy_pde_RGLS_seq``
+    always provides *M* - the simple-thresholding fallback is a
+    STRidge-ism, not the MSTLS algorithm).
 
-    When *M* is provided (a vector of length *d*), the dominant-balance
-    bounds from the WSINDy paper are used::
+    The least-squares solves are done in the original ("scaled") space
+    spanned by the columns of *X*.  The per-column scale vector *M*
+    converts from scaled to physical coefficients: ``w_phys = M ⊙ w_sc``.
+    Thresholding is applied to the physical coefficients against
+    physical bounds::
 
-        bnds_j = ‖y‖ / ‖X_j‖ * M_j
-        LBs_j = λ * max(1, bnds_j)
-        UBs_j = (1/λ) * min(1, bnds_j)
+        bnds_j = ‖y‖ / ‖X_j‖ · M_j
+        LBs_j = λ · max(1, bnds_j)
+        UBs_j = (1/λ) · min(1, bnds_j)
 
     and a coefficient is zeroed if ``|w_j| < LBs_j`` or ``|w_j| > UBs_j``.
-    Column normalisation is skipped in this mode since *M* carries the
-    scale information.  The coefficients are also scaled by *M* after
-    each solve, matching the MATLAB ``sparsifyDynamics`` path A.
 
     Parameters
     ----------
-    X : ndarray, shape (n, d) — design matrix
-    y : ndarray, shape (n,)   — target vector
-    lam : float — threshold λ > 0
-    M : ndarray, shape (d,) or None — per-column scale factors for
-        dominant-balance bounds; if None, use simple thresholding
-    maxit : int — maximum thresholding iterations
-    normalize : int — column normalisation norm order (0 = none);
-        ignored when *M* is not None
+    X : ndarray, shape (n, d) - design matrix
+    y : ndarray, shape (n,)   - target vector
+    lam : float - threshold λ > 0
+    M : ndarray, shape (d,) or None - per-column scale factors for
+        dominant-balance bounds; if None, defaults to ``ones(d)``
+    maxit : int or None - maximum thresholding iterations;
+        if None, defaults to ``d + 1`` (matching the reference)
 
     Returns
     -------
-    w : ndarray, shape (d,) — sparse coefficient vector
+    w : ndarray, shape (d,) - sparse coefficient vector (physical)
     """
     n, d = X.shape
     y = y.ravel()
 
-    if M is not None:
-        # Dominant-balance path (sparsifyDynamics path A): per-column
-        # bounds based on column norms relative to the target.
-        M = np.asarray(M, dtype=float).ravel()
-        col_norms = np.linalg.norm(X, axis=0)
-        y_norm = np.linalg.norm(y)
-        bnds = y_norm / np.maximum(col_norms, 1e-30) * M
-        LBs = lam * np.maximum(1.0, bnds)
-        UBs = (1.0 / np.maximum(lam, 1e-30)) * np.minimum(1.0, bnds)
-        X_work = X
-        Mreg = np.ones(d)
+    if M is None:
+        M = np.ones(d)
     else:
-        # Simple thresholding path (sparsifyDynamics fallback): normalise
-        # columns and use a single threshold λ for all.
-        if normalize != 0:
-            Mreg = np.array(
-                [1.0 / (np.linalg.norm(X[:, i], normalize) + 1e-14) for i in range(d)]
-            )
-            X_work = X * Mreg[np.newaxis, :]
-        else:
-            X_work = X.copy()
-            Mreg = np.ones(d)
-        LBs = None
-        UBs = None
+        M = np.asarray(M, dtype=float).ravel()
 
-    w = np.linalg.lstsq(X_work, y, rcond=None)[0]
+    if maxit is None:
+        maxit = d + 1
 
-    # Apply initial scaling when using dominant-balance bounds
-    if M is not None:
-        w = M * w
+    col_norms = np.linalg.norm(X, axis=0)
+    col_norms[col_norms == 0] = np.inf
+    bnds = (np.linalg.norm(y) / col_norms) * M
+    lower = lam * np.maximum(bnds, 1.0)
+    upper = (1.0 / lam) * np.minimum(bnds, 1.0)
 
-    active_prev = None
+    # Initial solve: scaled space → physical coefficients
+    w = M * np.linalg.lstsq(X, y, rcond=None)[0]
+
+    prev = None
     for _ in range(maxit):
-        if M is not None:
-            active = (np.abs(w) >= LBs) & (np.abs(w) <= UBs)
-        else:
-            active = np.abs(w) >= lam
-
-        if active_prev is not None and np.array_equal(active, active_prev):
+        small = (np.abs(w) < lower) | (np.abs(w) > upper)
+        if prev is not None and np.array_equal(small, prev):
             break
-        active_prev = active.copy()
-        w[~active] = 0.0
-        if np.sum(active) == 0:
-            break
-        w[active] = np.linalg.lstsq(X_work[:, active], y, rcond=None)[0]
+        big = ~small
+        w = np.zeros(d)
+        if big.any():
+            w[big] = M[big] * np.linalg.lstsq(X[:, big], y, rcond=None)[0]
+        prev = small
 
-        # Re-apply scaling after solve (matching MATLAB's M.*(...))
-        if M is not None:
-            w[active] = M[active] * w[active]
-
-    return Mreg * w
+    return w  # physical coefficients
 
 
 def select_lambda_grid(X, y, n_lambdas=50):
@@ -410,7 +391,7 @@ def select_lambda_grid(X, y, n_lambdas=50):
     ----------
     X : ndarray, shape (n, d)
     y : ndarray, shape (n,)
-    n_lambdas : int — number of λ candidates
+    n_lambdas : int - number of λ candidates
 
     Returns
     -------
@@ -429,40 +410,50 @@ def select_lambda_grid(X, y, n_lambdas=50):
     proj_norm = np.linalg.norm(X @ w_ls)
     lam_min = proj_norm / (d * max(np.max(col_norms), 1e-30))
 
-    # Clamp to sensible range
-    lam_min = max(lam_min, 1e-10)
-    lam_max = min(lam_max, 1e4)
+    # Safety floor / ceiling to avoid log of zero / overflow;
+    # the original MATLAB code has no clamps, so these are deliberately
+    # wide (1e-30, 1e30) and should never be hit in practice.
+    lam_min = max(lam_min, 1e-30)
+    lam_max = min(lam_max, 1e30)
     if lam_min >= lam_max:
         lam_min = lam_max * 1e-4
 
     return np.logspace(np.log10(lam_min), np.log10(lam_max), n_lambdas)
 
 
-def TrainMSTLS(Theta, ut, lambdas=None, M=None, n_lambdas=50, maxit=50, alpha=0.5, normalize=2):
+def TrainMSTLS(Theta, ut, lambdas=None, M=None, n_lambdas=50, maxit=None, alpha=0.5):
     """MSTLS with automatic λ selection via the loss function.
 
-    For each λ in the candidate grid, runs ``mstls`` and evaluates
+    Matches the reference ``mstls`` + ``_mstls_loss`` from the WSINDy
+    codebase (MathBioCU/WSciML-SIAMWorkshop2026).  For each λ in the
+    candidate grid, runs :func:`mstls` and evaluates
 
     .. math::
 
         \\mathcal{L}(\\lambda) =
-        \\alpha \\frac{\\|\\Theta(w^\\lambda - w^{LS})\\|}{\\|\\Theta w^{LS}\\|}
-        + (1-\\alpha) \\frac{\\#\\{j : w^\\lambda_j \\ne 0\\}}{d}.
+        \\alpha \\frac{\\|\\Theta(w_{\\text{sc}}^\\lambda - w^{LS})\\|}{\\|\\Theta w^{LS}\\|}
+        + (1-\\alpha) \\frac{\\#\\{j : w^\\lambda_j \\ne 0\\}}{d},
 
-    Returns the coefficient vector with the *smallest* λ that minimises
-    :math:`\\mathcal{L}`.  Ties are broken by choosing the sparser model.
+    where :math:`w_{\\text{sc}} = w / M` converts physical coefficients
+    back to the scaled space in which :math:`\\Theta` and :math:`w^{LS}`
+    live.  The reference uses equal weights (α = 0.5).
+
+    Returns the coefficient vector minimising :math:`\\mathcal{L}`.
+    Ties are broken by preferring sparser models, then smaller λ.
 
     Parameters
     ----------
-    Theta : ndarray, shape (n, d) — library (design) matrix
-    ut    : ndarray, shape (n,)   — time-derivative vector
-    lambdas : ndarray or None — candidate λ values; auto-generated if None
-    M : ndarray, shape (d,) or None — per-column scale factors for
-        dominant-balance bounds in ``mstls``; if None, simple thresholding
-    n_lambdas : int — used only when ``lambdas is None``
-    maxit : int — inner MSTLS iterations per λ
-    alpha : float — projection-cost weight in [0, 1]
-    normalize : int — column normalisation (passed to ``mstls``)
+    Theta : ndarray, shape (n, d) - library (design) matrix
+    ut    : ndarray, shape (n,)   - time-derivative vector
+    lambdas : ndarray or None - candidate λ values; auto-generated if None
+    M : ndarray, shape (d,) or None - per-column scale factors for
+        dominant-balance bounds in :func:`mstls`; if None, defaults to
+        ``ones(d)`` (matching the reference fallback)
+    n_lambdas : int - used only when ``lambdas is None``
+    maxit : int or None - inner MSTLS iterations per λ; if None,
+        defaults to ``d + 1``
+    alpha : float - projection-cost weight in [0, 1]; the reference
+        uses α = 0.5 (equal weight)
 
     Returns
     -------
@@ -473,46 +464,38 @@ def TrainMSTLS(Theta, ut, lambdas=None, M=None, n_lambdas=50, maxit=50, alpha=0.
     _, d = Theta.shape
     y = ut.ravel()
 
-    # Normalize columns (matching what mstls does internally) so that
-    # the lambda grid and loss computations use the same scale.
-    # When M is provided, skip normalisation here too — M carries the scale.
-    if M is not None:
-        Theta_norm = Theta
-        Mreg = np.ones(d)
-    elif normalize != 0:
-        Mreg = np.array(
-            [1.0 / (np.linalg.norm(Theta[:, i], normalize) + 1e-14) for i in range(d)]
-        )
-        Theta_norm = Theta * Mreg[np.newaxis, :]
+    if M is None:
+        M = np.ones(d)
     else:
-        Theta_norm = Theta.copy()
-        Mreg = np.ones(d)
+        M = np.asarray(M, dtype=float).ravel()
 
     if lambdas is None:
-        lambdas = select_lambda_grid(Theta_norm, y, n_lambdas)
+        lambdas = select_lambda_grid(Theta, y, n_lambdas)
 
-    w_ls = np.linalg.lstsq(Theta_norm, y, rcond=None)[0]
-    Theta_w_ls_norm = np.linalg.norm(Theta_norm @ w_ls)
-    if Theta_w_ls_norm < 1e-30:
-        Theta_w_ls_norm = 1.0
+    # LS solution in original (scaled) space
+    w_ls = np.linalg.lstsq(Theta, y, rcond=None)[0]
+    denom = np.linalg.norm(Theta @ w_ls)
+    if denom < 1e-30:
+        denom = 1.0
 
     best_loss = np.inf
-    best_w = np.zeros(d)  # unscaled
+    best_w = np.zeros(d)
     best_lambda = lambdas[0]
     loss_vals = np.empty(len(lambdas))
 
     for i, lam in enumerate(lambdas):
-        w = mstls(Theta, ut, lam, M=M, maxit=maxit, normalize=normalize)
-        # Loss computed on NORMALIZED system for consistency with lambda grid
-        w_norm = w / np.maximum(Mreg, 1e-30)
-        proj_cost = np.linalg.norm(Theta_norm @ (w_norm - w_ls)) / Theta_w_ls_norm
+        w = mstls(Theta, ut, lam, M=M, maxit=maxit)
+        # Loss - matches _mstls_loss from the reference:
+        #   ls_term   = ‖G @ (w_sc − w_ls)‖ / ‖G @ w_ls‖
+        #   sparsity  = nnz(w_phys) / d
+        w_sc = w / np.maximum(M, 1e-30)          # physical → scaled
+        ls_term = np.linalg.norm(Theta @ (w_sc - w_ls)) / denom
         nnz = np.count_nonzero(w)
-        sparsity_cost = nnz / max(d, 1)
-        loss = alpha * proj_cost + (1.0 - alpha) * sparsity_cost
+        sparsity_term = nnz / max(d, 1)
+        loss = alpha * ls_term + (1.0 - alpha) * sparsity_term
         loss_vals[i] = loss
 
-        # Keep the *smallest* λ that achieves the minimum loss.
-        # Ties at same loss: prefer sparser model, then smaller λ.
+        # Tie-breaking: smaller loss → sparser model → smaller λ
         if (
             loss < best_loss
             or (loss == best_loss and nnz < np.count_nonzero(best_w))
@@ -526,7 +509,7 @@ def TrainMSTLS(Theta, ut, lambdas=None, M=None, n_lambdas=50, maxit=50, alpha=0.
 
 
 # ==================================================================================================
-# RFE — Recursive Feature Elimination
+# RFE - Recursive Feature Elimination
 #
 # Stephany & Earls (2022), "PDE-READ: Human-readable Partial Differential Equation
 # Discovery using Deep Learning", 10.1016/j.neunet.2022.07.008.
@@ -544,19 +527,19 @@ def TrainMSTLS(Theta, ut, lambdas=None, M=None, n_lambdas=50, maxit=50, alpha=0.
 # ==================================================================================================
 
 
-def RFE(X0, y, normalize=2):
+def RFE(X0, y, normalize=2, lam=0.0):
     """Recursive Feature Elimination.
 
-    Parameter-free sparse regression for PDE discovery.  Iteratively eliminates
-    the smallest OLS (Ordinary Least Squares) coefficient, tracks the residual 
-    at each step, and selects the model at the step that maximises the relative 
+    Sparse regression for PDE discovery.  Iteratively eliminates the smallest
+    (optionally ridge-regularised) coefficient, tracks the residual at each
+    step, and selects the model at the step that maximises the relative
     residual increase.
 
     The algorithm:
         1. Normalises columns to unit norm (default: L2).
-        2. Fits OLS on all features; records residual.
+        2. Fits (ridge-regularised) LS on all features; records residual.
         3. Eliminates the feature with smallest |coefficient|.
-        4. Re-fits OLS on remaining features; records new residual.
+        4. Re-fits on remaining features; records new residual.
         5. Repeats until zero features remain (residual = ‖y‖²).
         6. Selects step j* = argmax_j (RLS[j+1] - RLS[j]) / RLS[j].
         7. Returns coefficients from step j*, rescaled to original units.
@@ -565,11 +548,12 @@ def RFE(X0, y, normalize=2):
     ----------
     X0        : ndarray, shape (N, d) - design matrix
     y         : ndarray, shape (N,)   - target vector
-    normalize : int - norm order for column normalisation (0 = none, 2 = L²)
+    normalize : int - norm order for column normalisation (0 = none, 2 = L2)
+    lam       : float - ridge regularisation (0 = pure OLS, >0 = ridge)
 
     Returns
     -------
-    w : ndarray, shape (d,) — sparse coefficient vector (original scale)
+    w : ndarray, shape (d,) - sparse coefficient vector (original scale)
     """
     N, d = X0.shape
     y = y.ravel()
@@ -590,9 +574,9 @@ def RFE(X0, y, normalize=2):
     XtX = X.T @ X   # (d, d)
     Xty = X.T @ y   # (d,)
 
-    # Initial OLS on all features
+    # Initial (ridge-regularised) LS on all features
     try:
-        w = np.linalg.solve(XtX, Xty)
+        w = np.linalg.solve(XtX + lam * np.eye(d), Xty)
     except np.linalg.LinAlgError:
         w = np.linalg.lstsq(X, y, rcond=None)[0]
 
@@ -608,12 +592,13 @@ def RFE(X0, y, normalize=2):
         k_min = int(np.argmin(active_coeffs))
         S[k_min] = False
 
-        # Re-fit OLS on remaining active features
+        # Re-fit (ridge-regularised) LS on remaining active features
         idx = np.where(S)[0]
         w_new = np.zeros(d)
+        n_active = len(idx)
         try:
             w_new[idx] = np.linalg.solve(
-                XtX[np.ix_(idx, idx)], Xty[idx],
+                XtX[np.ix_(idx, idx)] + lam * np.eye(n_active), Xty[idx],
             )
         except np.linalg.LinAlgError:
             w_new[idx] = np.linalg.lstsq(X[:, idx], y, rcond=None)[0]
@@ -638,9 +623,169 @@ def RFE(X0, y, normalize=2):
     return w_out
 
 
-def TrainRFE(Theta, ut, **kwargs):
-    """Thin wrapper: RFE is parameter-free, so this just calls ``RFE`` directly.
+def TrainRFE(Theta, ut, lam=0.0, **kwargs):
+    """Thin wrapper around ``RFE`` for API consistency with other regression
+    methods (STRidge, SR3, MSTLS).
 
-    Provided for API consistency with other regression methods (STRidge, SR3, MSTLS).
+    Parameters
+    ----------
+    Theta : ndarray - design matrix
+    ut    : ndarray - target vector
+    lam   : float - ridge regularisation (0 = pure OLS, >0 = ridge-RFE)
     """
-    return RFE(Theta, ut)
+    return RFE(Theta, ut, lam=lam)
+
+
+# =====================================================================================
+# Exhaustive best-subset selection  (L0-penalised least squares)
+#
+#   min_{β}   ‖Xβ − y‖² / ‖y‖²   +   λ · ‖β‖₀
+#
+# Enumerates every subset of columns and returns the Pareto frontier of
+# (model size, relative RSS) plus the single best model for a given λ.
+
+# The key precomputation trick is to work entirely with the d×d Gram matrix
+# G = ΘᵀΘ and h = ΘᵀFₜ, so each subset costs O(k³) independent of n.
+# =====================================================================================
+
+import itertools
+import math
+import time
+
+
+def exhaustive_best_subset(X0, y, max_k=None, normalize=2, l0_penalty=0.0,
+                           verbose=False):
+    """Exhaustive best-subset selection with L₀ sparsity penalty.
+
+    Enumerates every subset of columns of size 1 up to *max_k* (default: all
+    d columns), fits OLS on each, and returns the Pareto frontier.  The best
+    model minimises::
+
+        relative_RSS  +  λ · k,      relative_RSS = ‖Xβ - y‖² / ‖y‖².
+
+    Parameters
+    ----------
+    X0 : ndarray, shape (n, d) - design matrix.
+    y  : ndarray, shape (n,)  - target vector.
+    max_k : int or None - maximum subset size (None = all d columns).
+    normalize : int - column normalisation (0 = none, 2 = L2).
+    l0_penalty : float - λ ≥ 0, the sparsity penalty per active term.
+        λ = 0 picks the full model; larger λ enforces fewer terms.
+    verbose : bool - print progress.
+
+    Returns
+    -------
+    best_by_k : dict
+        k → (rss, indices, xi, score) for the best k-term model.
+    best_overall : tuple
+        (k, indices, xi, rss, score) for the L0-optimal model.
+    """
+    _, d = X0.shape
+    y = y.ravel()
+
+    # column normalisation (same convention as STRidge / SR3)
+    if normalize != 0:
+        Mreg = np.array([
+            1.0 / (np.linalg.norm(X0[:, i], normalize) + 1e-14)
+            for i in range(d)
+        ])
+        X = X0 * Mreg[np.newaxis, :]
+    else:
+        X = X0.astype(float, copy=True)
+        Mreg = np.ones(d)
+
+    # precompute normal equations
+    XtX = X.T @ X       # (d, d)
+    Xty = X.T @ y       # (d,)
+    yty = float(y @ y)  # normalize RSS to relative scale
+
+    max_k = min(max_k if max_k is not None else d, d)
+    if max_k == d and d > 25:
+        print(
+            f"Warning: full enumeration (2^{d} subsets) may be slow. "
+            f"Consider setting max_k ≤ 8."
+        )
+
+    # enumerate
+    best_by_k = {}          # k → (rss, indices, xi, score)
+    total_subsets = sum(math.comb(d, k) for k in range(1, max_k + 1))
+    count = 0
+    t0 = time.perf_counter()
+
+    for k in range(1, max_k + 1):
+        for combo in itertools.combinations(range(d), k):
+            idx = list(combo)
+            G = XtX[np.ix_(idx, idx)]   # (k, k)
+            h = Xty[idx]                 # (k,)
+
+            try:
+                xi_sub = np.linalg.solve(G, h)
+            except np.linalg.LinAlgError:
+                xi_sub = np.linalg.lstsq(X[:, idx], y, rcond=None)[0]
+
+            rss = float(yty - xi_sub @ h)
+            rss = max(rss, 0.0)          # guard against tiny negatives
+
+            score = rss / yty + l0_penalty * float(k)
+
+            if k not in best_by_k or score < best_by_k[k][3]:
+                xi_full = np.zeros(d)
+                xi_full[idx] = xi_sub
+                best_by_k[k] = (rss, idx, xi_full, score)
+
+            count += 1
+
+        if verbose:
+            elapsed = time.perf_counter() - t0
+            frac = count / max(total_subsets, 1)
+            print(
+                f"  k={k:2d} done  |  {count}/{total_subsets} subsets  "
+                f"({100*frac:.1f}%)  |  {elapsed:.1f}s elapsed"
+            )
+
+    # rescale to original units
+    best_by_k_rescaled = {}
+    for k, (rss, idx, xi, score) in best_by_k.items():
+        best_by_k_rescaled[k] = (rss, idx, Mreg * xi, score)
+
+    # pick best overall (lowest L₀-penalised score)
+    best_k = min(best_by_k_rescaled, key=lambda k_: best_by_k_rescaled[k_][3])
+    best_rss, best_idx, best_xi, best_score = best_by_k_rescaled[best_k]
+    best_overall = (best_k, best_idx, best_xi, best_rss, best_score)
+
+    if verbose:
+        elapsed = time.perf_counter() - t0
+        score0 = best_by_k_rescaled[best_k][3]
+        print(
+            f"Done: {count} subsets in {elapsed:.1f}s "
+            f"({count / max(elapsed, 1e-6):.0f} subsets/s).  "
+            f"Best: k={best_k}, indices={best_idx}, "
+            f"relRSS={best_rss / yty:.6f}, score={score0:.6f}"
+        )
+
+    return best_by_k_rescaled, best_overall
+
+
+def TrainExhaustive(Theta, ut, max_k=None, normalize=2, l0_penalty=0.0,
+                    verbose=False):
+    """Thin wrapper around :func:`exhaustive_best_subset` for API consistency
+    with ``TrainSTRidge``, ``TrainSR3``, etc.
+
+    Parameters
+    ----------
+    Theta : ndarray - design matrix.
+    ut    : ndarray - target vector.
+    max_k : int or None - maximum subset size.
+    normalize : int - column normalisation.
+    l0_penalty : float - sparsity penalty per term.
+    verbose : bool - print progress.
+
+    Returns
+    -------
+    w : ndarray, shape (d,) - best sparse coefficient vector.
+    """
+    _, best = exhaustive_best_subset(
+        Theta, ut, max_k=max_k, normalize=normalize,
+        l0_penalty=l0_penalty, verbose=verbose,
+    )
+    return best[2]  # xi vector

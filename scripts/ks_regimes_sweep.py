@@ -187,9 +187,9 @@ def build_matrices(snapshots, times, n_per_snap, L, skip_fraction):
         flush=True,
     )
     mats = {
-        ("spectral",    "equivariant"): np.vstack(eq_spec_rows).astype(float),
+        ("spectral",    "multigraphs"): np.vstack(eq_spec_rows).astype(float),
         ("spectral",    "standard"):    np.vstack(std_spec_rows).astype(float),
-        ("polynomial",  "equivariant"): np.vstack(eq_poly_rows).astype(float),
+        ("polynomial",  "multigraphs"): np.vstack(eq_poly_rows).astype(float),
         ("polynomial",  "standard"):    np.vstack(std_poly_rows).astype(float),
     }
     return mats, Ft, desc_eq, desc_std
@@ -328,7 +328,7 @@ def main():
                     eta = avg * (n_combos - i)
                     print(f"    {i}/{n_combos}  avg {avg*1e3:.0f}ms/combo  ETA {eta:.0f}s", flush=True)
 
-                Theta_eq  = mats[(backend, "equivariant")]
+                Theta_eq  = mats[(backend, "multigraphs")]
                 Theta_std = mats[(backend, "standard")]
 
                 nz, fp, fn, exact, err = sweep_one(
@@ -336,7 +336,7 @@ def main():
                 )
                 writer.writerow(dict(
                     regime=name, L_over_pi=L_over_pi, N_unstable=N_u,
-                    backend=backend, library="equivariant", algorithm=args.algorithm,
+                    backend=backend, library="multigraphs", algorithm=args.algorithm,
                     lam=lam, d_tol=d_tol,
                     n_active=nz, fp=fp, fn=fn, exact_recovery=exact, max_coeff_err=err,
                 ))
@@ -365,7 +365,7 @@ def main():
                 eq_rows = [
                     r for r in all_rows
                     if r["backend"] == backend
-                    and r["library"] == "equivariant"
+                    and r["library"] == "multigraphs"
                     and r["exact_recovery"] not in ("", "nan")
                 ]
                 if not eq_rows:

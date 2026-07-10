@@ -54,13 +54,13 @@ sys.path.insert(0, CODE_DIR)
 
 from equivariant_pde_find import derivatives  # noqa: E402
 from equivariant_pde_find.evaluation import (  # noqa: E402
-    build_eval_theta_jet, evaluate_from_theta, evaluate_unified,
-    evaluate_mwsindy,
+    build_eval_theta_jet, evaluate_unified,
     build_wsindy_to_jet_map, _EQUIV_TO_JET_DECOMPOSITION,
 )
 from equivariant_pde_find.equation_configs import (  # noqa: E402
     find_op, true_allen_cahn, true_swift_hohenberg, true_ks,
     true_cahn_hilliard, true_pme, mask_pme, EQUATION_META,
+    normalize_eq_name,
 )
 from equivariant_pde_find.library import (  # noqa: E402
     build_equivariant_library, build_standard_library,
@@ -68,7 +68,7 @@ from equivariant_pde_find.library import (  # noqa: E402
     build_mod_multigraph_library,
     spectral_lowpass,
 )
-from equivariant_pde_find.regression import TrainSTRidge, TrainSR3, TrainMSTLS  # noqa: E402
+from equivariant_pde_find.regression import TrainSTRidge, TrainMSTLS, TrainRFE, TrainExhaustive  # noqa: E402
 from equivariant_pde_find.simulations import make_regression_data  # noqa: E402
 from equivariant_pde_find import weak_form as wf  # noqa: E402
 
@@ -78,11 +78,13 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 
 # ── hyperparameter grids ────────────────────────────────────────────────────
 LAMS = [1e-6, 1e-4, 1e-2, 1.0]
-SR3_KAPPAS = [0.01, 0.1, 1.0, 10.0, 100.0]
+RFE_LAMS = [0.0]  # ridge regularisation for RFE (0 = pure OLS)
 MSTLS_N_LAMBDAS = 50
-MSTLS_ALPHAS = [0.0, 0.25, 0.5, 0.75, 1.0]
+MSTLS_ALPHAS = [0.25, 0.5, 0.75]
 MSTLS_MAXITS = 50
 D_TOLS = [1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 5e-2, 0.1, 0.2, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 7.0, 10.0]
+BRUTE_L0_PENALTIES = [1e-4, 1e-2, 1.0]  # mild, moderate, strong sparsity
+BRUTE_MAX_K = 8  # cap for libraries > 20 cols; None for <= 20
 BACKENDS = ["spectral", "polynomial"]
 WEAK_M = [4, 8, 12]
 WEAK_P = 6
@@ -149,7 +151,7 @@ def build_pointwise(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend):
     with derivatives.use_backend(backend):
         rows_theta, rows_ft = [], []
         for s in range(len(f_snaps)):
-            if library == "equivariant":
+            if library == "multigraphs":
                 T, desc = build_equivariant_library(f_snaps[s], Lx, Ly)
             elif library == "mod_multigraph":
                 T, desc = build_mod_multigraph_library(f_snaps[s], Lx, Ly)
@@ -157,7 +159,7 @@ def build_pointwise(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend):
                 T, desc = build_polynomial_jet_library(
                     f_snaps[s], Lx, Ly, max_order=4, max_degree=3,
                 )
-            elif library in ("wsindy", "wsindy_proj", "mwsindy"):
+            elif library in ("wsindy", "mwsindy"):
                 T, desc = build_pointwise_wsindy_library(
                     f_snaps[s], Lx, Ly, max_order=4, max_poly=3,
                 )
@@ -180,7 +182,7 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
         for s in range(len(f_snaps)):
             f = f_snaps[s]
             ft = ft_snaps[s]
-            if library == "equivariant":
+            if library == "multigraphs":
                 G, desc = wf.build_weak_library(
                     f, Lx, Ly, max_p=2, max_n=3, m=m, p=WEAK_P,
                     use_ibp=use_ibp,
@@ -195,7 +197,7 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
                     f, Lx, Ly, max_order=4, max_degree=3,
                     m=m, p=WEAK_P, use_ibp=use_ibp,
                 )
-            elif library in ("wsindy", "wsindy_proj", "mwsindy"):
+            elif library in ("wsindy", "mwsindy"):
                 G, desc = wf.build_weak_wsindy_library(
                     f, Lx, Ly, max_order=4, max_poly=3,
                     m=m, p=WEAK_P, use_ibp=use_ibp,
@@ -234,15 +236,16 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
 
 def sweep_one(Theta, Ft, true_eq, lam, d_tol, algorithm, mstls_alpha=0.5, mstls_M=None):
     """Run regression and return (n_active, w, lam_out)."""
-    if algorithm == "sr3":
-        w = TrainSR3(Theta, Ft, lam, d_tol)
-        lam_out = lam
-    elif algorithm == "mstls":
+    if algorithm == "mstls":
         # MSTLS does its own internal λ sweep; lam/d_tol are ignored
         w, lam_out, _ = TrainMSTLS(
             Theta, Ft, lambdas=None, M=mstls_M, n_lambdas=MSTLS_N_LAMBDAS,
             maxit=MSTLS_MAXITS, alpha=mstls_alpha,
         )
+    elif algorithm == "rfe":
+        # lam is the ridge regularisation for RFE (0 = pure OLS)
+        w = TrainRFE(Theta, Ft, lam=lam)
+        lam_out = lam
     else:
         w = TrainSTRidge(Theta, Ft, lam, d_tol)
         lam_out = lam
@@ -281,13 +284,13 @@ def main():
     )
     parser.add_argument(
         "--algorithms", nargs="+",
-        default=["strridge", "sr3", "mstls"],
-        choices=["strridge", "sr3", "mstls"],
+        default=["strridge", "mstls", "rfe"],
+        choices=["strridge", "mstls", "rfe", "brute", "oracle"],
     )
     parser.add_argument(
         "--libraries", nargs="+",
-        default=["equivariant", "standard", "polynomial_jet", "wsindy", "wsindy_proj", "mwsindy"],
-        choices=["equivariant", "mod_multigraph", "standard", "polynomial_jet", "wsindy", "wsindy_proj", "mwsindy"],
+        default=["multigraphs", "standard", "polynomial_jet", "wsindy"],
+        choices=["multigraphs", "mod_multigraph", "standard", "polynomial_jet", "wsindy", "mwsindy"],
     )
     parser.add_argument(
         "--backends", nargs="+",
@@ -320,8 +323,27 @@ def main():
              "Default: 0.0 0.25 0.5 0.75 1.0.",
     )
     parser.add_argument(
+        "--rfe-lam", nargs="+", type=float, default=None,
+        help="Ridge regularisation for RFE (0 = pure OLS). "
+             "Default: 0.0.",
+    )
+    parser.add_argument(
+        "--brute-l0", nargs="+", type=float, default=None,
+        help="L₀ sparsity penalties for brute-force exhaustive search. "
+             f"Default: {BRUTE_L0_PENALTIES}.",
+    )
+    parser.add_argument(
+        "--brute-max-k", type=int, default=None,
+        help=f"Max subset size for brute-force (default: None for ≤20 cols, "
+             f"{BRUTE_MAX_K} for >20).",
+    )
+    parser.add_argument(
         "--name", default="",
         help="Optional tag appended to output filename.",
+    )
+    parser.add_argument(
+        "--no-oracle", action="store_true",
+        help="Skip oracle (ground-truth residual) computation.",
     )
     args = parser.parse_args()
 
@@ -330,12 +352,23 @@ def main():
     all_npz = sorted([
         f for f in os.listdir(data_dir)
         if f.endswith(".npz") and not f.startswith(".")
+        and "aniso" not in f  # skip anisotropic-noise datasets by default
     ])
 
     if args.equations:
         eq_set = set(args.equations)
+        # Map short names → legacy filename prefixes for old data files
+        _eq_to_filename = {
+            "ac": "allen_cahn", "sh": "swift_hohenberg",
+            "ch": "cahn_hilliard", "pme": "porous_medium",
+            "ks_cell": "ks_cellular", "ks_wchaos": "ks_weak_chaotic",
+            "ks_chaos": "ks_chaotic",
+        }
+        eq_prefixes = set()
+        for eq in eq_set:
+            eq_prefixes.add(_eq_to_filename.get(eq, eq))
         all_npz = [f for f in all_npz
-                   if any(f.startswith(eq + "_") for eq in eq_set)]
+                   if any(f.startswith(eq + "_") for eq in eq_prefixes)]
     if args.noise is not None:
         noise_labels = {0.0: "clean", 0.02: "noise2pct", 0.05: "noise5pct"}
         allowed = {noise_labels[n] for n in args.noise}
@@ -355,6 +388,10 @@ def main():
     spectral_cutoffs = [args.spectral_cutoff] if args.spectral_cutoff else [None]
     ch_epsilons = args.ch_epsilons or CH_EPSILONS
     mstls_alphas = args.mstls_alpha or MSTLS_ALPHAS
+    rfe_lams = args.rfe_lam or RFE_LAMS
+    brute_l0_penalties = args.brute_l0 or BRUTE_L0_PENALTIES
+    oracle_only = (algorithms == ["oracle"])
+    compute_oracle = not args.no_oracle
 
     # ── output ───────────────────────────────────────────────────────────
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -365,8 +402,8 @@ def main():
     fieldnames = [
         "equation", "noise", "method", "algorithm", "library", "backend",
         "weak_m", "lam", "d_tol", "mstls_alpha",
-        "n_active", "fp", "fn", "exact_recovery", "E", "max_coeff_err",
-        "E_fit", "cond_theta", "n_samples",
+        "n_active", "fp", "fn", "exact_recovery", "E_coeff", "max_coeff_err",
+        "E_data", "cond_theta", "n_samples",
         "post_hoc_noise", "spectral_cutoff", "ch_eps",
         "profile_type", "profile_direction",
         "time_ms",
@@ -390,10 +427,11 @@ def main():
             # Load
             snapshots_orig, times, Lx, Ly, N, dt_snap, obs_noise, eq_name, \
                 profile_type, profile_direction = load_dataset(npz_path)
+            eq_name = normalize_eq_name(eq_name)
             true_fn, skip_frac, mask_fn = _get_meta(eq_name)
 
             # Determine CH epsilon sweep if applicable
-            is_ch = "cahn_hilliard" in eq_name
+            is_ch = eq_name == "ch"
             eps_list = ch_epsilons if is_ch else [None]
 
             eq_exact_count = 0
@@ -437,10 +475,10 @@ def main():
                     )
                     if is_ch:
                         true_eq = true_fn(desc_eq_ref, eps=ch_eps)
-                    elif eq_name.startswith("allen_cahn"):
-                        true_eq = true_fn(desc_eq_ref)
-                    elif eq_name.startswith("swift_hohenberg"):
-                        true_eq = true_fn(desc_eq_ref)
+                    elif eq_name == "ac":
+                        true_eq = true_fn(desc_eq_ref, eps=0.15)
+                    elif eq_name == "sh":
+                        true_eq = true_fn(desc_eq_ref, r=0.3)
                     else:
                         true_eq = true_fn(desc_eq_ref)
 
@@ -513,14 +551,10 @@ def main():
                     # ── Pre-build method matrices ────────────────────────
                     prebuilt = {}
 
-                    # MWSINDy needs equivariant G for fine-tuning — ensure
-                    # it's built even if not explicitly requested.
-                    build_libs = list(libraries)
-                    if "mwsindy" in libraries and "equivariant" not in build_libs:
-                        build_libs = ["equivariant"] + build_libs
-
+                    # Oracle-only: only need multigraph matrices
+                    _libs = ["multigraphs"] if oracle_only else libraries
                     for method, library, backend in itertools.product(
-                        methods, build_libs, backends
+                        methods, _libs, backends
                     ):
                         if method == "pointwise":
                             m_vals = [None]
@@ -565,6 +599,52 @@ def main():
                                   f"cond={cond_val:.2e}  "
                                   f"({elapsed:.1f}s)", flush=True)
 
+                    # ── Oracle: per-configuration ground truth ──────────
+                    if compute_oracle:
+                        for actual_key, (Theta, Ft, desc, cond_val) in \
+                                prebuilt.items():
+                            method, library, backend, m_val = actual_key
+                            if library != "multigraphs":
+                                continue
+                            # Use method-specific (Theta, Ft) directly
+                            Ft_pred = Theta @ true_eq
+                            E_data = float(
+                                np.linalg.norm(Ft_pred - Ft)
+                                / max(np.linalg.norm(Ft), 1e-14)
+                            )
+                            row = dict(
+                                equation=eq_name,
+                                noise=noise_label,
+                                method=method,
+                                algorithm="oracle",
+                                library=library,
+                                backend=backend,
+                                weak_m=(m_val if m_val != 0 else ""),
+                                lam="", d_tol="", mstls_alpha="",
+                                n_active=int(np.sum(np.abs(true_eq) > 1e-10)),
+                                fp=0, fn=0, exact_recovery=1,
+                                E_coeff="0.000000",
+                                max_coeff_err="0.000000",
+                                E_data=f"{E_data:.6f}",
+                                cond_theta=cond_val,
+                                n_samples=len(Ft),
+                                post_hoc_noise=(
+                                    post_hoc_noise if post_hoc_noise else ""),
+                                spectral_cutoff=(
+                                    args.spectral_cutoff
+                                    if args.spectral_cutoff else ""),
+                                ch_eps=(ch_eps if ch_eps else ""),
+                                profile_type=profile_type,
+                                profile_direction=profile_direction,
+                                time_ms="0.0",
+                            )
+                            writer.writerow(row)
+                            total_combos += 1
+
+                    if oracle_only:
+                        print(f"  [ac] oracle done", flush=True)
+                        continue
+
                     # ── Sweep hyperparams ──────────────────────────────
                     for method, library, backend in itertools.product(
                         methods, libraries, backends
@@ -583,14 +663,19 @@ def main():
                             Theta, Ft, desc, cond_val = prebuilt[actual_key]
 
                             for algorithm in algorithms:
+                                # MSTLS: weak-form only (skip pointwise)
                                 if algorithm == "mstls":
-                                    # Compute dominant-balance M for weak-form data
-                                    mstls_M = None
-                                    if method != "pointwise":
-                                        mstls_M = wf.compute_m_scale(Theta, Ft)
+                                    if method == "pointwise":
+                                        continue
 
-                                    # MSTLS does its own internal λ sweep;
-                                    # iterate over α values
+                                    # M-scaling only for WSINDy; skip for
+                                    # multigraph/standard where column
+                                    # norms span orders of magnitude.
+                                    if library in ("wsindy", "wsindy_proj"):
+                                        mstls_M = wf.compute_m_scale(Theta, Ft)
+                                    else:
+                                        mstls_M = None
+
                                     for mstls_alpha in mstls_alphas:
                                         t_row = time.time()
                                         n_active, w, lam_out = sweep_one(
@@ -605,17 +690,6 @@ def main():
                                             Theta_eval, Ft_eval, true_jet,
                                             M_ws_to_jet=M_ws_to_jet,
                                         )
-                                        # MWSINDy: fine-tune on multigraph submatrix
-                                        if library == "mwsindy":
-                                            mg_key = (method, "equivariant", backend, m_val)
-                                            if mg_key in prebuilt:
-                                                G_mg, b_mg, desc_mg, _ = prebuilt[mg_key]
-                                                eval_result = evaluate_mwsindy(
-                                                    w, desc, desc_mg, desc_jet,
-                                                    M_ws_to_jet, Theta_eval,
-                                                    Ft_eval, true_jet,
-                                                    G_mg, b_mg,
-                                                )
                                         dt_ms = (time.time() - t_row) * 1000
 
                                         row = dict(
@@ -635,10 +709,10 @@ def main():
                                             fn=eval_result["fn"],
                                             exact_recovery=eval_result[
                                                 "exact_recovery"],
-                                            E=eval_result["E"],
+                                            E_coeff=eval_result["E_coeff"],
                                             max_coeff_err=eval_result[
                                                 "max_coeff_err"],
-                                            E_fit=eval_result.get("E_fit", ""),
+                                            E_data=f"{np.linalg.norm(Theta @ w - Ft) / max(np.linalg.norm(Ft), 1e-14):.6f}",
                                             cond_theta=cond_val,
                                             n_samples=eval_result["n_samples"],
                                             post_hoc_noise=(
@@ -660,10 +734,139 @@ def main():
                                         eq_total += 1
                                     continue
 
-                                lam_grid = (SR3_KAPPAS if algorithm == "sr3"
-                                            else LAMS)
+                                # RFE: sweep over ridge regularisation
+                                if algorithm == "rfe":
+                                    for rfe_lam in rfe_lams:
+                                        t_row = time.time()
+                                        n_active, w, lam_out = sweep_one(
+                                            Theta, Ft, true_eq, rfe_lam, 0.0,
+                                            algorithm,
+                                        )
 
-                                for lam in lam_grid:
+                                        eval_result = evaluate_unified(
+                                            w, library, desc, desc_jet,
+                                            Theta_eval, Ft_eval, true_jet,
+                                            M_ws_to_jet=M_ws_to_jet,
+                                        )
+                                        dt_ms = (time.time() - t_row) * 1000
+
+                                        row = dict(
+                                            equation=eq_name,
+                                            noise=noise_label,
+                                            method=method,
+                                            algorithm=algorithm,
+                                            library=library,
+                                            backend=backend,
+                                            weak_m=(m_val if m_val != 0
+                                                      else ""),
+                                            lam=lam_out,
+                                            d_tol="",
+                                            mstls_alpha="",
+                                            n_active=n_active,
+                                            fp=eval_result["fp"],
+                                            fn=eval_result["fn"],
+                                            exact_recovery=eval_result[
+                                                "exact_recovery"],
+                                            E_coeff=eval_result["E_coeff"],
+                                            max_coeff_err=eval_result[
+                                                "max_coeff_err"],
+                                            E_data=f"{np.linalg.norm(Theta @ w - Ft) / max(np.linalg.norm(Ft), 1e-14):.6f}",
+                                            cond_theta=cond_val,
+                                            n_samples=eval_result[
+                                                "n_samples"],
+                                            post_hoc_noise=(
+                                                post_hoc_noise
+                                                if post_hoc_noise else ""),
+                                            spectral_cutoff=(
+                                                args.spectral_cutoff
+                                                if args.spectral_cutoff
+                                                else ""),
+                                            ch_eps=(ch_eps
+                                                    if ch_eps else ""),
+                                            profile_type=profile_type,
+                                            profile_direction=
+                                                profile_direction,
+                                            time_ms=f"{dt_ms:.1f}",
+                                        )
+                                        writer.writerow(row)
+                                        total_combos += 1
+                                        eq_total += 1
+                                        if eval_result["exact_recovery"]:
+                                            eq_exact_count += 1
+                                    continue
+
+                                # Brute-force: multigraphs only (same as oracle)
+                                if algorithm == "brute":
+                                    if library != "multigraphs":
+                                        continue
+                                    max_k = args.brute_max_k
+                                    if max_k is None:
+                                        n_cols = Theta.shape[1]
+                                        max_k = None if n_cols <= 20 else BRUTE_MAX_K
+
+                                    for l0_pen in brute_l0_penalties:
+                                        t_row = time.time()
+                                        w = TrainExhaustive(
+                                            Theta, Ft, max_k=max_k,
+                                            l0_penalty=l0_pen,
+                                        )
+                                        n_active = int(np.count_nonzero(
+                                            np.abs(w) > 1e-10))
+
+                                        eval_result = evaluate_unified(
+                                            w, library, desc, desc_jet,
+                                            Theta_eval, Ft_eval, true_jet,
+                                            M_ws_to_jet=M_ws_to_jet,
+                                        )
+                                        dt_ms = (time.time() - t_row) * 1000
+
+                                        row = dict(
+                                            equation=eq_name,
+                                            noise=noise_label,
+                                            method=method,
+                                            algorithm=algorithm,
+                                            library=library,
+                                            backend=backend,
+                                            weak_m=(m_val if m_val != 0
+                                                      else ""),
+                                            lam="",
+                                            d_tol=l0_pen,
+                                            mstls_alpha="",
+                                            n_active=n_active,
+                                            fp=eval_result["fp"],
+                                            fn=eval_result["fn"],
+                                            exact_recovery=eval_result[
+                                                "exact_recovery"],
+                                            E_coeff=eval_result["E_coeff"],
+                                            max_coeff_err=eval_result[
+                                                "max_coeff_err"],
+                                            E_data=f"{np.linalg.norm(Theta @ w - Ft) / max(np.linalg.norm(Ft), 1e-14):.6f}",
+                                            cond_theta=cond_val,
+                                            n_samples=eval_result[
+                                                "n_samples"],
+                                            post_hoc_noise=(
+                                                post_hoc_noise
+                                                if post_hoc_noise else ""),
+                                            spectral_cutoff=(
+                                                args.spectral_cutoff
+                                                if args.spectral_cutoff
+                                                else ""),
+                                            ch_eps=(ch_eps
+                                                    if ch_eps else ""),
+                                            profile_type=profile_type,
+                                            profile_direction=
+                                                profile_direction,
+                                            time_ms=f"{dt_ms:.1f}",
+                                        )
+                                        writer.writerow(row)
+                                        total_combos += 1
+                                        eq_total += 1
+                                        if eval_result["exact_recovery"]:
+                                            eq_exact_count += 1
+                                    continue
+
+                                # STRidge: sweep over lam × d_tol
+                                for lam in LAMS:
                                     for d_tol in D_TOLS:
                                         t_row = time.time()
                                         n_active, w, lam_out = sweep_one(
@@ -676,17 +879,6 @@ def main():
                                             Theta_eval, Ft_eval, true_jet,
                                             M_ws_to_jet=M_ws_to_jet,
                                         )
-                                        # MWSINDy: fine-tune on multigraph submatrix
-                                        if library == "mwsindy":
-                                            mg_key = (method, "equivariant", backend, m_val)
-                                            if mg_key in prebuilt:
-                                                G_mg, b_mg, desc_mg, _ = prebuilt[mg_key]
-                                                eval_result = evaluate_mwsindy(
-                                                    w, desc, desc_mg, desc_jet,
-                                                    M_ws_to_jet, Theta_eval,
-                                                    Ft_eval, true_jet,
-                                                    G_mg, b_mg,
-                                                )
                                         dt_ms = (time.time() - t_row) * 1000
 
                                         row = dict(
@@ -706,10 +898,10 @@ def main():
                                             fn=eval_result["fn"],
                                             exact_recovery=eval_result[
                                                 "exact_recovery"],
-                                            E=eval_result["E"],
+                                            E_coeff=eval_result["E_coeff"],
                                             max_coeff_err=eval_result[
                                                 "max_coeff_err"],
-                                            E_fit=eval_result.get("E_fit", ""),
+                                            E_data=f"{np.linalg.norm(Theta @ w - Ft) / max(np.linalg.norm(Ft), 1e-14):.6f}",
                                             cond_theta=cond_val,
                                             n_samples=eval_result["n_samples"],
                                             post_hoc_noise=(

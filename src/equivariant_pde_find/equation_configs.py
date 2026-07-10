@@ -177,14 +177,42 @@ def mask_pme(field):
     return field.ravel() > 0.05
 
 
-# Equation registry: maps name prefix → (true_fn, skip_fraction, mask_fn).
-# KS variants (ks_cellular, ks_weak_chaotic, ks_chaotic) all use true_ks.
+# Equation registry: maps canonical short name → (true_fn, skip_fraction, mask_fn).
+# KS variants (ks_cell, ks_wchaos, ks_chaos) all use true_ks.
+#
+# Legacy data files use long names (allen_cahn, swift_hohenberg, …);
+# ``normalize_eq_name`` maps them to the canonical short keys below.
 EQUATION_META = {
-    "allen_cahn":       (true_allen_cahn,       0.0,  None),
-    "swift_hohenberg":  (true_swift_hohenberg,  0.1,  None),
-    "cahn_hilliard":    (true_cahn_hilliard,     0.0,  None),
-    "porous_medium":    (true_pme,               0.0,  mask_pme),
-    "ks_cellular":      (true_ks,                0.3,  None),
-    "ks_weak_chaotic":  (true_ks,                0.3,  None),
-    "ks_chaotic":       (true_ks,                0.3,  None),
+    "ac":        (true_allen_cahn,       0.0,  None),
+    "sh":        (true_swift_hohenberg,  0.1,  None),
+    "ch":        (true_cahn_hilliard,     0.0,  None),
+    "pme":       (true_pme,               0.0,  mask_pme),
+    "ks_cell":   (true_ks,                0.3,  None),
+    "ks_wchaos": (true_ks,                0.3,  None),
+    "ks_chaos":  (true_ks,                0.3,  None),
 }
+
+# Mapping from any variant (old long name, new short name) → canonical key.
+_EQ_NAME_ALIASES = {
+    "allen_cahn": "ac",
+    "swift_hohenberg": "sh",
+    "cahn_hilliard": "ch",
+    "porous_medium": "pme",
+    "ks_cellular": "ks_cell",
+    "ks_weak_chaotic": "ks_wchaos",
+    "ks_chaotic": "ks_chaos",
+    # canonical → canonical (identity)
+    "ac": "ac", "sh": "sh", "ch": "ch", "pme": "pme",
+    "ks_cell": "ks_cell", "ks_wchaos": "ks_wchaos", "ks_chaos": "ks_chaos",
+}
+
+
+def normalize_eq_name(name):
+    """Map any equation name variant to the canonical short key.
+
+    Accepts both legacy long names (``"allen_cahn"``, ``"swift_hohenberg"``,
+    …) and the new short names (``"ac"``, ``"sh"``, …).  Returns the
+    canonical short key, or the original *name* unchanged if no mapping
+    is known (useful for KS regime sub-names that are already canonical).
+    """
+    return _EQ_NAME_ALIASES.get(name, name)

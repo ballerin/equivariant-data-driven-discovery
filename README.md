@@ -36,7 +36,7 @@ Two differentiation backends are available:
 
 Several regression algorithms:
 - STridge, originally from PDE-FIND [3];
-- SR3, TODO.
+- SR3, TODO. (maybe will be removed)
 - MSTLS, as described in [4].
 
 ### Pipeline
@@ -55,7 +55,7 @@ python scripts/generate_data.py
 To generate only specific equations or noise levels:
 
 ```bash
-python scripts/generate_data.py --equations allen_cahn swift_hohenberg
+python scripts/generate_data.py --equations ac sh
 python scripts/generate_data.py --noise 0.0 0.02
 ```
 
@@ -72,15 +72,15 @@ python scripts/sweep.py
 Targeted sweeps for faster iteration:
 
 ```bash
-# Core equivariant vs standard comparison (pointwise only, STRidge only)
-python scripts/sweep.py --methods pointwise --algorithms strridge --libraries equivariant standard
+# Core multigraphs vs standard comparison (pointwise only, STRidge only)
+python scripts/sweep.py --methods pointwise --algorithms strridge --libraries multigraphs standard
 
-# Noise-robustness comparison (weak vs pointwise, equivariant only)
+# Noise-robustness comparison (weak vs pointwise, multigraphs only)
 python scripts/sweep.py \
-    --equations swift_hohenberg ks_chaotic \
+    --equations sh ks_chaos \
     --noise 0.02 0.05 \
     --methods pointwise weak_direct weak_ibp \
-    --libraries equivariant
+    --libraries multigraphs
 
 # With post-hoc noise injection and spectral low-pass prefiltering
 python scripts/sweep.py --post-hoc-noise 0.02 0.05 --spectral-cutoff 3.0
@@ -95,7 +95,7 @@ python scripts/sweep.py --libraries polynomial_jet
 python scripts/sweep.py --libraries wsindy
 
 # Cahn-Hilliard epsilon ablation
-python scripts/sweep.py --equations cahn_hilliard --ch-epsilons 0.1 0.2 0.4
+python scripts/sweep.py --equations ch --ch-epsilons 0.1 0.2 0.4
 ```
 
 Key CLI options for `sweep.py`:
@@ -104,14 +104,13 @@ Key CLI options for `sweep.py`:
 |---|---|---|
 | `--methods` | `pointwise weak_direct weak_ibp` | Library evaluation methods |
 | `--algorithms` | `strridge sr3 mstls` | Regression algorithms (`strridge`, `sr3`, `mstls`) |
-| `--libraries` | `equivariant standard polynomial_jet wsindy` | Library types (`equivariant`, `standard`, `polynomial_jet`, `wsindy`) |
+| `--libraries` | `multigraphs standard polynomial_jet wsindy` | Library types (`multigraphs`, `standard`, `polynomial_jet`, `wsindy`) |
 | `--backends` | `spectral polynomial` | Differentiation backends |
 | `--equations` | all | Filter by equation name prefix |
 | `--noise` | all | Filter by noise level (e.g. `0.0 0.02 0.05`) |
 | `--weak-m` | `4 8 12` | Test-function half-support sizes |
 | `--post-hoc-noise` | none | Add noise to clean data as fraction of std |
 | `--spectral-cutoff` | none | Low-pass filter cutoff wavenumber |
-| `--ch-epsilons` | `0.1 0.2 0.4` | Cahn-Hilliard ε values to sweep |
 | `--name` | `""` | Tag appended to output filename |
 
 Output: `results/sweep_<YYYYMMDD>_<HHMMSS>_<name>.csv`
@@ -175,7 +174,7 @@ Generate a human-readable markdown summary for each equation from a sweep CSV:
 python scripts/build_summary.py results/sweep_20260619_170245.csv
 
 # Restrict to a single equation
-python scripts/build_summary.py results/sweep_20260619_170245.csv --equation porous_medium
+python scripts/build_summary.py results/sweep_20260619_170245.csv --equation pme
 
 # Specify output path
 python scripts/build_summary.py results/sweep_20260619_170245.csv --out summaries/my_summary.md

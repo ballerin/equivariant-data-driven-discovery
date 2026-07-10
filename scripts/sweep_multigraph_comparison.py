@@ -43,7 +43,7 @@ from equivariant_pde_find.equation_configs import (  # noqa: E402
     true_cahn_hilliard, true_pme, mask_pme, EQUATION_META,
     true_allen_cahn_mod_multigraph, true_swift_hohenberg_mod_multigraph,
     true_ks_mod_multigraph, true_cahn_hilliard_mod_multigraph,
-    true_pme_mod_multigraph,
+    true_pme_mod_multigraph, normalize_eq_name,
 )
 from equivariant_pde_find.library import (  # noqa: E402
     build_polynomial_jet_library,
@@ -66,19 +66,19 @@ SAMPLE_STRIDE = 4
 
 # ── truth functions per library and equation ─────────────────────────────────
 TRUTH_FNS = {
-    "multigraph": {
-        "allen_cahn": true_allen_cahn,
-        "swift_hohenberg": true_swift_hohenberg,
+    "multigraphs": {
+        "ac": true_allen_cahn,
+        "sh": true_swift_hohenberg,
         "ks": true_ks,
-        "cahn_hilliard": true_cahn_hilliard,
-        "porous_medium": true_pme,
+        "ch": true_cahn_hilliard,
+        "pme": true_pme,
     },
     "mod_multigraph": {
-        "allen_cahn": true_allen_cahn_mod_multigraph,
-        "swift_hohenberg": true_swift_hohenberg_mod_multigraph,
+        "ac": true_allen_cahn_mod_multigraph,
+        "sh": true_swift_hohenberg_mod_multigraph,
         "ks": true_ks_mod_multigraph,
-        "cahn_hilliard": true_cahn_hilliard_mod_multigraph,
-        "porous_medium": true_pme_mod_multigraph,
+        "ch": true_cahn_hilliard_mod_multigraph,
+        "pme": true_pme_mod_multigraph,
     },
 }
 
@@ -115,7 +115,7 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
         for s in range(len(f_snaps)):
             f = f_snaps[s]
             ft = ft_snaps[s]
-            if library == "multigraph":
+            if library == "multigraphs":
                 G, desc = wf.build_weak_library(
                     f, Lx, Ly, max_p=2, max_n=3, m=m, p=WEAK_P,
                     use_ibp=use_ibp,
@@ -154,14 +154,12 @@ def cond_number(Theta):
 
 
 def _map_equivariant_key(eq_name):
-    """Map dataset names to truth-function keys."""
-    for key in ["allen_cahn", "swift_hohenberg", "cahn_hilliard",
-                "porous_medium"]:
-        if eq_name.startswith(key):
-            return key
-    for key in ["ks_cellular", "ks_weak_chaotic", "ks_chaotic"]:
-        if eq_name.startswith(key):
-            return "ks"
+    """Map canonical equation name to truth-function key."""
+    name = normalize_eq_name(eq_name)
+    if name in ("ac", "sh", "ch", "pme"):
+        return name
+    if name in ("ks_cell", "ks_wchaos", "ks_chaos"):
+        return "ks"
     raise KeyError(f"Unknown equation: {eq_name}")
 
 
@@ -198,7 +196,7 @@ def main():
         print(f"No .npz files found in {args.data_dir} matching filters.")
         return
 
-    libraries = ["multigraph", "mod_multigraph"]
+    libraries = ["multigraphs", "mod_multigraph"]
     weak_m_vals = args.weak_m
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -227,10 +225,11 @@ def main():
             print(f"{'='*70}")
 
             snapshots, times, Lx, Ly, N, obs_noise, eq_name = load_dataset(npz_path)
+            eq_name = normalize_eq_name(eq_name)
             true_fn_key = _map_equivariant_key(eq_name)
             true_fn, skip_frac, mask_fn = _get_meta(eq_name)
 
-            is_ch = "cahn_hilliard" in eq_name
+            is_ch = eq_name == "ch"
             eps_list = args.ch_epsilons if is_ch else [None]
 
             for ch_eps in eps_list:
@@ -274,7 +273,7 @@ def main():
                 true_jet = {}
                 for lib in libraries:
                     # Get the correct desc for this lib (cheap: just build on one snapshot)
-                    if lib == "multigraph":
+                    if lib == "multigraphs":
                         _, desc_lib = wf.build_weak_library(
                             f_snaps[0], Lx, Ly, max_p=2, max_n=3, m=4, p=WEAK_P, use_ibp=False)
                     else:
@@ -288,7 +287,7 @@ def main():
                         true_w = TRUTH_FNS[lib][true_fn_key](desc_lib, eps=0.15)
                     else:
                         true_w = TRUTH_FNS[lib][true_fn_key](desc_lib)
-                    if lib == "multigraph":
+                    if lib == "multigraphs":
                         true_jet[lib] = map_equivariant_to_jet_from_w(true_w, desc_lib, desc_jet)
                     else:
                         true_jet[lib] = map_mod_multigraph_to_jet_from_w(true_w, desc_lib, desc_jet)

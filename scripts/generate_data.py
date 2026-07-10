@@ -8,7 +8,7 @@ Usage
 -----
     cd paper-experimental/code
     python scripts/generate_data.py
-    python scripts/generate_data.py --equations allen_cahn swift_hohenberg
+    python scripts/generate_data.py --equations ac sh
     python scripts/generate_data.py --noise 0.0 0.02
     python scripts/generate_data.py --data-dir data/
 """
@@ -48,43 +48,43 @@ NOISE_LABELS = {0.0: "clean", 0.02: "noise2pct", 0.05: "noise5pct"}
 # ── equation configurations ──────────────────────────────────────────────────
 EQUATIONS = [
     dict(
-        name="allen_cahn",
+        name="ac",
         simulate_fn=allen_cahn,
         sim_kwargs=dict(N=64, L=2 * np.pi, T_end=8.0, eps=0.15, dt=0.01,
                         save_every=20, seed=42),
     ),
     dict(
-        name="swift_hohenberg",
+        name="sh",
         simulate_fn=swift_hohenberg,
         sim_kwargs=dict(N=64, L=8 * np.pi, T_end=50.0, r=0.3, dt=0.1,
                         save_every=5, seed=42),
     ),
     dict(
-        name="cahn_hilliard",
+        name="ch",
         simulate_fn=cahn_hilliard,
         sim_kwargs=dict(N=128, L=4 * np.pi, T_end=30.0, eps=0.2, dt=0.005,
                         save_every=30, seed=42),
     ),
     dict(
-        name="porous_medium",
+        name="pme",
         simulate_fn=porous_medium,
         sim_kwargs=dict(N=64, L=6 * np.pi, T_end=2.0, dt=0.002,
                         save_every=25, seed=42),
     ),
     dict(
-        name="ks_cellular",
+        name="ks_cell",
         simulate_fn=kuramoto_sivashinsky,
         sim_kwargs=dict(N=64, L=4 * np.pi, T_end=50.0, dt=0.1,
                         save_every=5, seed=42),
     ),
     dict(
-        name="ks_weak_chaotic",
+        name="ks_wchaos",
         simulate_fn=kuramoto_sivashinsky,
         sim_kwargs=dict(N=64, L=8 * np.pi, T_end=100.0, dt=0.1,
                         save_every=5, seed=42),
     ),
     dict(
-        name="ks_chaotic",
+        name="ks_chaos",
         simulate_fn=kuramoto_sivashinsky,
         sim_kwargs=dict(N=64, L=16 * np.pi, T_end=100.0, dt=0.1,
                         save_every=5, seed=42),
@@ -95,7 +95,7 @@ EQUATIONS = [
 
 ANISOTROPIC_NOISE_LEVELS = [0.02, 0.05]        # clean data is the same regardless
 ANISOTROPIC_NOISE_LABELS = {0.02: "noise2pct", 0.05: "noise5pct"}
-ANISOTROPIC_EQUATIONS = ["allen_cahn", "swift_hohenberg"]
+ANISOTROPIC_EQUATIONS = ["ac", "sh"]
 
 ANISOTROPIC_PROFILES = [
     dict(profile_type="gaussian_decay", direction="radial", label="radial_decay"),

@@ -279,7 +279,7 @@ def test_evaluate_unified_handles_mod_multigraph():
     assert result["fp"] == 0, f"Perfect recovery should have fp=0, got {result['fp']}"
     assert result["fn"] == 0, f"Perfect recovery should have fn=0, got {result['fn']}"
     assert result["exact_recovery"] == 1
-    assert result["E"] < 1e-10, f"E should be ~0, got {result['E']}"
+    assert result["E_coeff"] < 1e-10, f"E should be ~0, got {result['E']}"
 
     # Partial recovery: drop Δ²f (index 9 in mod multigraph)
     w_partial = w_perfect.copy()

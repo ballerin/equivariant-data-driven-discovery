@@ -9,10 +9,12 @@ with periodic boundary conditions.
 from . import derivatives
 from . import evaluation
 from . import library
+from . import markdown_tables
 from . import multigraph_operators
 from . import polynomial_derivatives
 from . import regression
 from . import simulations
 from . import spectral_derivatives
+from . import summary_metadata
 from . import utils
 from . import weak_form

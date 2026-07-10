@@ -2,12 +2,12 @@
 Universal evaluation of sparse PDE recovery against ground truth.
 
 Provides:
-  build_eval_theta    — pre-build the pointwise Theta from snapshots (slow;
+  build_eval_theta    - pre-build the pointwise Theta from snapshots (slow;
                         do once per dataset).
-  evaluate_from_theta — compute fp, fn, E, etc. from pre-built (Theta, Ft)
+  evaluate_from_theta - compute fp, fn, E, etc. from pre-built (Theta, Ft)
                         (fast; call for each hyperparameter combination).
-  evaluate_recovery   — convenience wrapper: build + evaluate in one call.
-  best_of_sweep       — select the best row from a sweep using the
+  evaluate_recovery   - convenience wrapper: build + evaluate in one call.
+  best_of_sweep       - select the best row from a sweep using the
                         lexicographic criterion (exact → fp → fn → E).
 
 All evaluations use the **pointwise** design matrix Theta on all grid
@@ -51,14 +51,14 @@ def build_eval_theta(snapshots, times, Lx, Ly, skip_fraction=0.0, seed=0):
     snapshots  : ndarray (n_saved, Nx, Ny)
     times      : ndarray (n_saved,)
     Lx, Ly     : float
-    skip_fraction : float — fraction of front snapshots to discard
-    seed       : int — forwarded to make_regression_data for spatial subsampling RNG
+    skip_fraction : float - fraction of front snapshots to discard
+    seed       : int - forwarded to make_regression_data for spatial subsampling RNG
 
     Returns
     -------
-    Theta : ndarray (n_total, K) — pointwise equivariant library on ALL grid
+    Theta : ndarray (n_total, K) - pointwise equivariant library on ALL grid
                                     points.
-    Ft    : ndarray (n_total,)   — time derivative on ALL grid points.
+    Ft    : ndarray (n_total,)   - time derivative on ALL grid points.
     """
     f_snaps, ft_snaps, _, _ = make_regression_data(
         snapshots, times, n_per_snap=200, skip_fraction=skip_fraction, seed=seed,
@@ -295,13 +295,13 @@ def evaluate_unified(w, library, desc_lib, desc_jet, Theta_jet, Ft,
     Maps the recovered coefficients to the jet basis, then computes
     fp, fn, E in the common jet space.
     """
-    if library in ("equivariant", "multigraph"):
+    if library in ("multigraphs",):
         w_jet = map_equivariant_to_jet_from_w(w, desc_lib, desc_jet)
     elif library == "mod_multigraph":
         w_jet = map_mod_multigraph_to_jet_from_w(w, desc_lib, desc_jet)
     elif library == "standard":
         w_jet = map_standard_to_jet(w, desc_lib, desc_jet)
-    elif library in ("wsindy", "wsindy_proj", "mwsindy") and M_ws_to_jet is not None:
+    elif library in ("wsindy", "mwsindy") and M_ws_to_jet is not None:
         w_jet = map_wsindy_to_jet(w, M_ws_to_jet)
     elif library == "polynomial_jet":
         w_jet = w
@@ -432,21 +432,28 @@ def evaluate_from_theta(w, true_eq, Theta, Ft):
     else:
         max_coeff_err = float(np.max(np.abs(true_eq[active_mask])))
 
-    # Prediction error E = ||Theta·(w - true)|| / ||Theta·true||
+    # Coefficient error E_coeff = ||Theta·(w - true)|| / ||Theta·true||
     delta = w - true_eq
     pred_true = Theta @ true_eq
     pred_delta = Theta @ delta
     denom = np.linalg.norm(pred_true) + 1e-30
-    E = float(np.linalg.norm(pred_delta) / denom)
+    E_coeff = float(np.linalg.norm(pred_delta) / denom)
+
+    # Data-fit error E_data = ||Theta·w - Ft|| / ||Ft||
+    pred_w = Theta @ w
+    E_data = float(
+        np.linalg.norm(pred_w - Ft) / (np.linalg.norm(Ft) + 1e-30)
+    )
 
     return dict(
         fp=fp,
         fn=fn,
         exact_recovery=exact,
         n_active=n_active,
-        E=E,
+        E_coeff=E_coeff,
         max_coeff_err=max_coeff_err,
         n_samples=Theta.shape[0],
+        E_data=E_data,
     )
 
 
@@ -915,6 +922,6 @@ def best_of_sweep(rows, criterion="lexicographic"):
         # rows always lose to any row with finite metrics.
         fp_val = row["fp"] if not _is_nan(row["fp"]) else float("inf")
         fn_val = row["fn"] if not _is_nan(row["fn"]) else float("inf")
-        return (exact_score, fp_val, fn_val, row["E"])
+        return (exact_score, fp_val, fn_val, row["E_coeff"])
 
     return min(rows, key=key)

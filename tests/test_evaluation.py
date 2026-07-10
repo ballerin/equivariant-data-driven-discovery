@@ -120,7 +120,7 @@ class TestEvaluateRecovery:
         assert result["exact_recovery"] == 1
         assert result["fp"] == 0
         assert result["fn"] == 0
-        assert result["E"] < 1e-8, f"E={result['E']} should be ~0"
+        assert result["E_coeff"] < 1e-8, f"E={result['E_coeff']} should be ~0"
 
     def test_zero_coefficients_gives_E_one(self, ac_data):
         """w = 0 should give E = 1."""
@@ -129,7 +129,7 @@ class TestEvaluateRecovery:
         result = evaluate_recovery(w_zero, true_eq, snaps, times,
                                     2 * np.pi, 2 * np.pi)
         # E = ||Theta·(0 - true)|| / ||Theta·true|| = 1 exactly
-        assert abs(result["E"] - 1.0) < 1e-10
+        assert abs(result["E_coeff"] - 1.0) < 1e-10
 
     def test_fp_counting(self, ac_data):
         """Adding a false positive should increase fp."""
@@ -193,9 +193,9 @@ class TestEvaluateRecovery:
         # Large perturbation
         w_large = true_eq * 2.0
         E_small = evaluate_recovery(w_small, true_eq, snaps, times,
-                                     2 * np.pi, 2 * np.pi)["E"]
+                                     2 * np.pi, 2 * np.pi)["E_coeff"]
         E_large = evaluate_recovery(w_large, true_eq, snaps, times,
-                                     2 * np.pi, 2 * np.pi)["E"]
+                                     2 * np.pi, 2 * np.pi)["E_coeff"]
         assert E_large > E_small
 
     def test_n_samples_is_positive(self, ac_data):
@@ -226,8 +226,8 @@ class TestBestOfSweep:
     def test_exact_beats_nonexact(self):
         """An exact recovery (fp=0, fn=0) should beat any non-exact."""
         rows = [
-            dict(exact_recovery=0, fp=1, fn=0, E=0.001),
-            dict(exact_recovery=1, fp=0, fn=0, E=0.01),
+            dict(exact_recovery=0, fp=1, fn=0, E_coeff=0.001),
+            dict(exact_recovery=1, fp=0, fn=0, E_coeff=0.01),
         ]
         best = best_of_sweep(rows)
         assert best["exact_recovery"] == 1
@@ -235,8 +235,8 @@ class TestBestOfSweep:
     def test_lower_fp_beats_higher_fp(self):
         """When neither is exact, lower fp wins."""
         rows = [
-            dict(exact_recovery=0, fp=5, fn=0, E=0.001),
-            dict(exact_recovery=0, fp=2, fn=0, E=0.1),
+            dict(exact_recovery=0, fp=5, fn=0, E_coeff=0.001),
+            dict(exact_recovery=0, fp=2, fn=0, E_coeff=0.1),
         ]
         best = best_of_sweep(rows)
         assert best["fp"] == 2
@@ -244,8 +244,8 @@ class TestBestOfSweep:
     def test_lower_fn_breaks_fp_tie(self):
         """When fp is tied, lower fn wins."""
         rows = [
-            dict(exact_recovery=0, fp=2, fn=3, E=0.001),
-            dict(exact_recovery=0, fp=2, fn=1, E=0.1),
+            dict(exact_recovery=0, fp=2, fn=3, E_coeff=0.001),
+            dict(exact_recovery=0, fp=2, fn=1, E_coeff=0.1),
         ]
         best = best_of_sweep(rows)
         assert best["fn"] == 1
@@ -253,24 +253,24 @@ class TestBestOfSweep:
     def test_lower_E_breaks_fn_tie(self):
         """When fp and fn are tied, lower E wins."""
         rows = [
-            dict(exact_recovery=0, fp=2, fn=1, E=0.05),
-            dict(exact_recovery=0, fp=2, fn=1, E=0.01),
+            dict(exact_recovery=0, fp=2, fn=1, E_coeff=0.05),
+            dict(exact_recovery=0, fp=2, fn=1, E_coeff=0.01),
         ]
         best = best_of_sweep(rows)
-        assert best["E"] == 0.01
+        assert best["E_coeff"] == 0.01
 
     def test_multiple_exact_all_tied(self):
         """When multiple rows are exact, fp/fn tie, pick lower E."""
         rows = [
-            dict(exact_recovery=1, fp=0, fn=0, E=0.002),
-            dict(exact_recovery=1, fp=0, fn=0, E=0.001),
+            dict(exact_recovery=1, fp=0, fn=0, E_coeff=0.002),
+            dict(exact_recovery=1, fp=0, fn=0, E_coeff=0.001),
         ]
         best = best_of_sweep(rows)
-        assert best["E"] == 0.001
+        assert best["E_coeff"] == 0.001
 
     def test_single_row(self):
         """Single row is trivially the best."""
-        row = dict(exact_recovery=0, fp=3, fn=1, E=0.05)
+        row = dict(exact_recovery=0, fp=3, fn=1, E_coeff=0.05)
         best = best_of_sweep([row])
         assert best is row
 
@@ -286,8 +286,8 @@ class TestBestOfSweep:
         """
         # NaN fp should lose to valid fp=1
         rows = [
-            dict(exact_recovery=0, fp=1, fn=0, E=0.01),
-            dict(exact_recovery=0, fp=float("nan"), fn=float("nan"), E=0.001),
+            dict(exact_recovery=0, fp=1, fn=0, E_coeff=0.01),
+            dict(exact_recovery=0, fp=float("nan"), fn=float("nan"), E_coeff=0.001),
         ]
         best = best_of_sweep(rows)
         # The row with fp=1 should win (NaN goes to the end in min)
