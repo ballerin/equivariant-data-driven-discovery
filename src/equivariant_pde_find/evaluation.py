@@ -37,6 +37,7 @@ import numpy as np
 
 from .library import build_multigraph_library, build_polynomial_jet_library
 from .library_mapping import (
+    build_wsindy_to_jet_map,
     map_multigraph_to_jet,
     map_mod_multigraph_to_jet,
     map_standard_to_jet,
