@@ -405,11 +405,11 @@ def test_mstls_dominant_balance_upper_bound():
     w_true[0] = 100.0  # very large coefficient
     y = X @ w_true
 
-    # With lam=0.01: ||y||/||X_0|| ≈ 100*17/17 = 100,
-    # bnds_0 = 100, UBs_0 = (1/0.01) * min(1, 100) = 1
-    # |w_0| = 100 > UBs_0 = 1 → zeroed
+    # bnds_0 = ||y|| / ||X_0|| · M_0 ≈ 100
+    # With lam=0.1: UBs_0 = (1/0.1) * min(1, 100) = 10
+    # |w_0| = 100 > UBs_0 = 10 → zeroed
     M = np.ones(d)
-    w = mstls(X, y, lam=0.01, M=M, maxit=50)
+    w = mstls(X, y, lam=0.1, M=M, maxit=50)
     assert abs(w[0]) < 1e-8  # eliminated by upper bound
 
 
