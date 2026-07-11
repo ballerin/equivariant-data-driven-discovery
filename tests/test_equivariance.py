@@ -284,20 +284,20 @@ def test_fx_maps_to_fy_under_rotation(field_and_domain):
 
 
 def test_equivariant_library_rotated_field(field_and_domain):
-    """Each column of build_equivariant_library(f∘R) equals the corresponding
-    column of build_equivariant_library(f) rotated by R.
+    """Each column of build_multigraph_library(f∘R) equals the corresponding
+    column of build_multigraph_library(f) rotated by R.
 
     This is the key structural property: the design matrix Θ transforms
     column-wise under rotations of the input field.
     """
     f, L, N = field_and_domain
-    from equivariant_pde_find.library import build_equivariant_library
+    from equivariant_pde_find.library import build_multigraph_library
 
-    Theta, descs = build_equivariant_library(f, L, L, max_p=2, max_n=3)
+    Theta, descs = build_multigraph_library(f, L, L, max_p=2, max_n=3)
     assert Theta.shape[1] == 20  # sanity
 
     f_rot = rotation_90(f)
-    Theta_rot, descs_rot = build_equivariant_library(f_rot, L, L, max_p=2, max_n=3)
+    Theta_rot, descs_rot = build_multigraph_library(f_rot, L, L, max_p=2, max_n=3)
     assert descs_rot == descs  # same columns, same order
 
     # Each column of Theta_rot should equal the rotated column of Theta.
@@ -395,11 +395,11 @@ def test_regression_coefficients_rotation_invariant(field_and_domain):
     to keep the test fast and deterministic.
     """
     f, L, N = field_and_domain
-    from equivariant_pde_find.library import build_equivariant_library
+    from equivariant_pde_find.library import build_multigraph_library
     from equivariant_pde_find.regression import STRidge
 
     # Build a synthetic f_t from the true Allen-Cahn operators.
-    Theta, descs = build_equivariant_library(f, L, L, max_p=2, max_n=3)
+    Theta, descs = build_multigraph_library(f, L, L, max_p=2, max_n=3)
     # True coefficients: Δf (+1), f (+1), f³ (−1).  Find their column indices.
     idx_Delta = descs.index("Δf")
     idx_f = descs.index("f")
@@ -418,7 +418,7 @@ def test_regression_coefficients_rotation_invariant(field_and_domain):
 
     # Now rotate everything and re-run
     f_rot = rotation_90(f)
-    Theta_rot, descs_rot = build_equivariant_library(f_rot, L, L, max_p=2, max_n=3)
+    Theta_rot, descs_rot = build_multigraph_library(f_rot, L, L, max_p=2, max_n=3)
     assert descs_rot == descs
 
     f_t_rot = rotation_90(f_t.reshape(N, N)).ravel()

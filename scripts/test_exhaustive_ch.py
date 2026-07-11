@@ -3,7 +3,7 @@ import numpy as np
 import sys, os, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from equivariant_pde_find.library import build_equivariant_library
+from equivariant_pde_find.library import build_multigraph_library
 from equivariant_pde_find.regression import exhaustive_best_subset
 from equivariant_pde_find.equation_configs import true_cahn_hilliard
 from equivariant_pde_find.simulations import make_regression_data
@@ -39,7 +39,7 @@ for fname, noise_label, _ in CONFIGS:
         # Build pointwise library, subsample spatially
         rows_T, rows_Ft = [], []
         for s in range(len(f_snaps)):
-            T, desc = build_equivariant_library(f_snaps[s], Lx, Ly)
+            T, desc = build_multigraph_library(f_snaps[s], Lx, Ly)
             rows_T.append(T[idx_sets[s]])
             rows_Ft.append(ft_snaps[s].ravel()[idx_sets[s]])
         Theta = np.vstack(rows_T).astype(float)

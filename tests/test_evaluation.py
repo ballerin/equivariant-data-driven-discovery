@@ -1,6 +1,6 @@
 """
 Tests for ``evaluation.py`` — evaluate_recovery, evaluate_from_theta,
-build_eval_theta, and best_of_sweep.
+build_eval_theta_multigraphs, and best_of_sweep.
 
 Also covers a regression bug: ground-truth coefficient vectors must always
 be built from **equivariant** library descriptions, never from the standard
@@ -17,11 +17,11 @@ CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
 from equivariant_pde_find.evaluation import (                                        # noqa: E402
-    evaluate_recovery, evaluate_from_theta, build_eval_theta, best_of_sweep,
-    evaluate_standard,
+    evaluate_recovery, evaluate_from_theta, build_eval_theta_multigraphs,
+    best_of_sweep, evaluate_standard,
 )
 from equivariant_pde_find.library import (                                           # noqa: E402
-    build_equivariant_library, build_standard_library,
+    build_multigraph_library, build_standard_library,
 )
 from equivariant_pde_find.simulations import make_regression_data                    # noqa: E402
 from equivariant_pde_find.simulations import allen_cahn                              # noqa: E402
@@ -48,7 +48,7 @@ def ac_data():
         save_every=20, seed=42,
     )
     # Get descriptions from one snapshot
-    _, desc = build_equivariant_library(snaps[0], 2 * np.pi, 2 * np.pi)
+    _, desc = build_multigraph_library(snaps[0], 2 * np.pi, 2 * np.pi)
     true_eq = _true_allen_cahn(desc)
     return snaps, times, true_eq, desc
 
@@ -64,7 +64,7 @@ class TestGroundTruthDescriptionMismatch:
     def test_equivariant_descriptions_contain_delta(self, ac_data):
         """Equivariant library must contain 'Δf', 'Δ²f', etc."""
         snaps, times, _, _ = ac_data
-        _, desc = build_equivariant_library(snaps[0], 2 * np.pi, 2 * np.pi)
+        _, desc = build_multigraph_library(snaps[0], 2 * np.pi, 2 * np.pi)
         assert "Δf" in desc, f"Expected 'Δf' in {desc[:5]}..."
         assert "f³" in desc or "f\u00b3" in desc
         assert "Δ²f" in desc
@@ -81,7 +81,7 @@ class TestGroundTruthDescriptionMismatch:
     def test_true_fn_works_with_equivariant(self, ac_data):
         """_true_allen_cahn must succeed with equivariant descriptions."""
         snaps, times, _, _ = ac_data
-        _, desc_eq = build_equivariant_library(snaps[0], 2 * np.pi, 2 * np.pi)
+        _, desc_eq = build_multigraph_library(snaps[0], 2 * np.pi, 2 * np.pi)
         w = _true_allen_cahn(desc_eq)
         assert len(w) == len(desc_eq)
         assert np.sum(np.abs(w) > 1e-10) == 3
@@ -97,7 +97,9 @@ class TestGroundTruthDescriptionMismatch:
     def test_evaluate_from_theta_dimension_mismatch_raises(self, ac_data):
         """Passing a 60-dim w (standard) with a 20-dim true_eq must raise."""
         snaps, times, true_eq, desc = ac_data
-        Theta, Ft = build_eval_theta(snaps, times, 2 * np.pi, 2 * np.pi)
+        Theta, Ft = build_eval_theta_multigraphs(
+            snaps, times, 2 * np.pi, 2 * np.pi,
+        )
         # Simulate a standard-library coefficient vector (wrong size)
         w_wrong_size = np.zeros(60)
         with pytest.raises(ValueError):

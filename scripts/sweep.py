@@ -55,7 +55,9 @@ sys.path.insert(0, CODE_DIR)
 from equivariant_pde_find import derivatives  # noqa: E402
 from equivariant_pde_find.evaluation import (  # noqa: E402
     build_eval_theta_jet, evaluate_unified,
-    build_wsindy_to_jet_map, _EQUIV_TO_JET_DECOMPOSITION,
+)
+from equivariant_pde_find.library_mapping import (  # noqa: E402
+    build_wsindy_to_jet_map, _MULTIGRAPH_TO_JET_DECOMPOSITION,
 )
 from equivariant_pde_find.equation_configs import (  # noqa: E402
     find_op, true_allen_cahn, true_swift_hohenberg, true_ks,
@@ -63,7 +65,7 @@ from equivariant_pde_find.equation_configs import (  # noqa: E402
     normalize_eq_name,
 )
 from equivariant_pde_find.library import (  # noqa: E402
-    build_equivariant_library, build_standard_library,
+    build_multigraph_library, build_standard_library,
     build_polynomial_jet_library, build_pointwise_wsindy_library,
     build_mod_multigraph_library,
     spectral_lowpass,
@@ -152,7 +154,7 @@ def build_pointwise(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend):
         rows_theta, rows_ft = [], []
         for s in range(len(f_snaps)):
             if library == "multigraphs":
-                T, desc = build_equivariant_library(f_snaps[s], Lx, Ly)
+                T, desc = build_multigraph_library(f_snaps[s], Lx, Ly)
             elif library == "mod_multigraph":
                 T, desc = build_mod_multigraph_library(f_snaps[s], Lx, Ly)
             elif library == "polynomial_jet":
@@ -470,7 +472,7 @@ def main():
                           flush=True)
 
                     # Build ground truth with appropriate parameters
-                    _, desc_eq_ref = build_equivariant_library(
+                    _, desc_eq_ref = build_multigraph_library(
                         snapshots_proc[0], Lx, Ly,
                     )
                     if is_ch:
@@ -513,29 +515,23 @@ def main():
                     print(f"    interior snaps: {n_snaps}  "
                           f"points: {n_snaps * 200}", flush=True)
 
-                    # ── Pre-build evaluation Theta (polynomial jet) ──────
-                    t_eval = time.time()
-                    Theta_eval, Ft_eval = build_eval_theta_jet(
-                        snapshots_proc, times, Lx, Ly,
-                        skip_fraction=skip_frac, seed=0,
-                    )
-                    # Build jet descriptions for mapping
+                    # ── Jet descriptions & ground truth (backend-independent) ─
                     from equivariant_pde_find.library import \
                         build_polynomial_jet_library as _bpl
                     _, desc_jet = _bpl(
                         snapshots_proc[0], Lx, Ly, max_order=4, max_degree=3,
                     )
-                    # Ground truth in jet basis
+                    # Ground truth in jet basis (analytical — no backend)
                     true_jet = np.zeros(len(desc_jet))
                     for j, (name, coeff) in enumerate(zip(desc_eq_ref, true_eq)):
                         if abs(coeff) < 1e-12:
                             continue
-                        if name not in _EQUIV_TO_JET_DECOMPOSITION:
+                        if name not in _MULTIGRAPH_TO_JET_DECOMPOSITION:
                             continue
-                        for jet_name, mult in _EQUIV_TO_JET_DECOMPOSITION[name]:
+                        for jet_name, mult in _MULTIGRAPH_TO_JET_DECOMPOSITION[name]:
                             true_jet[desc_jet.index(jet_name)] += coeff * mult
 
-                    # Pre-build WSINDy → jet mapping matrix
+                    # Pre-build WSINDy → jet mapping matrix (analytical)
                     from equivariant_pde_find.library import \
                         build_pointwise_wsindy_library as _bpw
                     _, desc_ws = _bpw(
@@ -543,6 +539,19 @@ def main():
                     )
                     M_ws_to_jet = build_wsindy_to_jet_map(desc_ws, desc_jet)
 
+                    # ── Per-backend evaluation Theta ─────────────────────
+                    # Build a separate evaluation Theta for each backend so
+                    # that spectral recoveries are evaluated with exact
+                    # derivatives and polynomial recoveries with smoothed ones.
+                    t_eval = time.time()
+                    eval_thetas = {}
+                    for b in backends:
+                        Tj, Ftj = build_eval_theta_jet(
+                            snapshots_proc, times, Lx, Ly,
+                            skip_fraction=skip_frac, seed=0, backend=b,
+                        )
+                        eval_thetas[b] = (Tj, Ftj)
+                    Theta_eval, Ft_eval = eval_thetas[backends[0]]
                     print(f"    eval Theta: {Theta_eval.shape}  "
                           f"active_true="
                           f"{int(np.sum(np.abs(true_jet) > 1e-10))}"
@@ -687,7 +696,7 @@ def main():
 
                                         eval_result = evaluate_unified(
                                             w, library, desc, desc_jet,
-                                            Theta_eval, Ft_eval, true_jet,
+                                            *eval_thetas[backend], true_jet,
                                             M_ws_to_jet=M_ws_to_jet,
                                         )
                                         dt_ms = (time.time() - t_row) * 1000
@@ -745,7 +754,7 @@ def main():
 
                                         eval_result = evaluate_unified(
                                             w, library, desc, desc_jet,
-                                            Theta_eval, Ft_eval, true_jet,
+                                            *eval_thetas[backend], true_jet,
                                             M_ws_to_jet=M_ws_to_jet,
                                         )
                                         dt_ms = (time.time() - t_row) * 1000
@@ -815,7 +824,7 @@ def main():
 
                                         eval_result = evaluate_unified(
                                             w, library, desc, desc_jet,
-                                            Theta_eval, Ft_eval, true_jet,
+                                            *eval_thetas[backend], true_jet,
                                             M_ws_to_jet=M_ws_to_jet,
                                         )
                                         dt_ms = (time.time() - t_row) * 1000
@@ -876,7 +885,7 @@ def main():
 
                                         eval_result = evaluate_unified(
                                             w, library, desc, desc_jet,
-                                            Theta_eval, Ft_eval, true_jet,
+                                            *eval_thetas[backend], true_jet,
                                             M_ws_to_jet=M_ws_to_jet,
                                         )
                                         dt_ms = (time.time() - t_row) * 1000

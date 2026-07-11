@@ -51,14 +51,16 @@ from equivariant_pde_find import derivatives  # noqa: E402
 from equivariant_pde_find.evaluation import (  # noqa: E402
     build_eval_theta_jet,
     evaluate_unified,
-    _EQUIV_TO_JET_DECOMPOSITION,
+)
+from equivariant_pde_find.library_mapping import (  # noqa: E402
+    _MULTIGRAPH_TO_JET_DECOMPOSITION,
 )
 from equivariant_pde_find.equation_configs import (  # noqa: E402
     find_op, true_allen_cahn, true_swift_hohenberg, true_ks,
     true_cahn_hilliard, true_pme, mask_pme, EQUATION_META,
 )
 from equivariant_pde_find.library import (  # noqa: E402
-    build_equivariant_library, build_standard_library,
+    build_multigraph_library, build_standard_library,
     build_polynomial_jet_library, build_pointwise_wsindy_library,
     build_mod_multigraph_library,
 )
@@ -135,7 +137,7 @@ def _get_meta(name):
 def build_library(f, Lx, Ly, library):
     """Build a pointwise library from a single snapshot."""
     if library == "multigraphs":
-        T, desc = build_equivariant_library(f, Lx, Ly, max_p=2, max_n=3)
+        T, desc = build_multigraph_library(f, Lx, Ly, max_p=2, max_n=3)
     elif library == "mod_multigraph":
         T, desc = build_mod_multigraph_library(f, Lx, Ly, max_p=2, max_n=3)
     elif library == "polynomial_jet":
@@ -280,27 +282,31 @@ def main():
 
     true_fn, skip_frac, mask_fn = _get_meta(eq_name)
 
-    # ── pre-build evaluation Theta (polynomial jet) on original data ────
+    # ── pre-build per-backend evaluation Theta (polynomial jet) ─────────
     print("Pre-building evaluation Theta (polynomial jet, all points)...", end=" ", flush=True)
     t0 = time.time()
-    Theta_eval, Ft_eval = build_eval_theta_jet(
-        snapshots_orig, times, Lx, Ly, skip_fraction=skip_frac, seed=0,
-    )
+    eval_thetas = {}
+    for b in args.backends:
+        Tj, Ftj = build_eval_theta_jet(
+            snapshots_orig, times, Lx, Ly,
+            skip_fraction=skip_frac, seed=0, backend=b,
+        )
+        eval_thetas[b] = (Tj, Ftj)
     from equivariant_pde_find.library import build_polynomial_jet_library as _bpl
     _, desc_jet = _bpl(snapshots_orig[0], Lx, Ly, max_order=4, max_degree=3)
     print(f"done ({time.time() - t0:.1f}s)")
 
     # Build ground truth in jet basis
-    _, desc_eq_ref = build_equivariant_library(snapshots_orig[0], Lx, Ly,
+    _, desc_eq_ref = build_multigraph_library(snapshots_orig[0], Lx, Ly,
                                                 max_p=2, max_n=3)
     true_eq = true_fn(desc_eq_ref)
     true_jet = np.zeros(len(desc_jet))
     for j, (name, coeff) in enumerate(zip(desc_eq_ref, true_eq)):
         if abs(coeff) < 1e-12:
             continue
-        if name not in _EQUIV_TO_JET_DECOMPOSITION:
+        if name not in _MULTIGRAPH_TO_JET_DECOMPOSITION:
             continue
-        for jet_name, mult in _EQUIV_TO_JET_DECOMPOSITION[name]:
+        for jet_name, mult in _MULTIGRAPH_TO_JET_DECOMPOSITION[name]:
             true_jet[desc_jet.index(jet_name)] += coeff * mult
 
     # ── prepare regression data from original ───────────────────────────
@@ -478,7 +484,7 @@ def main():
                             # Evaluate in jet basis
                             result = evaluate_unified(
                                 w_c, library_key, desc_lib, desc_jet,
-                                Theta_eval, Ft_eval, true_jet,
+                                *eval_thetas[backend], true_jet,
                             )
                             fp = result["fp"]
                             fn = result["fn"]

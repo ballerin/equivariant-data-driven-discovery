@@ -9,7 +9,7 @@ from equivariant_pde_find.multigraph_operators import (
     get_mod_multigraph_operators,
 )
 from equivariant_pde_find.library import (
-    build_equivariant_library,
+    build_multigraph_library,
     build_mod_multigraph_library,
 )
 from equivariant_pde_find.basis_transforms import (
@@ -64,7 +64,7 @@ def test_subset_counts():
 def test_basis_equivalence(test_field):
     """Both bases must span the same 20-dimensional column space."""
     f, L = test_field
-    T_orig, _ = build_equivariant_library(f, L, L)
+    T_orig, _ = build_multigraph_library(f, L, L)
     T_mod, _ = build_mod_multigraph_library(f, L, L)
     combined = np.column_stack([T_orig, T_mod])
     U, S, Vt = np.linalg.svd(combined, full_matrices=False)
@@ -78,7 +78,7 @@ def test_basis_equivalence(test_field):
 def test_change_of_basis_random(test_field):
     """M @ w_mod must equal w_orig for random coefficient vectors."""
     f, L = test_field
-    T_orig, _ = build_equivariant_library(f, L, L)
+    T_orig, _ = build_multigraph_library(f, L, L)
     T_mod, _ = build_mod_multigraph_library(f, L, L)
     M = mod_multigraph_to_multigraph_matrix()
     rng = np.random.default_rng(99)
@@ -108,7 +108,7 @@ def test_change_of_basis_inverse():
 def test_ground_truth_consistency(test_field, name, true_orig, true_mod):
     """Ground truth in both bases must produce the same PDE prediction."""
     f, L = test_field
-    T_orig, d_orig = build_equivariant_library(f, L, L)
+    T_orig, d_orig = build_multigraph_library(f, L, L)
     T_mod, d_mod = build_mod_multigraph_library(f, L, L)
     w_orig = true_orig(d_orig)
     w_mod = true_mod(d_mod)
@@ -190,7 +190,7 @@ def test_mod_multigraph_reflection_equivariance(smooth_field):
 
 def test_jet_decomposition():
     """All 20 mod. multigraph operators must have a jet decomposition."""
-    from equivariant_pde_find.evaluation import _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION
+    from equivariant_pde_find.library_mapping import _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION
     ops = get_mod_multigraph_operators()
     for _, desc in ops:
         assert desc in _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION, \
@@ -200,7 +200,7 @@ def test_jet_decomposition():
 def test_jet_decomposition_naming_consistency():
     """Every jet name in the mod. multigraph decomposition must exist
     in the polynomial-jet library produced by build_polynomial_jet_library."""
-    from equivariant_pde_find.evaluation import _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION
+    from equivariant_pde_find.library_mapping import _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION
     from equivariant_pde_find.library import build_polynomial_jet_library
     N, L = 32, 2 * math.pi
     rng = np.random.default_rng(99)
@@ -216,7 +216,7 @@ def test_jet_decomposition_naming_consistency():
 def test_map_mod_multigraph_to_jet_known_coefficients():
     """Mapping known Swift-Hohenberg coefficients (f, Δf, Δ²f, f³)
     from mod. multigraph to jet basis must give the correct 7 jet terms."""
-    from equivariant_pde_find.evaluation import map_mod_multigraph_to_jet_from_w
+    from equivariant_pde_find.library_mapping import map_mod_multigraph_to_jet
     from equivariant_pde_find.library import build_polynomial_jet_library
 
     N, L = 32, 2 * math.pi
@@ -226,7 +226,7 @@ def test_map_mod_multigraph_to_jet_known_coefficients():
     _, desc_jet = build_polynomial_jet_library(f, L, L, max_order=4, max_degree=3)
 
     w_mod = true_swift_hohenberg_mod_multigraph(desc_mod)
-    w_jet = map_mod_multigraph_to_jet_from_w(w_mod, desc_mod, desc_jet)
+    w_jet = map_mod_multigraph_to_jet(w_mod, desc_mod, desc_jet)
 
     # SH truth: f = -0.7, Δf = -2.0, Δ²f = -1.0, f³ = -1.0
     # Jet: f, f_xx, f_yy, f_xxxx, f_xxyy, f_yyyy, f³
@@ -254,7 +254,8 @@ def test_map_mod_multigraph_to_jet_known_coefficients():
 def test_evaluate_unified_handles_mod_multigraph():
     """evaluate_unified must handle library='mod_multigraph' without error
     and produce consistent fp/fn/E against known ground truth."""
-    from equivariant_pde_find.evaluation import evaluate_unified, map_mod_multigraph_to_jet_from_w
+    from equivariant_pde_find.evaluation import evaluate_unified
+    from equivariant_pde_find.library_mapping import map_mod_multigraph_to_jet
     from equivariant_pde_find.library import build_polynomial_jet_library
 
     N, L = 32, 2 * math.pi
@@ -265,7 +266,7 @@ def test_evaluate_unified_handles_mod_multigraph():
 
     # Perfect recovery: pass the true coefficients
     w_perfect = true_swift_hohenberg_mod_multigraph(desc_mod)
-    true_jet = map_mod_multigraph_to_jet_from_w(w_perfect, desc_mod, desc_jet)
+    true_jet = map_mod_multigraph_to_jet(w_perfect, desc_mod, desc_jet)
 
     # Build a dummy Theta_jet and Ft for evaluation
     n = 100
@@ -299,7 +300,7 @@ def test_mod_vs_orig_condition_number():
     rng = np.random.default_rng(123)
     f = rng.standard_normal((N, N))
 
-    T_orig, _ = build_equivariant_library(f, L, L, max_p=2, max_n=3)
+    T_orig, _ = build_multigraph_library(f, L, L, max_p=2, max_n=3)
     T_mod, _ = build_mod_multigraph_library(f, L, L, max_p=2, max_n=3)
 
     cond_orig = float(np.linalg.cond(T_orig))

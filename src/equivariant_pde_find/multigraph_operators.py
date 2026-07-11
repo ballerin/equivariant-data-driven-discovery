@@ -4,7 +4,9 @@ O(2)-equivariant multigraph operators on R^2, with p <= 3 (edges) and n <= 4 (no
 Implements all base multigraph operators N_Gamma for the required p and n as described in:
 
   "Equivariant nonlinear partial differential operators on
-   constant curvature spaces"  — Ballerin & Grong, 2026.
+   constant curvature spaces"  - Ballerin & Grong, 2026.
+
+TODO: Update references to the final published version of the paper once available.
 
 Background
 ----------
@@ -37,7 +39,7 @@ Operators are ordered by (total_p, k, m).
 2D-specific kernel elements (p=3)
 ----------------------------------
 On R^2 two multigraph operators are linearly dependent on the others and are
-excluded from the irredundant basis.  Both vanish identically in d=2 but are
+excluded from the non-redundant basis.  Both vanish identically in d=2 but are
 independent in d≥3 (Theorem 2 of the paper).
 
   k=3  Triangle graph (three vertices each of degree 2, mutually connected):
@@ -439,7 +441,7 @@ def _op_gradBilap_grad(f, Lx, Ly):
 
 # -----------------------------------------------------------------------
 # -----------------------------------------------------------------------
-# CONNECTED_OPERATORS  —  dict  {p: [(func, desc, k, excluded_2d), ...]}
+# CONNECTED_OPERATORS  -  dict  {p: [(func, desc, k, excluded_2d), ...]}
 #
 # k            = number of non-isolated vertices (minimum polynomial degree)
 # excluded_2d  = True for operators that in R^2 are linearly dependent on others
@@ -516,8 +518,8 @@ def _all_base_operators(max_p, max_n):
     total vertex count <= max_n.
 
     Generates all multisets of non-excluded connected components from
-    CONNECTED_OPERATORS — including the isolated vertex (f, p=0, k=1) which
-    provides the polynomial prefactors f^m — with total edge count <= max_p
+    CONNECTED_OPERATORS - including the isolated vertex (f, p=0, k=1) which
+    provides the polynomial prefactors f^m - with total edge count <= max_p
     and total vertex count <= max_n.  Components are chosen in non-decreasing
     order of (p, original_index) to avoid duplicate multisets.
 
@@ -540,7 +542,7 @@ def _all_base_operators(max_p, max_n):
         for fn, desc, k, excl in CONNECTED_OPERATORS[p]:
             if not excl and k >= 1:
                 components.append((p, k, fn, desc))
-    # components[0] = (0, 1, _op_identity, 'f')  — isolated vertex
+    # components[0] = (0, 1, _op_identity, 'f')  - isolated vertex
     # components[1:] = p >= 1 operators in their original order
 
     results = []  # (total_p, k, func, desc)
@@ -594,9 +596,9 @@ def _all_base_operators(max_p, max_n):
 
     recurse(max_p, max_n, 0, 0, _op_const, "1", 0, 0)
     # Canonical ordering (three-level lexicographic):
-    #   1. total edge count p   — controls differential order (2p)
-    #   2. polynomial degree k  — total vertex count (non-isolated + isolated)
-    #   3. description string   — Unicode lexicographic order (tie-breaker)
+    #   1. total edge count p   - controls differential order (2p)
+    #   2. polynomial degree k  - total vertex count (non-isolated + isolated)
+    #   3. description string   - Unicode lexicographic order (tie-breaker)
     # This order is documented in README.md and enforced by test_multigraph_operators.py.
     results.sort(key=lambda x: (x[0], x[1], x[3]))
     return results
@@ -612,9 +614,9 @@ def get_operators(max_p, max_n):
 
     Parameters
     ----------
-    max_p : int  — maximum edge count (0, 1, 2, or 3); controls differential
+    max_p : int  - maximum edge count (0, 1, 2, or 3); controls differential
                    order (total order = 2 * max_p).
-    max_n : int  — maximum polynomial degree (= total number of f-factors,
+    max_n : int  - maximum polynomial degree (= total number of f-factors,
                    counting both non-isolated vertices and extra f^m prefactors).
 
     Returns
@@ -659,15 +661,9 @@ def get_operator_metadata(max_p, max_n):
 
 
 # -----------------------------------------------------------------------
-# Modified Multigraph operators  (IBP-friendly basis, Lemma 1 / Table 4)
+# Modified Multigraph operators  (IBP-friendly basis)
 # -----------------------------------------------------------------------
 
-# The 20 operators in the modified basis for max_p=2, max_n=3.
-# Each entry: (callable, description, total_p, k).
-# The 6 replacements (marked ←) use the new _op_Delta_* / _op_Delta2_*
-# functions defined above.  The 14 unchanged operators reuse the existing
-# base functions, with polynomial prefactors applied where needed via
-# _make_func.
 _MOD_MULTIGRAPH_SPEC = [
     # --- p=0 ---
     (_op_const,          "1",               0, 0),
@@ -687,12 +683,12 @@ _MOD_MULTIGRAPH_SPEC = [
     (_op_Delta2_f2,      "Δ²f²",            2, 2),   # ← replacement
     (_op_Delta_grad_sq,  "Δ‖∇f‖²",         2, 2),   # ← replacement
     (_op_hess_norm_sq,   "‖∇²f‖²",         2, 2),
-    # (Δf)²: use _op_Delta square wrapped — note: original basis calls this "Δf·Δf"
+    # (Δf)²: use _op_Delta square wrapped - note: original basis calls this "Δf·Δf"
     (lambda f, Lx, Ly: laplacian(f, Lx, Ly)**2, "Δf·Δf", 2, 2),
     (_op_Delta2_f3,      "Δ²f³",            2, 3),   # ← replacement
     (_op_Delta_f_grad_sq,"Δ(f·‖∇f‖²)",      2, 3),   # ← replacement
     (_make_func(_op_hess_norm_sq, 1), "f·‖∇²f‖²", 2, 3),
-    # f·(Δf)²: f * Δf² — original calls this "f·Δf·Δf"
+    # f·(Δf)²: f * Δf² - original calls this "f·Δf·Δf"
     (lambda f, Lx, Ly: f * laplacian(f, Lx, Ly)**2, "f·Δf·Δf", 2, 3),
     (_op_hess_grad_grad, "∇²f(∇f,∇f)",      2, 3),
     # ‖∇f‖²·Δf = ‖∇f‖² * Δf
@@ -704,28 +700,20 @@ _MOD_MULTIGRAPH_SPEC = [
 def get_mod_multigraph_operators(max_p=2, max_n=3):
     """Return all operators in the modified multigraph (IBP-friendly) basis.
 
-    This is the basis from Lemma 1 / Table 4, specialised to R² with
-    G = O(2).  It spans the same 20-dimensional space as the original
+    A different basis which spans the same 20-dimensional space as the main
     multigraph basis (``get_operators``) but replaces 6 operators with
     Δ(something) or Δ²(something) forms that are better suited for
     integration by parts in the weak formulation.
 
     Parameters
     ----------
-    max_p : int  — maximum edge count (0, 1, or 2 only)
-    max_n : int  — maximum polynomial degree (0..3 only)
+    max_p : int  - maximum edge count (0, 1, or 2 only)
+    max_n : int  - maximum polynomial degree (0..3 only)
 
     Returns
     -------
-    ops : list of (callable, str)
-        Each entry is ``(func, description)`` where ``func(f, Lx, Ly)``
-        evaluates the operator.  Operators are ordered by
-        ``(total_p, k, description)``.
-
-    Examples
-    --------
-    >>> ops = get_mod_multigraph_operators()            # 20 operators
-    >>> ops = get_mod_multigraph_operators(max_p=2, max_n=2)  # 12 operators
+    ops : list of (callable, str) operators ordered by 
+            ``(total_p, k, description)``.
     """
     if max_p > 2:
         raise ValueError(

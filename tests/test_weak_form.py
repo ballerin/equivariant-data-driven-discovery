@@ -187,13 +187,13 @@ def test_weak_form_reduces_noise_amplification():
 
     from equivariant_pde_find import derivatives
     derivatives.set_backend("spectral")
-    from equivariant_pde_find.library import build_equivariant_library
+    from equivariant_pde_find.library import build_multigraph_library
 
     # Strong form on noisy data
-    Theta_strong_noisy, descs = build_equivariant_library(
+    Theta_strong_noisy, descs = build_multigraph_library(
         f_noisy, L, L, max_p=2, max_n=3
     )
-    Theta_strong_clean, _ = build_equivariant_library(
+    Theta_strong_clean, _ = build_multigraph_library(
         f_clean, L, L, max_p=2, max_n=3
     )
 
@@ -779,12 +779,12 @@ def test_mwsindy_symmetry_check_rejects_anisotropic():
     # Ground truth: f_t = Δf
     true_mg = np.zeros(len(desc_mg))
     true_mg[desc_mg.index("Δf")] = 1.0
-    from equivariant_pde_find.evaluation import _EQUIV_TO_JET_DECOMPOSITION
+    from equivariant_pde_find.evaluation import _MULTIGRAPH_TO_JET_DECOMPOSITION
     true_jet = np.zeros(len(desc_jet))
     for j, (name, coeff) in enumerate(zip(desc_mg, true_mg)):
         if abs(coeff) < 1e-12: continue
-        if name not in _EQUIV_TO_JET_DECOMPOSITION: continue
-        for jet_name, mult in _EQUIV_TO_JET_DECOMPOSITION[name]:
+        if name not in _MULTIGRAPH_TO_JET_DECOMPOSITION: continue
+        for jet_name, mult in _MULTIGRAPH_TO_JET_DECOMPOSITION[name]:
             true_jet[desc_jet.index(jet_name)] += coeff * mult
 
     # Create an anisotropic WSINDy vector: keep f_{xx} but NOT f_{yy}
@@ -808,10 +808,10 @@ def test_mwsindy_symmetry_check_rejects_anisotropic():
     # Δf decomposition: f_xx + f_yy → both must be active
     mg_ops_missing = []
     for j_mg, mg_name in enumerate(desc_mg):
-        if mg_name not in _EQUIV_TO_JET_DECOMPOSITION:
+        if mg_name not in _MULTIGRAPH_TO_JET_DECOMPOSITION:
             continue
         all_active = True
-        for jet_name, _mult in _EQUIV_TO_JET_DECOMPOSITION[mg_name]:
+        for jet_name, _mult in _MULTIGRAPH_TO_JET_DECOMPOSITION[mg_name]:
             j_jet = desc_jet.index(jet_name)
             if not nz_jet[j_jet]:
                 all_active = False
@@ -853,12 +853,12 @@ def test_mwsindy_pipeline_produces_valid_result():
     # Ground truth: f_t = Δ²f
     true_mg = np.zeros(len(desc_mg))
     true_mg[desc_mg.index("Δ²f")] = 1.0
-    from equivariant_pde_find.evaluation import _EQUIV_TO_JET_DECOMPOSITION
+    from equivariant_pde_find.evaluation import _MULTIGRAPH_TO_JET_DECOMPOSITION
     true_jet = np.zeros(len(desc_jet))
     for j, (name, coeff) in enumerate(zip(desc_mg, true_mg)):
         if abs(coeff) < 1e-12: continue
-        if name not in _EQUIV_TO_JET_DECOMPOSITION: continue
-        for jet_name, mult in _EQUIV_TO_JET_DECOMPOSITION[name]:
+        if name not in _MULTIGRAPH_TO_JET_DECOMPOSITION: continue
+        for jet_name, mult in _MULTIGRAPH_TO_JET_DECOMPOSITION[name]:
             true_jet[desc_jet.index(jet_name)] += coeff * mult
 
     from equivariant_pde_find.regression import TrainSTRidge

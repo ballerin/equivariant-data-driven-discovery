@@ -1,5 +1,7 @@
 """Shared equation configurations for sweep scripts.
 
+TODO: fix the sweep scripts location. Either all in the src directory or move this file out
+
 Provides canonical ground-truth coefficient vectors, operator-finding
 utilities, and per-equation metadata used across all sweep and experiment
 scripts.  These functions are character-for-character identical across

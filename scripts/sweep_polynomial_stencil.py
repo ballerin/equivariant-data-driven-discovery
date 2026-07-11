@@ -36,7 +36,7 @@ if CODE_DIR not in sys.path:
 
 from simulations import allen_cahn, make_regression_data
 import derivatives
-from library import build_equivariant_library, build_standard_library
+from library import build_multigraph_library, build_standard_library
 from regression import TrainSTRidge
 
 

@@ -1,29 +1,11 @@
 """
-Library construction for equivariant PDE discovery.
+Library construction for PDE discovery.
 
-Evaluates the candidate operator bases (equivariant and standard) on a 2-D
-scalar field snapshot, producing the design matrix Θ used in sparse regression.
+Evaluates the candidate operator bases on a 2-D scalar field snapshot, producing
+the design matrix Θ used in sparse regression. Time derivatives are computed
+separately (make_regression) and passed in as the target vector F_t.
 
-Provides
---------
-build_equivariant_library    — O(2)-equivariant multigraph operator basis via
-                               get_operators().  Respects the active derivative
-                               backend (spectral or polynomial).
-build_standard_library       — coordinate-based library (all partial derivatives
-                               up to a given order × polynomial prefactors),
-                               i.e. the PDE-FIND library f^p · ∂^a f.
-build_pointwise_wsindy_library — WSINDy library ∂^α(f^q): partial derivatives
-                               applied to monomial powers of f (pointwise, not
-                               weak-form; for the weak-form version see
-                               weak_form.build_weak_wsindy_library).
-build_polynomial_jet_library — all monomials in jet variables (f, f_x, f_y,
-                               f_{xx}, …) up to given degree and order.
-build_standard_library_1d    — same as build_standard_library for 1-D fields.
-
-Sparse regression and utilities live in separate modules:
-  regression.py  — STRidge, TrainSTRidge
-  utils.py       — print_pde, rotation_90
-  derivatives.py — set_backend / use_backend (spectral ↔ polynomial)
+TODO: Make the naming of max_p/max_n vs max_order/max_poly consistent.
 """
 
 import numpy as np
@@ -53,15 +35,15 @@ def spectral_lowpass(f, Lx, Ly, cutoff):
     """Apply a 2-D isotropic spectral low-pass filter.
 
     Zeroes all Fourier modes with physical wavenumber magnitude |k| > cutoff
-    and returns the real-space reconstruction.  The filter is O(2)-symmetric
+    and returns the result in space domain.  The filter is O(2)-symmetric
     (isotropic cutoff sphere), so it commutes with all O(2)-equivariant
     operators in the library.
 
     Parameters
     ----------
     f      : ndarray, shape (Nx, Ny)
-    Lx, Ly : float — domain lengths
-    cutoff : float — maximum physical wavenumber to retain (e.g. 3.0)
+    Lx, Ly : float - domain lengths
+    cutoff : float - maximum physical wavenumber to retain
 
     Returns
     -------
@@ -79,16 +61,16 @@ def spectral_lowpass(f, Lx, Ly, cutoff):
 # -----------------------------------------------------------------------
 
 
-def build_equivariant_library(f, Lx, Ly, max_p=2, max_n=3):
+def build_multigraph_library(f, Lx, Ly, max_p=2, max_n=3):
     """Build the equivariant library matrix for a 2-D scalar field f.
 
     Parameters
     ----------
-    f     : ndarray, shape (Nx, Ny)
-    Lx    : float — domain length in x
-    Ly    : float — domain length in y
-    max_p : int — maximum multigraph edge count p (differential order = 2*max_p)
-    max_n : int — maximum polynomial degree (total number of f-factors per term)
+    f     : ndarray (Nx, Ny) - data
+    Lx    : float - domain length in x
+    Ly    : float - domain length in y
+    max_p : int - maximum multigraph edge count p (differential order = 2*max_p)
+    max_n : int - maximum polynomial degree
 
     Returns
     -------
@@ -97,10 +79,10 @@ def build_equivariant_library(f, Lx, Ly, max_p=2, max_n=3):
 
     Examples
     --------
-    >>> Theta, descs = build_equivariant_library(f, Lx, Ly)           # p<=2, n<=3 → 20 cols
-    >>> Theta, descs = build_equivariant_library(f, Lx, Ly, max_n=4)  # p<=2, n<=4 → 30 cols
-    >>> Theta, descs = build_equivariant_library(f, Lx, Ly, max_p=3)  # p<=3, n<=3 → 40 cols
-    >>> Theta, descs = build_equivariant_library(f, Lx, Ly, max_p=3, max_n=4)  # → 68 cols
+    >>> Theta, descs = build_multigraph_library(f, Lx, Ly)           # p<=2, n<=3 → 20 cols
+    >>> Theta, descs = build_multigraph_library(f, Lx, Ly, max_n=4)  # p<=2, n<=4 → 30 cols
+    >>> Theta, descs = build_multigraph_library(f, Lx, Ly, max_p=3)  # p<=3, n<=3 → 40 cols
+    >>> Theta, descs = build_multigraph_library(f, Lx, Ly, max_p=3, max_n=4)  # → 68 cols
     """
     ops = get_operators(max_p, max_n)
     cols, descs = [], []
@@ -116,15 +98,15 @@ def build_mod_multigraph_library(f, Lx, Ly, max_p=2, max_n=3):
     Uses the operator basis from Lemma 1 / Table 4 of the paper, which
     replaces 6 operators of the form f·(derivative) with Δ(something)
     or Δ²(something) forms.  This basis spans the same 20-dimensional
-    space as ``build_equivariant_library`` but is designed for use with
+    space as ``build_multigraph_library`` but is designed for use with
     the weak-form integration-by-parts mechanism.
 
     Parameters
     ----------
     f     : ndarray, shape (Nx, Ny)
     Lx, Ly : float
-    max_p : int — maximum edge count (0, 1, or 2)
-    max_n : int — maximum polynomial degree (0..3)
+    max_p : int - maximum edge count (0, 1, or 2)
+    max_n : int - maximum polynomial degree (0..3)
 
     Returns
     -------
@@ -161,10 +143,10 @@ def build_standard_library(f, Lx, Ly, max_order=4, max_poly=3):
 
     Parameters
     ----------
-    f         : ndarray, shape (Nx, Ny)
-    Lx, Ly    : float — domain lengths
-    max_order : int — highest partial derivative order (default 4)
-    max_poly  : int — highest polynomial degree factor (default 3)
+    f         : ndarray, shape (Nx, Ny) - data
+    Lx, Ly    : float - domain lengths
+    max_order : int - highest partial derivative order (default 4)
+    max_poly  : int - highest polynomial degree factor (default 3)
 
     Returns
     -------
@@ -214,25 +196,19 @@ def build_standard_library(f, Lx, Ly, max_order=4, max_poly=3):
 
 
 def build_pointwise_wsindy_library(f, Lx, Ly, max_order=4, max_poly=3):
-    """Build the pointwise WSINDy library: ∂_x^a ∂_y^b (f^q).
+    """Build the pointwise WSINDy library from data.
 
-    Columns = all derivative combinations ∂_x^a ∂_y^b applied to monomial
-    powers f^q, for 0 ≤ a+b ≤ max_order and 1 ≤ q ≤ max_poly, plus the
-    constant term 1 (a=b=0, q=0).
-
-    This is the pointwise analogue of the library used in Messenger & Bortz
-    (2021).  For max_order=4 and max_poly=3 this gives
-    1 + (15 × 3) = 46 columns.
-
-    The differentiation method respects the active backend in
-    ``derivatives.py``.
+    This is the pointwise analogue of the library used in WSINDy, for
+    benchmark purposes only. 
+    
+    For max_order=4 and max_poly=3 this gives 46 columns.
 
     Parameters
     ----------
-    f         : ndarray, shape (Nx, Ny)
-    Lx, Ly    : float — domain lengths
-    max_order : int — highest partial derivative order (default 4)
-    max_poly  : int — highest monomial power q in ∂^α(f^q) (default 3)
+    f         : ndarray shape (Nx, Ny) - data
+    Lx, Ly    : float - domain lengths
+    max_order : int - highest partial derivative order (default 4)
+    max_poly  : int - highest monomial power q in ∂^α(f^q) (default 3)
 
     Returns
     -------
@@ -304,16 +280,14 @@ def build_polynomial_jet_library(f, Lx, Ly, max_order=4, max_degree=3):
       - total degree:  Σ e_{a,b} ≤ max_degree
       - total differential order:  Σ e_{a,b} · (a+b) ≤ max_order
 
-    For max_order=4 and max_degree=3 this gives ~105 columns — the full
-    space of polynomial nonlinear differential operators in coordinates,
-    compared to 20 O(2)-equivariant operators.
+    For max_order=4 and max_degree=3 this gives 105 columns.
 
     Parameters
     ----------
-    f          : ndarray, shape (Nx, Ny)
-    Lx, Ly     : float — domain lengths
-    max_order  : int — maximum total differential order (default 4)
-    max_degree : int — maximum total polynomial degree (default 3)
+    f          : ndarray, shape (Nx, Ny) - data
+    Lx, Ly     : float - domain lengths
+    max_order  : int - maximum total differential order
+    max_degree : int - maximum total polynomial degree
 
     Returns
     -------

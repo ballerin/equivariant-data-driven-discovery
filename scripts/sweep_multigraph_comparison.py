@@ -36,7 +36,9 @@ sys.path.insert(0, CODE_DIR)
 from equivariant_pde_find import derivatives  # noqa: E402
 from equivariant_pde_find.evaluation import (  # noqa: E402
     build_eval_theta_jet, evaluate_unified,
-    map_equivariant_to_jet_from_w, map_mod_multigraph_to_jet_from_w,
+)
+from equivariant_pde_find.library_mapping import (  # noqa: E402
+    map_multigraph_to_jet, map_mod_multigraph_to_jet,
 )
 from equivariant_pde_find.equation_configs import (  # noqa: E402
     true_allen_cahn, true_swift_hohenberg, true_ks,
@@ -260,11 +262,14 @@ def main():
                     ft_snaps = ft_snaps_raw
                     idx_sets = idx_sets_raw
 
-                # Build evaluation Theta (jet basis)
-                Theta_eval, Ft_eval = build_eval_theta_jet(
-                    snapshots, times, Lx, Ly,
-                    skip_fraction=skip_frac, seed=0,
-                )
+                # Build per-backend evaluation Theta (jet basis)
+                eval_thetas = {}
+                for b in args.backends:
+                    Tj, Ftj = build_eval_theta_jet(
+                        snapshots, times, Lx, Ly,
+                        skip_fraction=skip_frac, seed=0, backend=b,
+                    )
+                    eval_thetas[b] = (Tj, Ftj)
                 _, desc_jet = build_polynomial_jet_library(
                     snapshots[0], Lx, Ly, max_order=4, max_degree=3,
                 )
@@ -288,9 +293,9 @@ def main():
                     else:
                         true_w = TRUTH_FNS[lib][true_fn_key](desc_lib)
                     if lib == "multigraphs":
-                        true_jet[lib] = map_equivariant_to_jet_from_w(true_w, desc_lib, desc_jet)
+                        true_jet[lib] = map_multigraph_to_jet(true_w, desc_lib, desc_jet)
                     else:
-                        true_jet[lib] = map_mod_multigraph_to_jet_from_w(true_w, desc_lib, desc_jet)
+                        true_jet[lib] = map_mod_multigraph_to_jet(true_w, desc_lib, desc_jet)
 
                 # Pre-build all (library, backend, m, ibp) matrices
                 prebuilt = {}
@@ -320,7 +325,7 @@ def main():
                         w = TrainSTRidge(Theta, Ft, 1e-6, d_tol, maxit=25, seed=0)
                         eval_result = evaluate_unified(
                             w, lib, desc, desc_jet,
-                            Theta_eval, Ft_eval, true_jet[lib],
+                            *eval_thetas[backend], true_jet[lib],
                         )
                         dt_ms = (time.time() - t_row) * 1000
 

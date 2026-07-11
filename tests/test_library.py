@@ -1,6 +1,6 @@
 """
 Tests for `library.py` — build_standard_library, build_standard_library_1d,
-and build_equivariant_library.
+and build_multigraph_library.
 
 The most critical class of bugs to guard against is a *polynomial-degree shift*
 in the standard library: a column labeled "f^p" must contain f^p multiplied by
@@ -20,7 +20,7 @@ sys.path.insert(0, CODE_DIR)
 
 from equivariant_pde_find import derivatives                                          # noqa: E402
 from equivariant_pde_find.library import (                                       # noqa: E402
-    build_equivariant_library,
+    build_multigraph_library,
     build_standard_library,
     build_standard_library_1d,
 )
@@ -317,7 +317,7 @@ def test_equivariant_library_column_count():
     f, L = _make_2d_field()
     for max_p, max_n in [(2, 3), (1, 2), (2, 4)]:
         with derivatives.use_backend("spectral"):
-            Theta, descs = build_equivariant_library(f, L, L, max_p=max_p, max_n=max_n)
+            Theta, descs = build_multigraph_library(f, L, L, max_p=max_p, max_n=max_n)
         expected = len(get_operators(max_p, max_n))
         assert Theta.shape[1] == expected, (
             f"max_p={max_p}, max_n={max_n}: expected {expected} columns from "
@@ -332,7 +332,7 @@ def test_equivariant_library_descriptions_match_operators():
     """Descriptions returned by build_equivariant_library must match get_operators exactly."""
     f, L = _make_2d_field()
     with derivatives.use_backend("spectral"):
-        _, descs = build_equivariant_library(f, L, L, max_p=2, max_n=3)
+        _, descs = build_multigraph_library(f, L, L, max_p=2, max_n=3)
     expected_descs = [name for _, name in get_operators(2, 3)]
     assert descs == expected_descs, (
         "Equivariant library descriptions do not match get_operators order. Diff:\n"
@@ -348,7 +348,7 @@ def test_equivariant_library_constant_column_is_ones():
     """The '1' operator column must be identically 1 for equivariant library."""
     f, L = _make_2d_field()
     with derivatives.use_backend("spectral"):
-        Theta, descs = build_equivariant_library(f, L, L, max_p=2, max_n=3)
+        Theta, descs = build_multigraph_library(f, L, L, max_p=2, max_n=3)
     col = _col(Theta, descs, "1")
     np.testing.assert_allclose(
         col, np.ones_like(col),
@@ -361,7 +361,7 @@ def test_equivariant_library_f_column_equals_f():
     """The 'f' operator column must equal f for equivariant library."""
     f, L = _make_2d_field()
     with derivatives.use_backend("spectral"):
-        Theta, descs = build_equivariant_library(f, L, L, max_p=2, max_n=3)
+        Theta, descs = build_multigraph_library(f, L, L, max_p=2, max_n=3)
     np.testing.assert_allclose(
         _col(Theta, descs, "f").reshape(f.shape), f,
         rtol=1e-12, atol=1e-12,

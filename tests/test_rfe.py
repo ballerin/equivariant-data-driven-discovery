@@ -17,7 +17,7 @@ CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
 from equivariant_pde_find.regression import RFE, TrainRFE, STRidge
-from equivariant_pde_find.library import build_equivariant_library
+from equivariant_pde_find.library import build_multigraph_library
 from equivariant_pde_find.simulations import allen_cahn
 
 
@@ -255,7 +255,7 @@ def test_rfe_allen_cahn_clean(ac_data):
     snaps, times = ac_data
 
     # Build equivariant library on all snapshots
-    _, desc = build_equivariant_library(snaps[0], 2 * np.pi, 2 * np.pi)
+    _, desc = build_multigraph_library(snaps[0], 2 * np.pi, 2 * np.pi)
     true_w = _true_ac(desc)
 
     # Identify operator indices for diagnostics
@@ -268,7 +268,7 @@ def test_rfe_allen_cahn_clean(ac_data):
         snaps, times, n_per_snap=200, skip_fraction=0.0, seed=0,
     )
     Theta = np.vstack([
-        build_equivariant_library(f, 2 * np.pi, 2 * np.pi)[0]
+        build_multigraph_library(f, 2 * np.pi, 2 * np.pi)[0]
         for f in f_snaps
     ])
     Ft = np.concatenate([ft.ravel() for ft in ft_snaps])

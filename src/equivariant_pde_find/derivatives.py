@@ -1,5 +1,14 @@
 """
-Derivative backend selector for multigraph_operators.py.
+Derivative backend selector for the different differential operators.
+
+Currently supports two backends:
+ - 'spectral' (FFT-based) [DEFAULT]
+ - 'polynomial' (local least-squares polynomial fit).
+
+Potential todos:
+ - finite-difference
+ - stencil-based
+ - Tikhonov-regularized polynomial fit
 
 Exposes six backend-neutral functions (grad, laplacian, hessian, bilaplacian,
 trilaplacian, third_order) that dispatch to whichever backend is currently active.
@@ -20,9 +29,15 @@ calls go through the module-level functions below, so the switch is immediate.
 
 Available backends
 ------------------
-'spectral'    — spectral_derivatives.py:   FFT-based, exact for band-limited data.
-'polynomial'  — polynomial_derivatives.py: local least-squares polynomial fit,
-                robust to measurement noise at the cost of a small bias.
+'spectral':   
+    - spectral_derivatives.py
+    - FFT-based, exact for band-limited data
+    - [DEFAULT]
+
+'polynomial':
+    - polynomial_derivatives.py
+    - local least-squares polynomial fit
+    - robust to measurement noise at the cost of a small bias
 """
 
 from contextlib import contextmanager
@@ -79,7 +94,7 @@ def use_backend(name: str):
     Example
     -------
     with derivatives.use_backend('polynomial'):
-        Theta, descs = build_equivariant_library(f, Lx, Ly)
+        Theta, descs = build_multigraph_library(f, Lx, Ly)
     """
     previous = get_backend()
     set_backend(name)
@@ -90,19 +105,18 @@ def use_backend(name: str):
 
 
 # ---------------------------------------------------------------------------
-# Public derivative APIs — backend-neutral names.
+# Public derivative APIs (backend-neutral names)
+#
+# Parameters
+# ----------
+# f : 2D array - function values on a uniform grid
+# Lx, Ly : float - physical domain sizes in x and y
+# prefilter_sigma - apply Gaussian prefilter by sigma (if provided)
 # ---------------------------------------------------------------------------
 
 
 def grad(f, Lx, Ly, prefilter_sigma=None):
-    """Gradient (f_x, f_y) via the active backend.
-
-    Parameters
-    ----------
-    prefilter_sigma : float or (float, float), optional
-        If provided, a periodic Gaussian prefilter (sigma in physical units)
-        is applied by the backend before differentiation.
-    """
+    """Gradient (f_x, f_y) via the active backend."""
     return _DISPATCH[_active_name]["grad"](f, Lx, Ly, prefilter_sigma)
 
 

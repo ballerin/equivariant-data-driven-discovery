@@ -47,7 +47,7 @@ CODE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
 from equivariant_pde_find import derivatives  # noqa: E402
-from equivariant_pde_find.library import build_equivariant_library, build_standard_library  # noqa: E402
+from equivariant_pde_find.library import build_multigraph_library, build_standard_library  # noqa: E402
 from equivariant_pde_find.regression import TrainSTRidge, TrainSR3  # noqa: E402
 from equivariant_pde_find.simulations import kuramoto_sivashinsky, make_regression_data  # noqa: E402
 from equivariant_pde_find.equation_configs import true_ks  # noqa: E402
@@ -155,7 +155,7 @@ def build_matrices(snapshots, times, n_per_snap, L, skip_fraction):
 
         t0 = time.time()
         with derivatives.use_backend("spectral"):
-            Teq,  desc_eq  = build_equivariant_library(fs, L, L)
+            Teq,  desc_eq  = build_multigraph_library(fs, L, L)
             Tstd, desc_std = build_standard_library(fs, L, L, max_order=4, max_poly=3)
         eq_spec_rows.append(Teq[idx])
         std_spec_rows.append(Tstd[idx])
@@ -163,7 +163,7 @@ def build_matrices(snapshots, times, n_per_snap, L, skip_fraction):
 
         t0 = time.time()
         with derivatives.use_backend("polynomial"):
-            Teq,  _ = build_equivariant_library(fs, L, L)
+            Teq,  _ = build_multigraph_library(fs, L, L)
             Tstd, _ = build_standard_library(fs, L, L, max_order=4, max_poly=3)
         eq_poly_rows.append(Teq[idx])
         std_poly_rows.append(Tstd[idx])
