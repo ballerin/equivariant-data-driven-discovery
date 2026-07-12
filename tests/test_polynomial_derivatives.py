@@ -17,7 +17,7 @@ import pytest
 CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
-from equivariant_pde_find import polynomial_derivatives as pd  # noqa: E402
+from equivariant_pde_find.derivatives import polynomial as pd  # noqa: E402
 
 
 def make_grid(Nx, Ny, Lx, Ly):
@@ -423,7 +423,7 @@ def test_spectral_polynomial_backends_agree_low_frequency():
     Import spectral_derivatives inline so the test file does not acquire a
     hard module-level dependency on the spectral backend.
     """
-    from equivariant_pde_find import spectral_derivatives as sd
+    from equivariant_pde_find.derivatives import spectral as sd
 
     Lx, Ly, Nx, Ny = 2 * math.pi, 2 * math.pi, 128, 128
     X, Y = make_grid(Nx, Ny, Lx, Ly)

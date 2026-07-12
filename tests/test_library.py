@@ -1,5 +1,5 @@
 """
-Tests for `library.py` — build_standard_library, build_standard_library_1d,
+Tests for `library.py` — build_pdefind_library, build_pdefind_library_1d,
 and build_multigraph_library.
 
 The most critical class of bugs to guard against is a *polynomial-degree shift*
@@ -21,8 +21,8 @@ sys.path.insert(0, CODE_DIR)
 from equivariant_pde_find import derivatives                                          # noqa: E402
 from equivariant_pde_find.library import (                                       # noqa: E402
     build_multigraph_library,
-    build_standard_library,
-    build_standard_library_1d,
+    build_pdefind_library,
+    build_pdefind_library_1d,
 )
 from equivariant_pde_find.multigraph_operators import get_operators              # noqa: E402
 
@@ -71,7 +71,7 @@ def test_standard_library_constant_column_is_ones(backend):
     """
     f, L = _make_2d_field()
     with derivatives.use_backend(backend):
-        Theta, descs = build_standard_library(f, L, L, max_order=2, max_poly=3)
+        Theta, descs = build_pdefind_library(f, L, L, max_order=2, max_poly=3)
     col = _col(Theta, descs, "1")
     np.testing.assert_allclose(
         col, np.ones_like(col),
@@ -88,7 +88,7 @@ def test_standard_library_f_column_equals_f(backend):
     """The 'f' column must equal f (not f²)."""
     f, L = _make_2d_field()
     with derivatives.use_backend(backend):
-        Theta, descs = build_standard_library(f, L, L, max_order=2, max_poly=3)
+        Theta, descs = build_pdefind_library(f, L, L, max_order=2, max_poly=3)
     np.testing.assert_allclose(
         _col(Theta, descs, "f").reshape(f.shape), f,
         rtol=1e-12, atol=1e-12,
@@ -101,7 +101,7 @@ def test_standard_library_f2_column_equals_f_squared(backend):
     """The 'f²' column must equal f² (not f³)."""
     f, L = _make_2d_field()
     with derivatives.use_backend(backend):
-        Theta, descs = build_standard_library(f, L, L, max_order=2, max_poly=3)
+        Theta, descs = build_pdefind_library(f, L, L, max_order=2, max_poly=3)
     np.testing.assert_allclose(
         _col(Theta, descs, "f²").reshape(f.shape), f ** 2,
         rtol=1e-12, atol=1e-12,
@@ -114,7 +114,7 @@ def test_standard_library_f3_column_equals_f_cubed(backend):
     """The 'f³' column must equal f³ (not f⁴)."""
     f, L = _make_2d_field()
     with derivatives.use_backend(backend):
-        Theta, descs = build_standard_library(f, L, L, max_order=2, max_poly=3)
+        Theta, descs = build_pdefind_library(f, L, L, max_order=2, max_poly=3)
     np.testing.assert_allclose(
         _col(Theta, descs, "f³").reshape(f.shape), f ** 3,
         rtol=1e-12, atol=1e-12,
@@ -135,7 +135,7 @@ def test_standard_library_product_term_equals_f_times_derivative():
     """
     f, L = _make_2d_field(N=32)
     with derivatives.use_backend("spectral"):
-        Theta, descs = build_standard_library(f, L, L, max_order=2, max_poly=2)
+        Theta, descs = build_pdefind_library(f, L, L, max_order=2, max_poly=2)
 
     f_xx_col   = _col(Theta, descs, "f_xx").reshape(f.shape)
     f_f_xx_col = _col(Theta, descs, "f·f_xx").reshape(f.shape)
@@ -159,7 +159,7 @@ def test_standard_library_product_terms_are_consistent():
     f, L = _make_2d_field(N=32)
     max_order, max_poly = 2, 3
     with derivatives.use_backend("spectral"):
-        Theta, descs = build_standard_library(f, L, L, max_order=max_order, max_poly=max_poly)
+        Theta, descs = build_pdefind_library(f, L, L, max_order=max_order, max_poly=max_poly)
 
     # Gather the pure-derivative columns (p=0 factor)
     pure_deriv_descs = [d for d in descs if not d.startswith("f^") and not d.startswith("f·")]
@@ -214,7 +214,7 @@ def test_standard_library_derivative_columns_spectral():
     }
 
     with derivatives.use_backend("spectral"):
-        Theta, descs = build_standard_library(f, L, L, max_order=2, max_poly=1)
+        Theta, descs = build_pdefind_library(f, L, L, max_order=2, max_poly=1)
 
     for name, expected in analytic.items():
         col = _col(Theta, descs, name).reshape(f.shape)
@@ -241,7 +241,7 @@ def test_standard_library_column_count(max_order, max_poly):
     """
     f, L = _make_2d_field()
     with derivatives.use_backend("spectral"):
-        Theta, descs = build_standard_library(f, L, L, max_order=max_order, max_poly=max_poly)
+        Theta, descs = build_pdefind_library(f, L, L, max_order=max_order, max_poly=max_poly)
     expected_n_derivs = (max_order + 1) * (max_order + 2) // 2
     expected_n_cols   = expected_n_derivs * (max_poly + 1)
     assert Theta.shape[1] == expected_n_cols, (
@@ -259,10 +259,10 @@ def test_standard_library_column_count(max_order, max_poly):
 # ---------------------------------------------------------------------------
 
 def test_standard_library_1d_constant_column_is_ones():
-    """The '1' column of build_standard_library_1d must be identically 1."""
+    """The '1' column of build_pdefind_library_1d must be identically 1."""
     u, L = _make_1d_field()
     with derivatives.use_backend("spectral"):
-        Theta, descs = build_standard_library_1d(u, L, max_deriv=3, max_poly=3)
+        Theta, descs = build_pdefind_library_1d(u, L, max_deriv=3, max_poly=3)
     col = _col(Theta, descs, "1")
     np.testing.assert_allclose(
         col, np.ones_like(col),
@@ -272,10 +272,10 @@ def test_standard_library_1d_constant_column_is_ones():
 
 
 def test_standard_library_1d_u_column_equals_u():
-    """The 'u' column of build_standard_library_1d must equal u (not u²)."""
+    """The 'u' column of build_pdefind_library_1d must equal u (not u²)."""
     u, L = _make_1d_field()
     with derivatives.use_backend("spectral"):
-        Theta, descs = build_standard_library_1d(u, L, max_deriv=3, max_poly=3)
+        Theta, descs = build_pdefind_library_1d(u, L, max_deriv=3, max_poly=3)
     np.testing.assert_allclose(
         _col(Theta, descs, "u"), u,
         rtol=1e-12, atol=1e-12,
@@ -284,10 +284,10 @@ def test_standard_library_1d_u_column_equals_u():
 
 
 def test_standard_library_1d_u2_column_equals_u_squared():
-    """The 'u²' column of build_standard_library_1d must equal u²."""
+    """The 'u²' column of build_pdefind_library_1d must equal u²."""
     u, L = _make_1d_field()
     with derivatives.use_backend("spectral"):
-        Theta, descs = build_standard_library_1d(u, L, max_deriv=3, max_poly=3)
+        Theta, descs = build_pdefind_library_1d(u, L, max_deriv=3, max_poly=3)
     np.testing.assert_allclose(
         _col(Theta, descs, "u²"), u ** 2,
         rtol=1e-12, atol=1e-12,
@@ -300,7 +300,7 @@ def test_standard_library_1d_column_count():
     u, L = _make_1d_field()
     max_deriv, max_poly = 3, 3
     with derivatives.use_backend("spectral"):
-        Theta, descs = build_standard_library_1d(u, L, max_deriv=max_deriv, max_poly=max_poly)
+        Theta, descs = build_pdefind_library_1d(u, L, max_deriv=max_deriv, max_poly=max_poly)
     expected = (max_deriv + 1) * (max_poly + 1)
     assert Theta.shape[1] == expected, (
         f"Expected {expected} columns ((max_deriv+1)*(max_poly+1) = "

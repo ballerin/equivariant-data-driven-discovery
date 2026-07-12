@@ -182,7 +182,7 @@ def _terms_to_jet_dict(terms, jet_names):
                 exponents[(0, 0)] += 1  # bare f
             else:
                 exponents[(a, b)] += 1
-        # Build canonical description (same ordering as build_polynomial_jet_library)
+        # Build canonical description (same ordering as build_polyjet_library)
         parts = []
         for (a, b), exp in sorted(exponents.items(), key=lambda kv: (kv[0][0] + kv[0][1], kv[0][0])):
             if exp == 0:

@@ -30,20 +30,20 @@ calls go through the module-level functions below, so the switch is immediate.
 Available backends
 ------------------
 'spectral':   
-    - spectral_derivatives.py
+    - derivatives/spectral.py
     - FFT-based, exact for band-limited data
     - [DEFAULT]
 
 'polynomial':
-    - polynomial_derivatives.py
+    - derivatives/polynomial.py
     - local least-squares polynomial fit
     - robust to measurement noise at the cost of a small bias
 """
 
 from contextlib import contextmanager
 
-from . import polynomial_derivatives as _polynomial
-from . import spectral_derivatives as _spectral
+from . import polynomial as _polynomial
+from . import spectral as _spectral
 
 # Dispatch table: backend name → dict of operation → function.
 # Each entry maps the neutral operation name to the backend-specific function.
@@ -163,5 +163,5 @@ def set_polynomial_stencil(deg=None, r=None, order=None):
 
 
 def get_polynomial_stencil(order):
-    """Return the (deg, r) pair currently used for `order` by the polynomial backend."""
+    """Return the (deg, r) pair currently used for ``order`` by the polynomial backend."""
     return _polynomial.get_default_stencil(order)

@@ -12,7 +12,8 @@ import pytest
 CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
-from equivariant_pde_find import weak_form as wf
+from equivariant_pde_find.library import weak_form as wf
+from equivariant_pde_find import library
 
 
 # ---------------------------------------------------------------------------
@@ -104,7 +105,7 @@ def test_weak_convolution_linearity(test_field):
 def test_weak_library_shape(test_field):
     f, _, L, N = test_field
     m, p = 6, 4
-    Theta_w, descs = wf.build_weak_library(f, L, L, max_p=2, max_n=3, m=m, p=p)
+    Theta_w, descs = library.build_multigraph_library(f, L, L, max_p=2, max_n=3, m=m, p=p, formulation="weak")
     Nv = (N - 2 * m) ** 2
     assert Theta_w.shape == (Nv, 20)
     assert len(descs) == 20
@@ -199,11 +200,11 @@ def test_weak_form_reduces_noise_amplification():
 
     # Weak form on noisy data
     m, p = 6, 4
-    Theta_weak_noisy, _ = wf.build_weak_library(
-        f_noisy, L, L, max_p=2, max_n=3, m=m, p=p
+    Theta_weak_noisy, _ = library.build_multigraph_library(
+        f_noisy, L, L, max_p=2, max_n=3, m=m, p=p, formulation="weak"
     )
-    Theta_weak_clean, _ = wf.build_weak_library(
-        f_clean, L, L, max_p=2, max_n=3, m=m, p=p
+    Theta_weak_clean, _ = library.build_multigraph_library(
+        f_clean, L, L, max_p=2, max_n=3, m=m, p=p, formulation="weak"
     )
 
     # Compare relative error (noisy vs clean) for the bilaplacian column
@@ -342,13 +343,13 @@ def test_ibp_beats_direct_on_noisy_data():
     )
 
 
-def test_build_weak_library_ibp_flag(test_field):
+def test_build_weak_multigraph_library_ibp_flag(test_field):
     """use_ibp=True produces a valid library where Δf/Δ²f differ from direct."""
     f, _, L, N = test_field
     m, p = 6, 4
 
-    Theta_ibp, descs = wf.build_weak_library(f, L, L, m=m, p=p, use_ibp=True)
-    Theta_direct, descs2 = wf.build_weak_library(f, L, L, m=m, p=p, use_ibp=False)
+    Theta_ibp, descs = library.build_multigraph_library(f, L, L, m=m, p=p, use_ibp=True, formulation="weak")
+    Theta_direct, descs2 = library.build_multigraph_library(f, L, L, m=m, p=p, use_ibp=False, formulation="weak")
 
     assert descs == descs2
     assert Theta_ibp.shape == Theta_direct.shape
@@ -378,9 +379,9 @@ def test_ibp_flag_off_by_default(test_field):
     f, _, L, N = test_field
     m, p = 6, 4
 
-    Theta_default, descs = wf.build_weak_library(f, L, L, m=m, p=p)
-    Theta_explicit_off, descs2 = wf.build_weak_library(
-        f, L, L, m=m, p=p, use_ibp=False
+    Theta_default, descs = library.build_multigraph_library(f, L, L, m=m, p=p, formulation="weak")
+    Theta_explicit_off, descs2 = library.build_multigraph_library(
+        f, L, L, m=m, p=p, use_ibp=False, formulation="weak"
     )
 
     assert descs == descs2
@@ -597,11 +598,11 @@ def test_wsindy_ibp_positive_correlation_all_orders():
     derivatives.set_backend("spectral")
 
     for m, p in [(6, 4), (8, 4), (12, 6)]:
-        G_dir, descs = wf.build_weak_wsindy_library(
-            f, L, L, m=m, p=p, use_ibp=False,
+        G_dir, descs = library.build_wsindy_library(
+            f, L, L, m=m, p=p, use_ibp=False, formulation="weak",
         )
-        G_ibp, _ = wf.build_weak_wsindy_library(
-            f, L, L, m=m, p=p, use_ibp=True,
+        G_ibp, _ = library.build_wsindy_library(
+            f, L, L, m=m, p=p, use_ibp=True, formulation="weak",
         )
         for j, desc in enumerate(descs):
             if not desc.startswith("f_{"):
@@ -625,11 +626,11 @@ def test_standard_ibp_positive_correlation_all_orders():
     derivatives.set_backend("spectral")
 
     for m, p in [(6, 4), (8, 4), (12, 6)]:
-        G_dir, descs = wf.build_weak_standard_library(
-            f, L, L, m=m, p=p, use_ibp=False,
+        G_dir, descs = library.build_pdefind_library(
+            f, L, L, m=m, p=p, use_ibp=False, formulation="weak",
         )
-        G_ibp, _ = wf.build_weak_standard_library(
-            f, L, L, m=m, p=p, use_ibp=True,
+        G_ibp, _ = library.build_pdefind_library(
+            f, L, L, m=m, p=p, use_ibp=True, formulation="weak",
         )
         for j, desc in enumerate(descs):
             # IBP applies to pure linear differential columns: f_x, f_xx, …
@@ -662,11 +663,11 @@ def test_wsindy_ibp_accuracy_by_order():
     derivatives.set_backend("spectral")
 
     m, p = 8, 4
-    G_dir, descs = wf.build_weak_wsindy_library(
-        f, L, L, m=m, p=p, use_ibp=False,
+    G_dir, descs = library.build_wsindy_library(
+        f, L, L, m=m, p=p, use_ibp=False, formulation="weak",
     )
-    G_ibp, _ = wf.build_weak_wsindy_library(
-        f, L, L, m=m, p=p, use_ibp=True,
+    G_ibp, _ = library.build_wsindy_library(
+        f, L, L, m=m, p=p, use_ibp=True, formulation="weak",
     )
 
     # Relative error thresholds by order (m=8, p=4)
@@ -724,12 +725,12 @@ def test_equivariant_ibp_kernel_consistency_with_wsindy():
     m, p = 8, 4
 
     # Equivariant: build full library, extract the Δf column
-    G_eq, descs_eq = wf.build_weak_library(f, L, L, m=m, p=p, use_ibp=True)
+    G_eq, descs_eq = library.build_multigraph_library(f, L, L, m=m, p=p, use_ibp=True, formulation="weak")
     col_delta = G_eq[:, descs_eq.index("Δf")]
 
     # WSINDy: the IBP f_xx + f_yy should equal the equivariant Δf column
     # (since Δf = f_xx + f_yy)
-    G_ws, descs_ws = wf.build_weak_wsindy_library(f, L, L, m=m, p=p, use_ibp=True)
+    G_ws, descs_ws = library.build_wsindy_library(f, L, L, m=m, p=p, use_ibp=True, formulation="weak")
     col_fxx = G_ws[:, descs_ws.index("f_{xx}")]
     col_fyy = G_ws[:, descs_ws.index("f_{yy}")]
     col_laplacian_from_wsindy = col_fxx + col_fyy
@@ -768,11 +769,11 @@ def test_mwsindy_symmetry_check_rejects_anisotropic():
 
     m, p = 8, 6
 
-    G_ws, desc_ws = wf.build_weak_wsindy_library(f, L, L, m=m, p=p, use_ibp=False)
-    G_mg, desc_mg = wf.build_weak_library(f, L, L, m=m, p=p, use_ibp=False)
+    G_ws, desc_ws = library.build_wsindy_library(f, L, L, m=m, p=p, use_ibp=False, formulation="weak")
+    G_mg, desc_mg = library.build_multigraph_library(f, L, L, m=m, p=p, use_ibp=False, formulation="weak")
 
-    from equivariant_pde_find.library import build_polynomial_jet_library
-    _, desc_jet = build_polynomial_jet_library(f, L, L, max_order=4, max_degree=3)
+    from equivariant_pde_find.library import build_polyjet_library
+    _, desc_jet = build_polyjet_library(f, L, L, max_order=4, max_degree=3)
     from equivariant_pde_find.evaluation import build_wsindy_to_jet_map
     M = build_wsindy_to_jet_map(desc_ws, desc_jet)
 
@@ -840,13 +841,13 @@ def test_mwsindy_pipeline_produces_valid_result():
     derivatives.set_backend("spectral")
     m, p = 8, 6
 
-    G_ws, desc_ws = wf.build_weak_wsindy_library(f, Lx, Ly, m=m, p=p, use_ibp=False)
-    G_mg, desc_mg = wf.build_weak_library(f, Lx, Ly, m=m, p=p, use_ibp=False)
+    G_ws, desc_ws = library.build_wsindy_library(f, Lx, Ly, m=m, p=p, use_ibp=False, formulation="weak")
+    G_mg, desc_mg = library.build_multigraph_library(f, Lx, Ly, m=m, p=p, use_ibp=False, formulation="weak")
     ft = derivatives.bilaplacian(f, Lx, Ly)
     b = wf.build_weak_rhs(ft, m=m, p=p)
 
-    from equivariant_pde_find.library import build_polynomial_jet_library
-    _, desc_jet = build_polynomial_jet_library(f, Lx, Ly, max_order=4, max_degree=3)
+    from equivariant_pde_find.library import build_polyjet_library
+    _, desc_jet = build_polyjet_library(f, Lx, Ly, max_order=4, max_degree=3)
     from equivariant_pde_find.evaluation import build_wsindy_to_jet_map
     M = build_wsindy_to_jet_map(desc_ws, desc_jet)
 

@@ -48,11 +48,11 @@ from equivariant_pde_find.equation_configs import (  # noqa: E402
     true_pme_mod_multigraph, normalize_eq_name,
 )
 from equivariant_pde_find.library import (  # noqa: E402
-    build_polynomial_jet_library,
+    build_polyjet_library,
 )
 from equivariant_pde_find.regression import TrainSTRidge  # noqa: E402
 from equivariant_pde_find.simulations import make_regression_data  # noqa: E402
-from equivariant_pde_find import weak_form as wf  # noqa: E402
+from equivariant_pde_find.library import weak_form as wf  # noqa: E402
 
 RESULTS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "results"))
 DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "data"))
@@ -68,7 +68,7 @@ SAMPLE_STRIDE = 4
 
 # ── truth functions per library and equation ─────────────────────────────────
 TRUTH_FNS = {
-    "multigraphs": {
+    "multigraph": {
         "ac": true_allen_cahn,
         "sh": true_swift_hohenberg,
         "ks": true_ks,
@@ -117,8 +117,8 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
         for s in range(len(f_snaps)):
             f = f_snaps[s]
             ft = ft_snaps[s]
-            if library == "multigraphs":
-                G, desc = wf.build_weak_library(
+            if library == "multigraph":
+                G, desc = wf.build_weak_multigraph_library(
                     f, Lx, Ly, max_p=2, max_n=3, m=m, p=WEAK_P,
                     use_ibp=use_ibp,
                 )
@@ -198,7 +198,7 @@ def main():
         print(f"No .npz files found in {args.data_dir} matching filters.")
         return
 
-    libraries = ["multigraphs", "mod_multigraph"]
+    libraries = ["multigraph", "mod_multigraph"]
     weak_m_vals = args.weak_m
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -270,7 +270,7 @@ def main():
                         skip_fraction=skip_frac, seed=0, backend=b,
                     )
                     eval_thetas[b] = (Tj, Ftj)
-                _, desc_jet = build_polynomial_jet_library(
+                _, desc_jet = build_polyjet_library(
                     snapshots[0], Lx, Ly, max_order=4, max_degree=3,
                 )
 
@@ -278,8 +278,8 @@ def main():
                 true_jet = {}
                 for lib in libraries:
                     # Get the correct desc for this lib (cheap: just build on one snapshot)
-                    if lib == "multigraphs":
-                        _, desc_lib = wf.build_weak_library(
+                    if lib == "multigraph":
+                        _, desc_lib = wf.build_weak_multigraph_library(
                             f_snaps[0], Lx, Ly, max_p=2, max_n=3, m=4, p=WEAK_P, use_ibp=False)
                     else:
                         _, desc_lib = wf.build_weak_mod_multigraph_library(
@@ -292,7 +292,7 @@ def main():
                         true_w = TRUTH_FNS[lib][true_fn_key](desc_lib, eps=0.15)
                     else:
                         true_w = TRUTH_FNS[lib][true_fn_key](desc_lib)
-                    if lib == "multigraphs":
+                    if lib == "multigraph":
                         true_jet[lib] = map_multigraph_to_jet(true_w, desc_lib, desc_jet)
                     else:
                         true_jet[lib] = map_mod_multigraph_to_jet(true_w, desc_lib, desc_jet)

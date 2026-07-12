@@ -49,7 +49,7 @@ Derivative order → Fourier multiplier
 
 import numpy as np
 
-from .utils import _apply_prefilter
+from ..utils import _apply_prefilter
 
 
 def _wavenumbers(N, L):

@@ -193,3 +193,33 @@ def apply_anisotropic_noise(snapshots, obs_noise, profile, rng):
     sigma = obs_noise * snapshots.std()
     noise = sigma * profile[np.newaxis, :, :] * rng.standard_normal(snapshots.shape)
     return snapshots + noise
+
+
+# ── spectral low-pass filter ────────────────────────────────────────────────
+
+
+def spectral_lowpass(f, Lx, Ly, cutoff):
+    """Apply a 2-D isotropic spectral low-pass filter.
+
+    Zeroes all Fourier modes with physical wavenumber magnitude |k| > cutoff
+    and returns the result in space domain.  The filter is O(2)-symmetric
+    (isotropic cutoff sphere), so it commutes with all O(2)-equivariant
+    operators in the library.
+
+    Parameters
+    ----------
+    f      : ndarray, shape (Nx, Ny)
+    Lx, Ly : float - domain lengths
+    cutoff : float - maximum physical wavenumber to retain
+
+    Returns
+    -------
+    f_filtered : ndarray, shape (Nx, Ny), real
+    """
+    Nx, Ny = f.shape
+    kx = 2.0 * np.pi / Lx * np.fft.fftfreq(Nx) * Nx
+    ky = 2.0 * np.pi / Ly * np.fft.fftfreq(Ny) * Ny
+    KX, KY = np.meshgrid(kx, ky, indexing="ij")
+    fh = np.fft.fft2(f)
+    fh[KX ** 2 + KY ** 2 > cutoff ** 2] = 0.0
+    return np.real(np.fft.ifft2(fh))

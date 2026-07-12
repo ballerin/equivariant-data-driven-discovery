@@ -50,7 +50,7 @@ from math import factorial
 
 import numpy as np
 
-from .utils import _apply_prefilter
+from ..utils import _apply_prefilter
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -292,7 +292,7 @@ def poly_partial(f, Lx, Ly, a, b, deg=None, r=None):
     2-D polynomial fitting.
 
     This is the generic public interface to the polynomial differentiation
-    backend.  It is used by build_standard_library(method='polynomial') to
+    backend.  It is used by build_pdefind_library(method='polynomial') to
     compute arbitrary multi-index derivatives, complementing the named
     functions (polynomial_grad, polynomial_laplacian, …) which are optimised
     for specific operators used by the equivariant library.

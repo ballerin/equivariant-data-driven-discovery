@@ -208,14 +208,14 @@ def test_translation_equivariance(op, name, dx, dy, field_and_domain):
 
 def _partial_x_spectral(f, L):
     """Compute ∂f/∂x via FFT (not O(2)-equivariant as a scalar operator)."""
-    from equivariant_pde_find import spectral_derivatives as sd
+    from equivariant_pde_find.derivatives import spectral as sd
     fx, _fy = sd.spectral_grad(f, L, L)
     return fx
 
 
 def _partial_xx_spectral(f, L):
     """Compute ∂²f/∂x² via FFT (not O(2)-equivariant as a scalar operator)."""
-    from equivariant_pde_find import spectral_derivatives as sd
+    from equivariant_pde_find.derivatives import spectral as sd
     fxx, _fxy, _fyy = sd.spectral_hessian(f, L, L)
     return fxx
 
@@ -266,7 +266,7 @@ def test_fx_maps_to_fy_under_rotation(field_and_domain):
     """
     f, L, _N = field_and_domain
 
-    from equivariant_pde_find import spectral_derivatives as sd
+    from equivariant_pde_find.derivatives import spectral as sd
 
     f_rot = rotation_90(f)
     lhs = _partial_x_spectral(f_rot, L)        # (f∘R)_x
@@ -318,11 +318,11 @@ def test_standard_library_not_columnwise_equivariant(field_and_domain):
     isotropic derivatives destroys the structural sparsity.
     """
     f, L, N = field_and_domain
-    from equivariant_pde_find.library import build_standard_library
+    from equivariant_pde_find.library import build_pdefind_library
 
-    Theta, descs = build_standard_library(f, L, L)
+    Theta, descs = build_pdefind_library(f, L, L)
     f_rot = rotation_90(f)
-    Theta_rot, _ = build_standard_library(f_rot, L, L)
+    Theta_rot, _ = build_pdefind_library(f_rot, L, L)
 
     # Check how many columns fail the equivariance test.
     n_fail = 0

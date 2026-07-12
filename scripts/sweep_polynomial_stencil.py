@@ -36,7 +36,7 @@ if CODE_DIR not in sys.path:
 
 from simulations import allen_cahn, make_regression_data
 import derivatives
-from library import build_multigraph_library, build_standard_library
+from library import build_multigraph_library, build_pdefind_library
 from regression import TrainSTRidge
 
 
@@ -82,7 +82,7 @@ def run_sweep(out_csv: str, quick: bool = False) -> None:
         idx = idx_sets[s]
         with derivatives.use_backend("spectral"):
             Th_eq, desc_eq = build_equivariant_library(fs, L, L)
-            Th_std, desc_std = build_standard_library(fs, L, L, max_order=4, max_poly=3)
+            Th_std, desc_std = build_pdefind_library(fs, L, L, max_order=4, max_poly=3)
         Theta_eq_rows_spec.append(Th_eq[idx])
         Theta_std_rows_spec.append(Th_std[idx])
     Theta_eq_spec = np.vstack(Theta_eq_rows_spec).astype(float)
@@ -149,7 +149,7 @@ def run_sweep(out_csv: str, quick: bool = False) -> None:
                 idx = idx_sets[s]
                 with derivatives.use_backend("polynomial"):
                     Th_eq, _ = build_equivariant_library(fs, L, L)
-                    Th_std, _ = build_standard_library(fs, L, L, max_order=4, max_poly=3)
+                    Th_std, _ = build_pdefind_library(fs, L, L, max_order=4, max_poly=3)
                 Theta_eq_rows_poly.append(Th_eq[idx])
                 Theta_std_rows_poly.append(Th_std[idx])
 

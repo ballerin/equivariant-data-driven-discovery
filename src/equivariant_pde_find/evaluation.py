@@ -35,7 +35,7 @@ Usage pattern
 import math
 import numpy as np
 
-from .library import build_multigraph_library, build_polynomial_jet_library
+from .library import build_multigraph_library, build_polyjet_library
 from .library_mapping import (
     build_wsindy_to_jet_map,
     map_multigraph_to_jet,
@@ -138,7 +138,7 @@ def build_eval_theta_jet(snapshots, times, Lx, Ly,
         )
         rows_theta, rows_ft = [], []
         for s in range(len(f_snaps)):
-            T, _ = build_polynomial_jet_library(
+            T, _ = build_polyjet_library(
                 f_snaps[s], Lx, Ly, max_order=4, max_degree=3,
             )
             rows_theta.append(T)
@@ -156,15 +156,15 @@ def evaluate_unified(w, library, desc_lib, desc_jet, Theta_jet, Ft,
     Maps the recovered coefficients to the jet basis, then computes
     fp, fn, E in the common jet space.
     """
-    if library in ("multigraphs",):
+    if library in ("multigraph",):
         w_jet = map_multigraph_to_jet(w, desc_lib, desc_jet)
     elif library == "mod_multigraph":
         w_jet = map_mod_multigraph_to_jet(w, desc_lib, desc_jet)
-    elif library == "standard":
+    elif library == "pdefind":
         w_jet = map_standard_to_jet(w, desc_lib, desc_jet)
     elif library in ("wsindy", "mwsindy") and M_ws_to_jet is not None:
         w_jet = map_wsindy_to_jet(w, M_ws_to_jet)
-    elif library == "polynomial_jet":
+    elif library == "polyjet":
         w_jet = w
     else:
         # Fallback: use library's own Theta

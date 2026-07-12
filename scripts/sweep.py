@@ -65,14 +65,14 @@ from equivariant_pde_find.equation_configs import (  # noqa: E402
     normalize_eq_name,
 )
 from equivariant_pde_find.library import (  # noqa: E402
-    build_multigraph_library, build_standard_library,
-    build_polynomial_jet_library, build_pointwise_wsindy_library,
+    build_multigraph_library, build_pdefind_library,
+    build_polyjet_library, build_wsindy_library,
     build_mod_multigraph_library,
-    spectral_lowpass,
 )
+from equivariant_pde_find.utils import spectral_lowpass  # noqa: E402
 from equivariant_pde_find.regression import TrainSTRidge, TrainMSTLS, TrainRFE, TrainExhaustive  # noqa: E402
 from equivariant_pde_find.simulations import make_regression_data  # noqa: E402
-from equivariant_pde_find import weak_form as wf  # noqa: E402
+from equivariant_pde_find.library import weak_form as wf  # noqa: E402
 
 RESULTS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "results"))
 DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "data"))
@@ -153,20 +153,20 @@ def build_pointwise(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend):
     with derivatives.use_backend(backend):
         rows_theta, rows_ft = [], []
         for s in range(len(f_snaps)):
-            if library == "multigraphs":
+            if library == "multigraph":
                 T, desc = build_multigraph_library(f_snaps[s], Lx, Ly)
             elif library == "mod_multigraph":
                 T, desc = build_mod_multigraph_library(f_snaps[s], Lx, Ly)
-            elif library == "polynomial_jet":
-                T, desc = build_polynomial_jet_library(
+            elif library == "polyjet":
+                T, desc = build_polyjet_library(
                     f_snaps[s], Lx, Ly, max_order=4, max_degree=3,
                 )
             elif library in ("wsindy", "mwsindy"):
-                T, desc = build_pointwise_wsindy_library(
+                T, desc = build_wsindy_library(
                     f_snaps[s], Lx, Ly, max_order=4, max_poly=3,
                 )
             else:
-                T, desc = build_standard_library(
+                T, desc = build_pdefind_library(
                     f_snaps[s], Lx, Ly, max_order=4, max_poly=3,
                 )
             rows_theta.append(T[idx_sets[s]])
@@ -184,8 +184,8 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
         for s in range(len(f_snaps)):
             f = f_snaps[s]
             ft = ft_snaps[s]
-            if library == "multigraphs":
-                G, desc = wf.build_weak_library(
+            if library == "multigraph":
+                G, desc = wf.build_weak_multigraph_library(
                     f, Lx, Ly, max_p=2, max_n=3, m=m, p=WEAK_P,
                     use_ibp=use_ibp,
                 )
@@ -194,7 +194,7 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
                     f, Lx, Ly, max_p=2, max_n=3, m=m, p=WEAK_P,
                     use_ibp=use_ibp,
                 )
-            elif library == "polynomial_jet":
+            elif library == "polyjet":
                 G, desc = wf.build_weak_polynomial_jet_library(
                     f, Lx, Ly, max_order=4, max_degree=3,
                     m=m, p=WEAK_P, use_ibp=use_ibp,
@@ -205,7 +205,7 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
                     m=m, p=WEAK_P, use_ibp=use_ibp,
                 )
             else:
-                G, desc = wf.build_weak_standard_library(
+                G, desc = wf.build_weak_pdefind_library(
                     f, Lx, Ly, max_order=4, max_poly=3, m=m, p=WEAK_P,
                     use_ibp=use_ibp,
                 )
@@ -291,8 +291,8 @@ def main():
     )
     parser.add_argument(
         "--libraries", nargs="+",
-        default=["multigraphs", "standard", "polynomial_jet", "wsindy"],
-        choices=["multigraphs", "mod_multigraph", "standard", "polynomial_jet", "wsindy", "mwsindy"],
+        default=["multigraph", "pdefind", "polyjet", "wsindy"],
+        choices=["multigraph", "mod_multigraph", "pdefind", "polyjet", "wsindy", "mwsindy"],
     )
     parser.add_argument(
         "--backends", nargs="+",
@@ -517,7 +517,7 @@ def main():
 
                     # ── Jet descriptions & ground truth (backend-independent) ─
                     from equivariant_pde_find.library import \
-                        build_polynomial_jet_library as _bpl
+                        build_polyjet_library as _bpl
                     _, desc_jet = _bpl(
                         snapshots_proc[0], Lx, Ly, max_order=4, max_degree=3,
                     )
@@ -533,7 +533,7 @@ def main():
 
                     # Pre-build WSINDy → jet mapping matrix (analytical)
                     from equivariant_pde_find.library import \
-                        build_pointwise_wsindy_library as _bpw
+                        build_wsindy_library as _bpw
                     _, desc_ws = _bpw(
                         snapshots_proc[0], Lx, Ly, max_order=4, max_poly=3,
                     )
@@ -561,7 +561,7 @@ def main():
                     prebuilt = {}
 
                     # Oracle-only: only need multigraph matrices
-                    _libs = ["multigraphs"] if oracle_only else libraries
+                    _libs = ["multigraph"] if oracle_only else libraries
                     for method, library, backend in itertools.product(
                         methods, _libs, backends
                     ):
@@ -613,7 +613,7 @@ def main():
                         for actual_key, (Theta, Ft, desc, cond_val) in \
                                 prebuilt.items():
                             method, library, backend, m_val = actual_key
-                            if library != "multigraphs":
+                            if library != "multigraph":
                                 continue
                             # Use method-specific (Theta, Ft) directly
                             Ft_pred = Theta @ true_eq
@@ -806,7 +806,7 @@ def main():
 
                                 # Brute-force: multigraphs only (same as oracle)
                                 if algorithm == "brute":
-                                    if library != "multigraphs":
+                                    if library != "multigraph":
                                         continue
                                     max_k = args.brute_max_k
                                     if max_k is None:

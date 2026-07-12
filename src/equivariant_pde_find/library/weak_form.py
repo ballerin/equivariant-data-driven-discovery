@@ -12,11 +12,12 @@ where ψ_{ij} is centred at query point (i, j).  The convolution provides
 natural noise averaging: integrating over a support of width (2m+1)² grid
 points reduces the noise standard deviation by a factor of 2m+1.
 
-Supports four library types in weak form:
-  - Equivariant (multigraph-operator) library via ``build_weak_library``
-  - Standard (PDE-FIND) library via ``build_weak_standard_library``
-  - WSINDy library (∂^α(f^q)) via ``build_weak_wsindy_library``
-  - Polynomial jet library via ``build_weak_polynomial_jet_library``
+Supports four library types in weak form (implemented in their respective
+library modules via ``_build_*_weak`` functions):
+  - Equivariant (multigraph-operator) library via ``multigraph._build_multigraph_weak``
+  - PDE-FIND library via ``pdefind._build_pdefind_weak``
+  - WSINDy library (∂^α(f^q)) via ``wsindy._build_wsindy_weak``
+  - Polynomial jet library via ``polyjet._build_polyjet_weak``
 
 For the equivariant library, operators like ‖∇f‖² and Δf cannot all be
 rewritten as ∂^α(f^β), so we use a **direct** approach:
@@ -37,8 +38,6 @@ from functools import lru_cache
 import math
 
 import numpy as np
-
-from .multigraph_operators import get_operators
 
 
 # ---------------------------------------------------------------------------
@@ -314,10 +313,10 @@ def _is_laplacian_of(desc):
     if desc == "Δf³":
         return ("laplacian", lambda f, Lx, Ly: f**3)
     if desc == "Δ‖∇f‖²":
-        from .multigraph_operators import _op_grad_sq
+        from ..multigraph_operators import _op_grad_sq
         return ("laplacian", _op_grad_sq)
     if desc == "Δ(f·‖∇f‖²)":
-        from .multigraph_operators import _op_grad_sq
+        from ..multigraph_operators import _op_grad_sq
         return ("laplacian", lambda f, Lx, Ly: f * _op_grad_sq(f, Lx, Ly))
 
     # Bilaplacian-of operators: Δ²f, Δ²f², Δ²f³
@@ -329,431 +328,6 @@ def _is_laplacian_of(desc):
         return ("bilaplacian", lambda f, Lx, Ly: f**3)
 
     return None
-
-
-def build_weak_library(f, Lx, Ly, max_p=2, max_n=3, m=8, p=4,
-                          use_ibp=False):
-    """Build the weak-form library matrix for a single 2-D snapshot.
-
-    Parameters
-    ----------
-    f : ndarray of shape (Nx, Ny)
-    Lx, Ly : float
-    max_p, max_n : int
-        Passed to ``get_operators()``.
-    m : int
-        Test function half-support in grid points.  The test function kernel
-        has length 2*m + 1.
-    p : int
-        Test function polynomial degree.
-    use_ibp : bool
-        If True, use integration by parts for operators of the form
-        Δ(something) or Δ²(something).  The Δ/Δ² is moved onto the
-        analytically-known test function, eliminating |k|² and |k|⁴
-        noise amplification.  Default False (direct weak-form).
-
-    Returns
-    -------
-    Theta_weak : ndarray of shape (N_valid, K)
-        Weak library matrix.  N_valid = (Nx - 2*m) * (Ny - 2*m).
-    descriptions : list of K str
-    """
-    ops = get_operators(max_p, max_n)
-    kernel = _cached_kernel_1d(m, p)
-
-    cols = []
-    for func, desc in ops:
-        ibp_info = _is_laplacian_of(desc) if use_ibp else None
-        if ibp_info is not None:
-            op_type, inner_func = ibp_info
-            inner_field = inner_func(f, Lx, Ly)
-            if op_type == "laplacian":
-                col_weak = weak_laplacian_ibp(inner_field, m, p, Lx, Ly)
-            elif op_type == "bilaplacian":
-                col_weak = weak_bilaplacian_ibp(inner_field, m, p, Lx, Ly)
-            else:
-                # Fallback
-                col_raw = func(f, Lx, Ly)
-                col_weak = weak_convolution(col_raw, kernel, kernel)
-        else:
-            # Direct path: compute operator on data, then convolve.
-            col_raw = func(f, Lx, Ly)
-            col_weak = weak_convolution(col_raw, kernel, kernel)
-        cols.append(col_weak.ravel())
-
-    descriptions = [desc for _, desc in ops]
-    return np.column_stack(cols), descriptions
-
-
-def build_weak_mod_multigraph_library(f, Lx, Ly, max_p=2, max_n=3,
-                                         m=8, p=4, use_ibp=False):
-    """Build the weak-form **modified multigraph** library matrix.
-
-    Like ``build_weak_library`` but uses the IBP-friendly operator basis
-    from Lemma 1 / Table 4.  When ``use_ibp=True``, up to 8 operators
-    (Δf, Δf², Δf³, Δ‖∇f‖², Δ(f·‖∇f‖²), Δ²f, Δ²f², Δ²f³) are evaluated
-    via integration by parts instead of by differentiating noisy data.
-
-    Parameters
-    ----------
-    f : ndarray of shape (Nx, Ny)
-    Lx, Ly : float
-    max_p, max_n : int
-    m, p : int — test function parameters
-    use_ibp : bool
-
-    Returns
-    -------
-    Theta_weak : ndarray of shape (N_valid, K)
-    descriptions : list of K str
-    """
-    from .multigraph_operators import get_mod_multigraph_operators
-    ops = get_mod_multigraph_operators(max_p, max_n)
-    kernel = _cached_kernel_1d(m, p)
-
-    cols = []
-    for func, desc in ops:
-        ibp_info = _is_laplacian_of(desc) if use_ibp else None
-        if ibp_info is not None:
-            op_type, inner_func = ibp_info
-            inner_field = inner_func(f, Lx, Ly)
-            if op_type == "laplacian":
-                col_weak = weak_laplacian_ibp(inner_field, m, p, Lx, Ly)
-            elif op_type == "bilaplacian":
-                col_weak = weak_bilaplacian_ibp(inner_field, m, p, Lx, Ly)
-            else:
-                col_raw = func(f, Lx, Ly)
-                col_weak = weak_convolution(col_raw, kernel, kernel)
-        else:
-            col_raw = func(f, Lx, Ly)
-            col_weak = weak_convolution(col_raw, kernel, kernel)
-        cols.append(col_weak.ravel())
-
-    descriptions = [desc for _, desc in ops]
-    return np.column_stack(cols), descriptions
-
-
-def build_weak_standard_library(f, Lx, Ly, max_order=4, max_poly=3,
-                                   m=8, p=4, use_ibp=False):
-    """Build the weak-form **standard** (coordinate-basis) library matrix.
-
-    Mirrors ``build_standard_library`` in ``library.py`` but convolves each
-    column with the test function ψ.  IBP is applied to purely linear
-    differential operators (∂_x, ∂_y, ∂_xx, ∂_xy, ∂_yy, …) when
-    ``use_ibp=True``.
-
-    Parameters
-    ----------
-    f : ndarray of shape (Nx, Ny)
-    Lx, Ly : float
-    max_order : int — highest partial derivative order (default 4)
-    max_poly  : int — highest polynomial degree factor (default 3)
-    m, p : int — test function parameters
-    use_ibp : bool — enable IBP for linear partial-derivative columns
-
-    Returns
-    -------
-    Theta_weak : ndarray of shape (N_valid, K)
-    descriptions : list of K str
-    """
-    from . import derivatives as _derivatives
-    from .polynomial_derivatives import poly_partial
-
-    Nx, Ny = f.shape
-    kernel = _cached_kernel_1d(m, p)
-    method = _derivatives.get_backend()
-
-    # Build list of (a, b) multi-indices up to max_order
-    multi_indices = []
-    for total in range(max_order + 1):
-        for a in range(total + 1):
-            multi_indices.append((a, total - a))
-
-    # Compute each pure derivative term on the grid
-    derivs, deriv_names = [], []
-    for a, b in multi_indices:
-        if a + b == 0:
-            deriv = np.ones_like(f)
-        elif method == "spectral":
-            kx = 2.0 * np.pi / Lx * np.fft.fftfreq(Nx) * Nx
-            ky = 2.0 * np.pi / Ly * np.fft.fftfreq(Ny) * Ny
-            KX, KY = np.meshgrid(kx, ky, indexing="ij")
-            fh = np.fft.fft2(f)
-            d_hat = (1j * KX) ** a * (1j * KY) ** b * fh
-            deriv = np.real(np.fft.ifft2(d_hat))
-        else:
-            deriv = poly_partial(f, Lx, Ly, a, b)
-        name = (("x" * a) + ("y" * b)) if (a + b) > 0 else "1"
-        name = f"f_{name}" if (a + b) > 0 else "1"
-        derivs.append(deriv)
-        deriv_names.append(name)
-
-    # Build columns: polynomial prefactor × derivative, then convolve
-    cols, descs = [], []
-    N_valid = (Nx - 2 * m) * (Ny - 2 * m)
-
-    for poly_deg in range(max_poly + 1):
-        for deriv, dname in zip(derivs, deriv_names):
-            poly_field = f ** poly_deg if poly_deg > 0 else np.ones_like(f)
-            col_raw = poly_field * deriv
-
-            # Determine if this is a pure linear differential term
-            # (poly_deg == 0 and a+b > 0) — candidates for IBP
-            a_plus_b = 0
-            if dname != "1" and dname.startswith("f_"):
-                dx_part = dname[2:]  # e.g. "xxy"
-                a_plus_b = len(dx_part)
-
-            if use_ibp and poly_deg == 0 and a_plus_b > 0:
-                # IBP: convolve f (not the derivative) with the IBP kernel.
-                # For ∂_x^a ∂_y^b: ∫ ψ · ∂_x^a∂_y^b f = (-1)^{a+b} ∫ ∂_x^a∂_y^b ψ · f
-                # The (-1)^{a+b} sign is handled implicitly by np.convolve
-                # (which reverses the kernel; for odd-order anti-symmetric
-                # kernels this introduces the required sign flip).
-                # Extract (a, b) from the derivative name (e.g. "f_xxy" → a=2, b=1).
-                a_ibp = dx_part.count("x")
-                b_ibp = dx_part.count("y")
-                kx_ibp = _test_function_deriv_1d(m, p, a_ibp)
-                ky_ibp = _test_function_deriv_1d(m, p, b_ibp)
-                # Scale by grid spacing to match physical units
-                dx_a = (Lx / Nx) ** a_ibp
-                dy_b = (Ly / Ny) ** b_ibp
-                kx_scaled = kx_ibp / dx_a
-                ky_scaled = ky_ibp / dy_b
-                col_weak = weak_convolution(f, kx_scaled, ky_scaled)
-            else:
-                col_weak = weak_convolution(col_raw, kernel, kernel)
-
-            cols.append(col_weak.ravel())
-
-            # Build description matching standard library convention
-            if poly_deg == 0:
-                desc = dname
-            elif poly_deg == 1:
-                desc = f"f·{dname}" if dname != "1" else "f"
-            else:
-                sup = {2: "²", 3: "³", 4: "⁴", 5: "⁵", 6: "⁶"}.get(poly_deg, f"^{poly_deg}")
-                desc = f"f{sup}·{dname}" if dname != "1" else f"f{sup}"
-            descs.append(desc)
-
-    return np.column_stack(cols), descs
-
-
-def build_weak_wsindy_library(f, Lx, Ly, max_order=4, max_poly=3,
-                                  m=8, p=4, use_ibp=False):
-    """Build the weak-form WSINDy library: ψ ∗ ∂^α(f^q).
-
-    Mirrors ``build_pointwise_wsindy_library`` in ``library.py`` but convolves each
-    column with the polynomial-bump test function ψ.  When ``use_ibp=True``,
-    integration by parts is applied to linear terms (q=1), moving the
-    derivative onto the test function:
-
-        ∫ ψ · ∂^α f  =  (-1)^{|α|} ∫ ∂^α ψ · f
-
-    For nonlinear terms (q ≥ 2), the pointwise derivative is computed
-    using the active backend, then convolved with ψ (direct path).
-
-    Parameters
-    ----------
-    f : ndarray of shape (Nx, Ny)
-    Lx, Ly : float
-    max_order : int — highest derivative order (default 4)
-    max_poly  : int — highest monomial power q (default 3)
-    m, p : int — test function parameters
-    use_ibp : bool — enable IBP for q=1 columns
-
-    Returns
-    -------
-    Theta_weak : ndarray of shape (N_valid, K)
-    descriptions : list of K str
-    """
-    from . import derivatives as _deriv
-    from .polynomial_derivatives import poly_partial
-
-    Nx, Ny = f.shape
-    kernel = _cached_kernel_1d(m, p)
-    method = _deriv.get_backend()
-
-    # Enumerate derivative multi-indices
-    multi_indices = []
-    for total in range(max_order + 1):
-        for a in range(total + 1):
-            multi_indices.append((a, total - a))
-
-    # Pre-compute spectral wavenumbers if needed
-    if method == "spectral":
-        kx = 2.0 * np.pi / Lx * np.fft.fftfreq(Nx) * Nx
-        ky = 2.0 * np.pi / Ly * np.fft.fftfreq(Ny) * Ny
-        KX, KY = np.meshgrid(kx, ky, indexing="ij")
-
-    cols, descs = [], []
-
-    # Constant term: ψ ∗ 1
-    ones_field = np.ones_like(f)
-    col_weak = weak_convolution(ones_field, kernel, kernel)
-    cols.append(col_weak.ravel())
-    descs.append("1")
-
-    for q in range(1, max_poly + 1):
-        f_pow = f ** q
-        if method == "spectral":
-            fh_pow = np.fft.fft2(f_pow)
-
-        for a, b in multi_indices:
-            if a + b == 0:
-                continue  # pure monomials handled below
-
-            if use_ibp and q == 1:
-                # IBP: ∫ ψ · ∂_x^a ∂_y^b f = (-1)^{a+b} ∫ ∂_x^a ∂_y^b ψ · f
-                # The (-1)^{a+b} sign is handled implicitly by np.convolve
-                # (which reverses the kernel; for odd-order anti-symmetric
-                # kernels this introduces the required sign flip).
-                kx_ibp = _test_function_deriv_1d(m, p, a)
-                ky_ibp = _test_function_deriv_1d(m, p, b)
-                dx_a = (Lx / Nx) ** a
-                dy_b = (Ly / Ny) ** b
-                kx_scaled = kx_ibp / dx_a
-                ky_scaled = ky_ibp / dy_b
-                col_weak = weak_convolution(f, kx_scaled, ky_scaled)
-            else:
-                # Direct: compute ∂^a_x ∂^b_y (f^q) then convolve
-                if method == "spectral":
-                    d_hat = (1j * KX) ** a * (1j * KY) ** b * fh_pow
-                    col_raw = np.real(np.fft.ifft2(d_hat))
-                else:
-                    col_raw = poly_partial(f_pow, Lx, Ly, a, b)
-                col_weak = weak_convolution(col_raw, kernel, kernel)
-
-            cols.append(col_weak.ravel())
-
-            dx_part = "x" * a + "y" * b
-            if q == 1:
-                desc = f"f_{{{dx_part}}}"
-            else:
-                desc = f"(f{sup(q)})_{{{dx_part}}}"
-            descs.append(desc)
-
-    # Pure monomials f^q for q ≥ 1
-    for q in range(1, max_poly + 1):
-        col_weak = weak_convolution(f ** q, kernel, kernel)
-        cols.append(col_weak.ravel())
-        descs.append("f" if q == 1 else f"f{sup(q)}")
-
-    return np.column_stack(cols), descs
-
-
-from .library import sup
-
-
-def build_weak_polynomial_jet_library(f, Lx, Ly, max_order=4, max_degree=3,
-                                          m=8, p=4, use_ibp=False):
-    """Build the weak-form polynomial jet library.
-
-    Computes each jet monomial pointwise and convolves with ψ.  When
-    ``use_ibp=True``, IBP is applied to single-derivative terms of the
-    form ∂_x^a ∂_y^b f (i.e., degree-1 monomials with order > 0).
-
-    Parameters
-    ----------
-    f : ndarray of shape (Nx, Ny)
-    Lx, Ly : float
-    max_order  : int — maximum total differential order (default 4)
-    max_degree : int — maximum total polynomial degree (default 3)
-    m, p : int — test function parameters
-    use_ibp : bool — enable IBP for single-derivative columns
-
-    Returns
-    -------
-    Theta_weak : ndarray of shape (N_valid, K)
-    descriptions : list of K str
-    """
-    from .library import enumerate_jet_monomials
-
-    Nx, Ny = f.shape
-    kernel = _cached_kernel_1d(m, p)
-
-    # Enumerate jet variables
-    jet_vars = []  # ((a,b), order, name)
-    for total in range(max_order + 1):
-        for a in range(total + 1):
-            b = total - a
-            name = (("x" * a) + ("y" * b)) if total > 0 else ""
-            name = f"f_{name}" if total > 0 else "f"
-            jet_vars.append(((a, b), total, name))
-
-    # Compute jet fields pointwise
-    from . import derivatives as _deriv
-    method = _deriv.get_backend()
-
-    jet_fields = {}
-    jet_names = {}
-    if method == "spectral":
-        kx = 2.0 * np.pi / Lx * np.fft.fftfreq(Nx) * Nx
-        ky = 2.0 * np.pi / Ly * np.fft.fftfreq(Ny) * Ny
-        KX, KY = np.meshgrid(kx, ky, indexing="ij")
-        fh = np.fft.fft2(f)
-
-    for (a, b), order, name in jet_vars:
-        jet_names[(a, b)] = name
-        if a + b == 0:
-            jet_fields[(a, b)] = f.copy()
-        elif method == "spectral":
-            d_hat = (1j * KX) ** a * (1j * KY) ** b * fh
-            jet_fields[(a, b)] = np.real(np.fft.ifft2(d_hat))
-        else:
-            from .polynomial_derivatives import poly_partial
-            jet_fields[(a, b)] = poly_partial(f, Lx, Ly, a, b)
-
-    # Enumerate monomials
-    monomials = enumerate_jet_monomials(jet_vars, max_order, max_degree)
-
-    # Build weak columns
-    cols, descs = [], []
-    for exponents, deg, order in monomials:
-        # Check if this is a single-derivative term (IBP candidate)
-        non_one_terms = [(k, v) for k, v in exponents.items() if v > 0]
-        is_single_deriv = (
-            use_ibp
-            and len(non_one_terms) == 1
-            and non_one_terms[0][0][0] + non_one_terms[0][0][1] > 0
-            and non_one_terms[0][1] == 1
-        )
-
-        if is_single_deriv:
-            (a, b), _exp = non_one_terms[0]
-            # IBP: ∫ ψ · ∂_x^a ∂_y^b f = (-1)^{a+b} ∫ ∂_x^a ∂_y^b ψ · f
-            # The (-1)^{a+b} sign is handled implicitly by np.convolve.
-            kx_ibp = _test_function_deriv_1d(m, p, a)
-            ky_ibp = _test_function_deriv_1d(m, p, b)
-            dx_a = (Lx / Nx) ** a
-            dy_b = (Ly / Ny) ** b
-            kx_scaled = kx_ibp / dx_a
-            ky_scaled = ky_ibp / dy_b
-            col_weak = weak_convolution(f, kx_scaled, ky_scaled)
-        else:
-            # Build pointwise monomial
-            col_raw = np.ones_like(f)
-            for (a, b), exp in exponents.items():
-                if exp > 0:
-                    col_raw = col_raw * (jet_fields[(a, b)] ** exp)
-            col_weak = weak_convolution(col_raw, kernel, kernel)
-
-        cols.append(col_weak.ravel())
-
-        # Build description
-        parts = []
-        for (a, b), exp in sorted(exponents.items(),
-                                   key=lambda kv: (kv[0][0] + kv[0][1], kv[0][0])):
-            if exp == 0:
-                continue
-            var_name = jet_names[(a, b)]
-            if exp == 1:
-                parts.append(var_name)
-            else:
-                parts.append(f"{var_name}{sup(exp)}")
-        descs.append("1" if not parts else "·".join(parts))
-
-    return np.column_stack(cols), descs
 
 
 def build_weak_rhs(ft, kernel_x=None, kernel_y=None, m=8, p=4):
@@ -853,7 +427,7 @@ def make_weak_regression_data(
         If > 1, subsample the weak grid uniformly with given stride.
         idx_sets is ignored when sample_stride > 1.
     use_ibp : bool
-        Forwarded to ``build_weak_library``.
+        Forwarded to ``multigraph._build_multigraph_weak``.
     rescale : bool
         If True, compute scale-invariance factors (γ_x, γ_t, γ_u) from the
         first snapshot and apply column/LHS rescaling.  The returned
@@ -876,7 +450,8 @@ def make_weak_regression_data(
 
     for snap_idx in range(len(f_snaps)):
         f = f_snaps[snap_idx]
-        Theta_w, descs = build_weak_library(
+        from .multigraph import _build_multigraph_weak
+        Theta_w, descs = _build_multigraph_weak(
             f, Lx, Ly, max_p, max_n, m=m, p=p, use_ibp=use_ibp,
         )
         if descriptions is None:
@@ -944,7 +519,7 @@ def _rescale_factors(gamma_x, gamma_t, gamma_u, max_p, max_n):
     lhs_scale : float
         LHS scaling factor: b_scaled = lhs_scale * b.
     """
-    from .multigraph_operators import get_operator_metadata
+    from ..multigraph_operators import get_operator_metadata
 
     meta = get_operator_metadata(max_p, max_n)
     col_scale = np.empty(len(meta))
@@ -1018,7 +593,7 @@ def weak_form_from_snapshots(
     sample_stride : int
     seed : int
     use_ibp : bool
-        Forwarded to ``build_weak_library``.
+        Forwarded to ``multigraph._build_multigraph_weak``.
     rescale : bool
         If True, apply scale-invariance rescaling to G and b.
     auto_params : bool
@@ -1031,7 +606,7 @@ def weak_form_from_snapshots(
     descriptions : list of K str
     rescale_info : dict or None
     """
-    from .simulations import make_regression_data
+    from ..simulations import make_regression_data
 
     # Auto-select test function params from the data
     if auto_params:
@@ -1381,7 +956,7 @@ def build_rescale_matrix(gamma_x, gamma_t, gamma_u, max_p, max_n):
     M : ndarray, shape (K,)
         Diagonal entries of the rescaling matrix.
     """
-    from .multigraph_operators import get_operator_metadata
+    from ..multigraph_operators import get_operator_metadata
 
     meta = get_operator_metadata(max_p, max_n)
     mu = np.empty(len(meta))

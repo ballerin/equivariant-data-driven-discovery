@@ -60,8 +60,8 @@ from equivariant_pde_find.equation_configs import (  # noqa: E402
     true_cahn_hilliard, true_pme, mask_pme, EQUATION_META,
 )
 from equivariant_pde_find.library import (  # noqa: E402
-    build_multigraph_library, build_standard_library,
-    build_polynomial_jet_library, build_pointwise_wsindy_library,
+    build_multigraph_library, build_pdefind_library,
+    build_polyjet_library, build_wsindy_library,
     build_mod_multigraph_library,
 )
 from equivariant_pde_find.regression import (  # noqa: E402
@@ -136,20 +136,20 @@ def _get_meta(name):
 
 def build_library(f, Lx, Ly, library):
     """Build a pointwise library from a single snapshot."""
-    if library == "multigraphs":
+    if library == "multigraph":
         T, desc = build_multigraph_library(f, Lx, Ly, max_p=2, max_n=3)
     elif library == "mod_multigraph":
         T, desc = build_mod_multigraph_library(f, Lx, Ly, max_p=2, max_n=3)
-    elif library == "polynomial_jet":
-        T, desc = build_polynomial_jet_library(
+    elif library == "polyjet":
+        T, desc = build_polyjet_library(
             f, Lx, Ly, max_order=4, max_degree=3,
         )
     elif library in ("wsindy",):
-        T, desc = build_pointwise_wsindy_library(
+        T, desc = build_wsindy_library(
             f, Lx, Ly, max_order=4, max_poly=3,
         )
     else:
-        T, desc = build_standard_library(f, Lx, Ly, max_order=4, max_poly=3)
+        T, desc = build_pdefind_library(f, Lx, Ly, max_order=4, max_poly=3)
     return T, desc
 
 
@@ -190,9 +190,9 @@ def main():
     )
     parser.add_argument(
         "--libraries", nargs="+",
-        default=["multigraphs"],
-        choices=["multigraphs", "mod_multigraph", "standard",
-                 "polynomial_jet", "wsindy"],
+        default=["multigraph"],
+        choices=["multigraph", "mod_multigraph", "pdefind",
+                 "polyjet", "wsindy"],
     )
     parser.add_argument(
         "--methods", nargs="+",
@@ -292,7 +292,7 @@ def main():
             skip_fraction=skip_frac, seed=0, backend=b,
         )
         eval_thetas[b] = (Tj, Ftj)
-    from equivariant_pde_find.library import build_polynomial_jet_library as _bpl
+    from equivariant_pde_find.library import build_polyjet_library as _bpl
     _, desc_jet = _bpl(snapshots_orig[0], Lx, Ly, max_order=4, max_degree=3)
     print(f"done ({time.time() - t0:.1f}s)")
 

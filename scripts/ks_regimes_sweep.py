@@ -47,7 +47,7 @@ CODE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
 from equivariant_pde_find import derivatives  # noqa: E402
-from equivariant_pde_find.library import build_multigraph_library, build_standard_library  # noqa: E402
+from equivariant_pde_find.library import build_multigraph_library, build_pdefind_library  # noqa: E402
 from equivariant_pde_find.regression import TrainSTRidge, TrainSR3  # noqa: E402
 from equivariant_pde_find.simulations import kuramoto_sivashinsky, make_regression_data  # noqa: E402
 from equivariant_pde_find.equation_configs import true_ks  # noqa: E402
@@ -156,7 +156,7 @@ def build_matrices(snapshots, times, n_per_snap, L, skip_fraction):
         t0 = time.time()
         with derivatives.use_backend("spectral"):
             Teq,  desc_eq  = build_multigraph_library(fs, L, L)
-            Tstd, desc_std = build_standard_library(fs, L, L, max_order=4, max_poly=3)
+            Tstd, desc_std = build_pdefind_library(fs, L, L, max_order=4, max_poly=3)
         eq_spec_rows.append(Teq[idx])
         std_spec_rows.append(Tstd[idx])
         t_spec_total += time.time() - t0
@@ -164,7 +164,7 @@ def build_matrices(snapshots, times, n_per_snap, L, skip_fraction):
         t0 = time.time()
         with derivatives.use_backend("polynomial"):
             Teq,  _ = build_multigraph_library(fs, L, L)
-            Tstd, _ = build_standard_library(fs, L, L, max_order=4, max_poly=3)
+            Tstd, _ = build_pdefind_library(fs, L, L, max_order=4, max_poly=3)
         eq_poly_rows.append(Teq[idx])
         std_poly_rows.append(Tstd[idx])
         t_poly_total += time.time() - t0
@@ -187,10 +187,10 @@ def build_matrices(snapshots, times, n_per_snap, L, skip_fraction):
         flush=True,
     )
     mats = {
-        ("spectral",    "multigraphs"): np.vstack(eq_spec_rows).astype(float),
-        ("spectral",    "standard"):    np.vstack(std_spec_rows).astype(float),
-        ("polynomial",  "multigraphs"): np.vstack(eq_poly_rows).astype(float),
-        ("polynomial",  "standard"):    np.vstack(std_poly_rows).astype(float),
+        ("spectral",    "multigraph"): np.vstack(eq_spec_rows).astype(float),
+        ("spectral",    "pdefind"):    np.vstack(std_spec_rows).astype(float),
+        ("polynomial",  "multigraph"): np.vstack(eq_poly_rows).astype(float),
+        ("polynomial",  "pdefind"):    np.vstack(std_poly_rows).astype(float),
     }
     return mats, Ft, desc_eq, desc_std
 
@@ -328,15 +328,15 @@ def main():
                     eta = avg * (n_combos - i)
                     print(f"    {i}/{n_combos}  avg {avg*1e3:.0f}ms/combo  ETA {eta:.0f}s", flush=True)
 
-                Theta_eq  = mats[(backend, "multigraphs")]
-                Theta_std = mats[(backend, "standard")]
+                Theta_eq  = mats[(backend, "multigraph")]
+                Theta_std = mats[(backend, "pdefind")]
 
                 nz, fp, fn, exact, err = sweep_one(
                     Theta_eq, Ft, true_eq, lam, d_tol, algorithm=args.algorithm
                 )
                 writer.writerow(dict(
                     regime=name, L_over_pi=L_over_pi, N_unstable=N_u,
-                    backend=backend, library="multigraphs", algorithm=args.algorithm,
+                    backend=backend, library="multigraph", algorithm=args.algorithm,
                     lam=lam, d_tol=d_tol,
                     n_active=nz, fp=fp, fn=fn, exact_recovery=exact, max_coeff_err=err,
                 ))
@@ -347,7 +347,7 @@ def main():
                 )
                 writer.writerow(dict(
                     regime=name, L_over_pi=L_over_pi, N_unstable=N_u,
-                    backend=backend, library="standard", algorithm=args.algorithm,
+                    backend=backend, library="pdefind", algorithm=args.algorithm,
                     lam=lam, d_tol=d_tol,
                     n_active=nz_s, fp=float("nan"), fn=float("nan"),
                     exact_recovery=float("nan"), max_coeff_err=float("nan"),
@@ -365,7 +365,7 @@ def main():
                 eq_rows = [
                     r for r in all_rows
                     if r["backend"] == backend
-                    and r["library"] == "multigraphs"
+                    and r["library"] == "multigraph"
                     and r["exact_recovery"] not in ("", "nan")
                 ]
                 if not eq_rows:

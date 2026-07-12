@@ -21,7 +21,7 @@ from equivariant_pde_find.evaluation import (                                   
     best_of_sweep, evaluate_standard,
 )
 from equivariant_pde_find.library import (                                           # noqa: E402
-    build_multigraph_library, build_standard_library,
+    build_multigraph_library, build_pdefind_library,
 )
 from equivariant_pde_find.simulations import make_regression_data                    # noqa: E402
 from equivariant_pde_find.simulations import allen_cahn                              # noqa: E402
@@ -72,7 +72,7 @@ class TestGroundTruthDescriptionMismatch:
     def test_standard_descriptions_do_not_contain_delta(self, ac_data):
         """Standard library must NOT contain 'Δf' (it has 'f_xx', etc.)."""
         snaps, times, _, _ = ac_data
-        _, desc = build_standard_library(snaps[0], 2 * np.pi, 2 * np.pi,
+        _, desc = build_pdefind_library(snaps[0], 2 * np.pi, 2 * np.pi,
                                           max_order=4, max_poly=3)
         assert "Δf" not in desc
         assert "f_xx" in desc
@@ -89,7 +89,7 @@ class TestGroundTruthDescriptionMismatch:
     def test_true_fn_fails_with_standard(self, ac_data):
         """_true_allen_cahn must raise with standard library descriptions."""
         snaps, times, _, _ = ac_data
-        _, desc_std = build_standard_library(snaps[0], 2 * np.pi, 2 * np.pi,
+        _, desc_std = build_pdefind_library(snaps[0], 2 * np.pi, 2 * np.pi,
                                               max_order=4, max_poly=3)
         with pytest.raises((ValueError, KeyError)):
             _true_allen_cahn(desc_std)
@@ -307,10 +307,10 @@ class TestEvaluateStandard:
     def test_zero_coeffs_gives_E_fit_one(self, ac_data):
         """w=0 should give E_fit = 1 (predicts zero, target is nonzero)."""
         snaps, times, true_eq, desc = ac_data
-        _, desc_std = build_standard_library(snaps[0], 2 * np.pi, 2 * np.pi,
+        _, desc_std = build_pdefind_library(snaps[0], 2 * np.pi, 2 * np.pi,
                                               max_order=4, max_poly=3)
         # Build a small Theta_std on one snapshot
-        T_std, _ = build_standard_library(snaps[1], 2 * np.pi, 2 * np.pi,
+        T_std, _ = build_pdefind_library(snaps[1], 2 * np.pi, 2 * np.pi,
                                            max_order=4, max_poly=3)
         ft = (snaps[2] - snaps[0]) / (2 * (times[1] - times[0]))
         w_zero = np.zeros(T_std.shape[1])
@@ -323,7 +323,7 @@ class TestEvaluateStandard:
         because Allen-Cahn (f_t = Δf + f − f³) is representable in the
         standard basis."""
         snaps, times, true_eq, desc = ac_data
-        T_std, _ = build_standard_library(snaps[1], 2 * np.pi, 2 * np.pi,
+        T_std, _ = build_pdefind_library(snaps[1], 2 * np.pi, 2 * np.pi,
                                            max_order=4, max_poly=3)
         ft = (snaps[2] - snaps[0]) / (2 * (times[1] - times[0]))
         w_lsq = np.linalg.lstsq(T_std, ft.ravel(), rcond=None)[0]
@@ -335,7 +335,7 @@ class TestEvaluateStandard:
     def test_n_active_count(self, ac_data):
         """n_active should count nonzeros."""
         snaps, times, true_eq, desc = ac_data
-        T_std, _ = build_standard_library(snaps[1], 2 * np.pi, 2 * np.pi,
+        T_std, _ = build_pdefind_library(snaps[1], 2 * np.pi, 2 * np.pi,
                                            max_order=4, max_poly=3)
         ft = (snaps[2] - snaps[0]) / (2 * (times[1] - times[0]))
         w = np.zeros(T_std.shape[1])

@@ -24,7 +24,7 @@ import pytest
 CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
-from equivariant_pde_find import spectral_derivatives as sd  # noqa: E402
+from equivariant_pde_find.derivatives import spectral as sd  # noqa: E402
 
 
 def make_grid(Nx, Ny, Lx, Ly):

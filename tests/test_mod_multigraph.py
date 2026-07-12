@@ -199,13 +199,13 @@ def test_jet_decomposition():
 
 def test_jet_decomposition_naming_consistency():
     """Every jet name in the mod. multigraph decomposition must exist
-    in the polynomial-jet library produced by build_polynomial_jet_library."""
+    in the polynomial-jet library produced by build_polyjet_library."""
     from equivariant_pde_find.library_mapping import _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION
-    from equivariant_pde_find.library import build_polynomial_jet_library
+    from equivariant_pde_find.library import build_polyjet_library
     N, L = 32, 2 * math.pi
     rng = np.random.default_rng(99)
     f = rng.standard_normal((N, N))
-    _, desc_jet = build_polynomial_jet_library(f, L, L, max_order=4, max_degree=3)
+    _, desc_jet = build_polyjet_library(f, L, L, max_order=4, max_degree=3)
     desc_jet_set = set(desc_jet)
     for mg_name, comps in _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION.items():
         for jet_name, _mult in comps:
@@ -217,13 +217,13 @@ def test_map_mod_multigraph_to_jet_known_coefficients():
     """Mapping known Swift-Hohenberg coefficients (f, Δf, Δ²f, f³)
     from mod. multigraph to jet basis must give the correct 7 jet terms."""
     from equivariant_pde_find.library_mapping import map_mod_multigraph_to_jet
-    from equivariant_pde_find.library import build_polynomial_jet_library
+    from equivariant_pde_find.library import build_polyjet_library
 
     N, L = 32, 2 * math.pi
     rng = np.random.default_rng(42)
     f = rng.standard_normal((N, N))
     _, desc_mod = build_mod_multigraph_library(f, L, L, max_p=2, max_n=3)
-    _, desc_jet = build_polynomial_jet_library(f, L, L, max_order=4, max_degree=3)
+    _, desc_jet = build_polyjet_library(f, L, L, max_order=4, max_degree=3)
 
     w_mod = true_swift_hohenberg_mod_multigraph(desc_mod)
     w_jet = map_mod_multigraph_to_jet(w_mod, desc_mod, desc_jet)
@@ -256,13 +256,13 @@ def test_evaluate_unified_handles_mod_multigraph():
     and produce consistent fp/fn/E against known ground truth."""
     from equivariant_pde_find.evaluation import evaluate_unified
     from equivariant_pde_find.library_mapping import map_mod_multigraph_to_jet
-    from equivariant_pde_find.library import build_polynomial_jet_library
+    from equivariant_pde_find.library import build_polyjet_library
 
     N, L = 32, 2 * math.pi
     rng = np.random.default_rng(42)
     f = rng.standard_normal((N, N))
     _, desc_mod = build_mod_multigraph_library(f, L, L, max_p=2, max_n=3)
-    _, desc_jet = build_polynomial_jet_library(f, L, L, max_order=4, max_degree=3)
+    _, desc_jet = build_polyjet_library(f, L, L, max_order=4, max_degree=3)
 
     # Perfect recovery: pass the true coefficients
     w_perfect = true_swift_hohenberg_mod_multigraph(desc_mod)
