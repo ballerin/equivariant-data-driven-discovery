@@ -37,7 +37,7 @@ from equivariant_pde_find import derivatives  # noqa: E402
 from equivariant_pde_find.evaluation import (  # noqa: E402
     build_eval_theta_jet, evaluate_unified,
 )
-from equivariant_pde_find.library_mapping import (  # noqa: E402
+from equivariant_pde_find.library.conversions import (  # noqa: E402
     map_multigraph_to_jet, map_mod_multigraph_to_jet,
 )
 from equivariant_pde_find.equation_configs import (  # noqa: E402

@@ -36,7 +36,7 @@ import math
 import numpy as np
 
 from .library import build_multigraph_library, build_polyjet_library
-from .library_mapping import (
+from .library.conversions import (
     build_wsindy_to_jet_map,
     map_multigraph_to_jet,
     map_mod_multigraph_to_jet,
@@ -336,7 +336,7 @@ def evaluate_standard(w, Theta, Ft):
 
 # ── Evaluate-with-truth functions ────────────────────────────────────────
 # These marshal library-specific ground-truth decompositions (now in the
-# ``library_mapping`` module) and call ``evaluate_from_theta``.
+# ``library.conversions`` module) and call ``evaluate_from_theta``.
 
 
 def evaluate_jet_with_truth(w, true_eq, desc_eq, desc_jet, Theta_jet, Ft):

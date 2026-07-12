@@ -14,6 +14,7 @@ Module                  Description
 ``wsindy.py``           WSINDy library
 ``polyjet.py``          Polynomial-jet monomial library
 ``weak_form.py``        Weak-form infrastructure
+``conversions.py``      Basis change-of-basis & library→jet mappings
 =====================  ===========================================
 """
 

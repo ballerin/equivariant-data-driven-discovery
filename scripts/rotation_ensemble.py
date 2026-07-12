@@ -52,7 +52,7 @@ from equivariant_pde_find.evaluation import (  # noqa: E402
     build_eval_theta_jet,
     evaluate_unified,
 )
-from equivariant_pde_find.library_mapping import (  # noqa: E402
+from equivariant_pde_find.library.conversions import (  # noqa: E402
     _MULTIGRAPH_TO_JET_DECOMPOSITION,
 )
 from equivariant_pde_find.equation_configs import (  # noqa: E402

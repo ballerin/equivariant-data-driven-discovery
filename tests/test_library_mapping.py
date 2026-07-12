@@ -1,5 +1,5 @@
 """
-Tests for ``library_mapping.py`` — Leibniz expansion, WSINDy-to-jet mapping,
+Tests for ``library/conversions.py`` — Leibniz expansion, WSINDy-to-jet mapping,
 and the hard-coded multigraph jet decomposition dictionaries.
 
 Covers:
@@ -20,7 +20,7 @@ import pytest
 CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
-from equivariant_pde_find.library_mapping import (
+from equivariant_pde_find.library.conversions import (
     _MULTIGRAPH_TO_JET_DECOMPOSITION,
     _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION,
     _expand_fq_deriv,

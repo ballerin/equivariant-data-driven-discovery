@@ -12,7 +12,7 @@ from equivariant_pde_find.library import (
     build_multigraph_library,
     build_mod_multigraph_library,
 )
-from equivariant_pde_find.basis_transforms import (
+from equivariant_pde_find.library.conversions import (
     mod_multigraph_to_multigraph_matrix,
     multigraph_to_mod_multigraph_matrix,
     convert_coefficients,
@@ -96,6 +96,147 @@ def test_change_of_basis_inverse():
     M_inv = multigraph_to_mod_multigraph_matrix()
     assert np.allclose(M @ M_inv, np.eye(20), atol=1e-12)
     assert np.allclose(M_inv @ M, np.eye(20), atol=1e-12)
+
+
+# ── Jet-composition cross-validation ───────────────────────────────────
+# Verifies that the composition law holds:
+#   mod → jet  ==  mod → orig → jet
+# and
+#   orig → jet  ==  orig → mod → jet
+# for random coefficient vectors and for pure-operator (single nonzero)
+# vectors on each of the 6 modified operators.
+
+
+def _build_jet_library_for_test():
+    """Helper: build a small polyjet library for composition tests."""
+    from equivariant_pde_find.library import build_polyjet_library
+    N, L = 32, 2 * math.pi
+    rng = np.random.default_rng(42)
+    f = rng.standard_normal((N, N))
+    _, desc_jet = build_polyjet_library(f, L, L, max_order=4, max_degree=3)
+    _, desc_orig = build_multigraph_library(f, L, L, max_p=2, max_n=3)
+    _, desc_mod = build_mod_multigraph_library(f, L, L, max_p=2, max_n=3)
+    M = mod_multigraph_to_multigraph_matrix()
+    M_inv = multigraph_to_mod_multigraph_matrix()
+    return desc_orig, desc_mod, desc_jet, M, M_inv
+
+
+@pytest.mark.parametrize("seed", [0, 1, 7, 42, 99])
+def test_jet_composition_mod_via_orig(seed):
+    """mod → jet directly  ==  mod → orig → jet  (random vectors)."""
+    from equivariant_pde_find.library.conversions import (
+        map_multigraph_to_jet,
+        map_mod_multigraph_to_jet,
+    )
+    desc_orig, desc_mod, desc_jet, M, _M_inv = _build_jet_library_for_test()
+    rng = np.random.default_rng(seed)
+    w_mod = rng.standard_normal(len(desc_mod))
+
+    # Direct path
+    w_jet_direct = map_mod_multigraph_to_jet(w_mod, desc_mod, desc_jet)
+
+    # Composed path: mod → orig → jet
+    w_orig = M @ w_mod
+    w_jet_composed = map_multigraph_to_jet(w_orig, desc_orig, desc_jet)
+
+    assert np.allclose(w_jet_direct, w_jet_composed, atol=1e-12), (
+        f"seed={seed}: max diff = {np.max(np.abs(w_jet_direct - w_jet_composed)):.2e}"
+    )
+
+
+@pytest.mark.parametrize("seed", [0, 1, 7, 42, 99])
+def test_jet_composition_orig_via_mod(seed):
+    """orig → jet directly  ==  orig → mod → jet  (random vectors)."""
+    from equivariant_pde_find.library.conversions import (
+        map_multigraph_to_jet,
+        map_mod_multigraph_to_jet,
+    )
+    desc_orig, desc_mod, desc_jet, _M, M_inv = _build_jet_library_for_test()
+    rng = np.random.default_rng(seed)
+    w_orig = rng.standard_normal(len(desc_orig))
+
+    # Direct path
+    w_jet_direct = map_multigraph_to_jet(w_orig, desc_orig, desc_jet)
+
+    # Composed path: orig → mod → jet
+    w_mod = M_inv @ w_orig
+    w_jet_composed = map_mod_multigraph_to_jet(w_mod, desc_mod, desc_jet)
+
+    assert np.allclose(w_jet_direct, w_jet_composed, atol=1e-12), (
+        f"seed={seed}: max diff = {np.max(np.abs(w_jet_direct - w_jet_composed)):.2e}"
+    )
+
+
+@pytest.mark.parametrize("mod_op_name", [
+    "Δf²", "Δf³", "Δ‖∇f‖²", "Δ(f·‖∇f‖²)", "Δ²f²", "Δ²f³",
+])
+def test_jet_composition_pure_operators(mod_op_name):
+    """Single-operator mod coefficients: both paths must agree.
+
+    This is the strongest cross-validation: for each of the 6 modified
+    operators, we set its coefficient to 1.0 (all others 0), then verify
+    that composing mod → orig → jet gives the same jet vector as the
+    direct mod → jet decomposition.
+    """
+    from equivariant_pde_find.library.conversions import (
+        map_multigraph_to_jet,
+        map_mod_multigraph_to_jet,
+    )
+    desc_orig, desc_mod, desc_jet, M, _M_inv = _build_jet_library_for_test()
+
+    # Pure operator vector in mod basis
+    w_mod = np.zeros(len(desc_mod))
+    w_mod[desc_mod.index(mod_op_name)] = 1.0
+
+    # Direct path
+    w_jet_direct = map_mod_multigraph_to_jet(w_mod, desc_mod, desc_jet)
+
+    # Composed path
+    w_orig = M @ w_mod
+    w_jet_composed = map_multigraph_to_jet(w_orig, desc_orig, desc_jet)
+
+    assert np.allclose(w_jet_direct, w_jet_composed, atol=1e-12), (
+        f"{mod_op_name}: max diff = "
+        f"{np.max(np.abs(w_jet_direct - w_jet_composed)):.2e}"
+    )
+
+    # The direct jet vector must be non-zero (sanity check)
+    assert np.max(np.abs(w_jet_direct)) > 0.0, \
+        f"{mod_op_name}: direct jet vector is all zeros"
+
+
+@pytest.mark.parametrize("seed", [0, 1, 7, 42, 99])
+def test_jet_composition_roundtrip(seed):
+    """mod → orig → jet → (via jet is universal) must equal
+    orig → mod → jet for the same random vector in mod basis.
+
+    Equivalently: both composed paths to jet, starting from the same
+    w_mod, must agree.
+    """
+    from equivariant_pde_find.library.conversions import (
+        map_multigraph_to_jet,
+        map_mod_multigraph_to_jet,
+    )
+    desc_orig, desc_mod, desc_jet, M, M_inv = _build_jet_library_for_test()
+    rng = np.random.default_rng(seed)
+    w_mod = rng.standard_normal(len(desc_mod))
+
+    # Path A: mod → orig → jet
+    w_orig = M @ w_mod
+    w_jet_A = map_multigraph_to_jet(w_orig, desc_orig, desc_jet)
+
+    # Path B: mod → jet directly
+    w_jet_B = map_mod_multigraph_to_jet(w_mod, desc_mod, desc_jet)
+
+    # Both must agree
+    assert np.allclose(w_jet_A, w_jet_B, atol=1e-12), (
+        f"seed={seed}: A vs B max diff = "
+        f"{np.max(np.abs(w_jet_A - w_jet_B)):.2e}"
+    )
+
+    # Now verify roundtrip: w_mod → w_orig → w_mod_back
+    w_mod_back = M_inv @ w_orig
+    assert np.allclose(w_mod, w_mod_back, atol=1e-12)
 
 
 @pytest.mark.parametrize("name, true_orig, true_mod", [
@@ -190,7 +331,7 @@ def test_mod_multigraph_reflection_equivariance(smooth_field):
 
 def test_jet_decomposition():
     """All 20 mod. multigraph operators must have a jet decomposition."""
-    from equivariant_pde_find.library_mapping import _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION
+    from equivariant_pde_find.library.conversions import _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION
     ops = get_mod_multigraph_operators()
     for _, desc in ops:
         assert desc in _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION, \
@@ -200,7 +341,7 @@ def test_jet_decomposition():
 def test_jet_decomposition_naming_consistency():
     """Every jet name in the mod. multigraph decomposition must exist
     in the polynomial-jet library produced by build_polyjet_library."""
-    from equivariant_pde_find.library_mapping import _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION
+    from equivariant_pde_find.library.conversions import _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION
     from equivariant_pde_find.library import build_polyjet_library
     N, L = 32, 2 * math.pi
     rng = np.random.default_rng(99)
@@ -216,7 +357,7 @@ def test_jet_decomposition_naming_consistency():
 def test_map_mod_multigraph_to_jet_known_coefficients():
     """Mapping known Swift-Hohenberg coefficients (f, Δf, Δ²f, f³)
     from mod. multigraph to jet basis must give the correct 7 jet terms."""
-    from equivariant_pde_find.library_mapping import map_mod_multigraph_to_jet
+    from equivariant_pde_find.library.conversions import map_mod_multigraph_to_jet
     from equivariant_pde_find.library import build_polyjet_library
 
     N, L = 32, 2 * math.pi
@@ -255,7 +396,7 @@ def test_evaluate_unified_handles_mod_multigraph():
     """evaluate_unified must handle library='mod_multigraph' without error
     and produce consistent fp/fn/E against known ground truth."""
     from equivariant_pde_find.evaluation import evaluate_unified
-    from equivariant_pde_find.library_mapping import map_mod_multigraph_to_jet
+    from equivariant_pde_find.library.conversions import map_mod_multigraph_to_jet
     from equivariant_pde_find.library import build_polyjet_library
 
     N, L = 32, 2 * math.pi

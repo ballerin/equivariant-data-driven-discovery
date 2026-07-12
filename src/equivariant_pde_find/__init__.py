@@ -8,7 +8,6 @@ partial differential operators for PDE discovery in 2-D domains.
 from . import derivatives
 from . import evaluation
 from . import library
-from . import library_mapping
 from . import markdown_tables
 from . import multigraph_operators
 from . import regression
