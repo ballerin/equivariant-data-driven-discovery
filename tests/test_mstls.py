@@ -280,14 +280,21 @@ def test_mstls_upper_bound_prevents_large_spurious():
 
 # ======================================================================
 # Integration tests — MSTLS in sweep pipeline
+#
+# These tests import from scripts/sweep.py and are marked as integration
+# tests.  They are skipped if sweep.py is not importable (e.g. in CI
+# without the scripts directory on the path).
 # ======================================================================
 
+sweep_module = pytest.importorskip("sweep", reason="scripts/sweep.py not available")
 
+
+@pytest.mark.integration
+@pytest.mark.integration
 def test_TrainMSTLS_one_pointwise():
     """sweep_one with algorithm='mstls' on synthetic pointwise-like data."""
     rng = np.random.default_rng(123)
     n, d = 1000, 10
-    # Use column-normalized matrix so lambda grid is well-scaled
     Theta = rng.standard_normal((n, d))
     Theta = Theta / np.sqrt(np.sum(Theta ** 2, axis=0))[np.newaxis, :]
     w_true = np.zeros(d)
@@ -295,18 +302,17 @@ def test_TrainMSTLS_one_pointwise():
     w_true[3] = -0.5
     Ft = Theta @ w_true
 
-    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-    sys.path.insert(0, os.path.join(SCRIPT_DIR, "..", "scripts"))
-    from sweep import sweep_one  # type: ignore[import-not-found]
+    from sweep import sweep_one
 
     n_active, w, lam_out = sweep_one(Theta, Ft, w_true, 0.0, 0.0, "mstls")
     assert n_active >= 2, f"n_active={n_active}, w={w}"
     assert lam_out > 0
-    # With column-normalized data, MSTLS should recover coefficients well
     assert abs(w[0] - 1.0) < 0.2
     assert abs(w[3] + 0.5) < 0.2
 
 
+@pytest.mark.integration
+@pytest.mark.integration
 def test_TrainMSTLS_one_weak_form():
     """sweep_one with algorithm='mstls' on synthetic weak-form-like data."""
     rng = np.random.default_rng(456)
@@ -318,9 +324,7 @@ def test_TrainMSTLS_one_weak_form():
     w_true[5] = -2.0
     b = G @ w_true + 0.005 * rng.standard_normal(n)
 
-    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-    sys.path.insert(0, os.path.join(SCRIPT_DIR, "..", "scripts"))
-    from sweep import sweep_one  # type: ignore[import-not-found]
+    from sweep import sweep_one
 
     n_active, w, lam_out = sweep_one(G, b, w_true, 0.0, 0.0, "mstls")
     assert n_active >= 2, f"n_active={n_active}, w={w}"
@@ -329,14 +333,16 @@ def test_TrainMSTLS_one_weak_form():
     assert abs(w[5] + 2.0) < 0.3
 
 
+@pytest.mark.integration
+@pytest.mark.integration
 def test_TrainMSTLS_cli_accepts_mstls():
     """Verify that --algorithms mstls is accepted by the CLI parser."""
-    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-    sys.path.insert(0, os.path.join(SCRIPT_DIR, "..", "scripts"))
-    from sweep import main as sweep_main  # type: ignore[import-not-found]
+    from sweep import main as sweep_main
     assert True  # import succeeded
 
 
+@pytest.mark.integration
+@pytest.mark.integration
 def test_mstls_vs_strridge_clean():
     """MSTLS and STRidge should both recover the true model on clean data."""
     rng = np.random.default_rng(789)
@@ -348,9 +354,7 @@ def test_mstls_vs_strridge_clean():
     w_true[7] = -1.2
     Ft = Theta @ w_true
 
-    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-    sys.path.insert(0, os.path.join(SCRIPT_DIR, "..", "scripts"))
-    from sweep import sweep_one  # type: ignore[import-not-found]
+    from sweep import sweep_one
 
     # STRidge
     _, w_s, _ = sweep_one(Theta, Ft, w_true, 1e-5, 0.05, "strridge")

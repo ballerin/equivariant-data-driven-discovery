@@ -28,6 +28,11 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: tests that require the scripts/ directory (e.g. sweep.py)",
+    "slow: tests that take more than a few seconds",
+]
+pythonpath = ["scripts"]
 
 [tool.black]
 line-length = 100
