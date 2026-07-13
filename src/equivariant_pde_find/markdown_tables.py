@@ -435,7 +435,7 @@ def build_pointwise_table(rows, backend, backend_label):
         ("multigraphs", "Multigraphs"),
     ]:
         for n, nl in [("0.0", "Clean"), ("0.02", "2%"), ("0.05", "5%")]:
-            for a, al in [("strridge", "STRidge"), ("mstls", "MSTLS"), ("rfe", "RFE"), ("brute", "Brute-force")]:
+            for a, al in [("stride", "STRidge"), ("mstls", "MSTLS"), ("rfe", "RFE"), ("brute", "Brute-force")]:
                 b = _best_in_lib(rows, lib, n, "pointwise", backend, a)
                 if b is None:
                     continue
@@ -471,7 +471,7 @@ def build_weak_table(rows, backend, backend_label):
     ]:
         for n, nl in [("0.0", "Clean"), ("0.02", "2%"), ("0.05", "5%")]:
             for mtd, ibp in [("weak_direct", "no"), ("weak_ibp", "yes")]:
-                for a, al in [("strridge", "STRidge"), ("mstls", "MSTLS"), ("rfe", "RFE"), ("brute", "Brute-force")]:
+                for a, al in [("stride", "STRidge"), ("mstls", "MSTLS"), ("rfe", "RFE"), ("brute", "Brute-force")]:
                     b = _best_in_lib(rows, lib, n, mtd, backend, a)
                     if b is None:
                         continue
@@ -636,7 +636,7 @@ def build_anisotropic_detailed_table(rows, method, method_label, backend, backen
         ("multigraphs", "Multigraphs"),
     ]:
         for n, nl in [("0.0", "Clean"), ("0.02", "2%"), ("0.05", "5%")]:
-            for alg, alg_label in [("strridge", "STRidge"), ("mstls", "MSTLS"), ("rfe", "RFE")]:
+            for alg, alg_label in [("stride", "STRidge"), ("mstls", "MSTLS"), ("rfe", "RFE")]:
                 for pt, pd in PROFILE_ORDER:
                     plabel = PROFILE_LABELS.get((pt, pd), f"{pt}/{pd}")
                     g = [

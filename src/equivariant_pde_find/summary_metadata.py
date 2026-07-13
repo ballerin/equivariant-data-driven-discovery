@@ -36,7 +36,7 @@ NOISE_LABELS = {
 }
 
 ALGORITHM_LABELS = {
-    "strridge": "STRidge",
+    "stride": "STRidge",
     "sr3": "SR3",
     "mstls": "MSTLS",
     "rfe": "RFE",

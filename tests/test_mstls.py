@@ -343,7 +343,7 @@ def test_TrainMSTLS_cli_accepts_mstls():
 
 @pytest.mark.integration
 @pytest.mark.integration
-def test_mstls_vs_strridge_clean():
+def test_mstls_vs_stride_clean():
     """MSTLS and STRidge should both recover the true model on clean data."""
     rng = np.random.default_rng(789)
     n, d = 800, 10
@@ -357,7 +357,7 @@ def test_mstls_vs_strridge_clean():
     from sweep import sweep_one
 
     # STRidge
-    _, w_s, _ = sweep_one(Theta, Ft, w_true, 1e-5, 0.05, "strridge")
+    _, w_s, _ = sweep_one(Theta, Ft, w_true, 1e-5, 0.05, "stride")
     # MSTLS
     _, w_m, _ = sweep_one(Theta, Ft, w_true, 0.0, 0.0, "mstls")
 

@@ -9,15 +9,6 @@ This repository is intended as reference for the paper "Equivariant PDE discover
 
 The implementation provides several differentiation backends, library building strategies and regression algorithms, so experiments can trade accuracy for noise-robustness and an ablation study can be performed. Details on the implemented methods can be found below.
 
-## Setup
-
-Install in editable mode:
-
-    pip install -e .
-
-This makes the ``equivariant_pde_find`` package importable from anywhere.
-Scripts add ``src/`` to ``sys.path`` so they also work without a pip install.
-
 ## Motivation
 The code exploits the complete classification of the multigraph-operators from Ballerin & Grong [2]: a minimal, complete, $O(2)$-equivariant basis of polynomial nonlinear partial differential operators. The general aim of the research is to show that whenever the underlying dynamics has the additional assumption of $O(2)$-equivariance, introducing bias in the form of a complete and non-redundant library of multigraph operators yields better recovery when deducing the generating PDE.
 
@@ -35,14 +26,25 @@ Two differentiation backends are available:
 - **Polynomial stencils** (local least-squares): fit a 2-D polynomial on a $(2r+1)\times(2r+1)$ stencil at each grid point. More noise-robust than spectral at the cost of a small approximation bias.
 
 Several regression algorithms:
-- STridge, originally from PDE-FIND [3];
-- SR3, TODO. (maybe will be removed)
-- MSTLS, as described in [4].
+- STRidge, originally from PDE-FIND [3];
+- MSTLS, as described in [4];
+- RFE (recursive feature elimination);
+- Brute-force exhaustive search;
+- Oracle (ground-truth support).
 
-### Pipeline
+## Pipeline
 
 The recommended workflow has four stages: generate data, run all sweeps,
 extract the best results.
+
+### Setup
+
+Install in editable mode:
+
+    pip install -e .
+
+This makes the ``equivariant_pde_find`` package importable from anywhere.
+Scripts in the ``scripts/`` directory automatically add ``src/`` to ``sys.path`` so they also work without a pip install.
 
 #### 1. Generate simulation data
 
@@ -55,7 +57,10 @@ python scripts/generate_data.py
 To generate only specific equations or noise levels:
 
 ```bash
+# Generate only Allen-Cahn and Swift-Hohenberg equations
 python scripts/generate_data.py --equations ac sh
+
+# Generate only noise levels 0.0 and 0.02
 python scripts/generate_data.py --noise 0.0 0.02
 ```
 
@@ -72,15 +77,15 @@ python scripts/sweep.py
 Targeted sweeps for faster iteration:
 
 ```bash
-# Core multigraphs vs standard comparison (pointwise only, STRidge only)
-python scripts/sweep.py --methods pointwise --algorithms strridge --libraries multigraphs standard
+# Multigraph library vs PDE-FIND library comparison (pointwise only, STRidge only)
+python scripts/sweep.py --methods pointwise --algorithms stride --libraries multigraph pdefind
 
 # Noise-robustness comparison (weak vs pointwise, multigraphs only)
 python scripts/sweep.py \
     --equations sh ks_chaos \
     --noise 0.02 0.05 \
     --methods pointwise weak_direct weak_ibp \
-    --libraries multigraphs
+    --libraries multigraph
 
 # With post-hoc noise injection and spectral low-pass prefiltering
 python scripts/sweep.py --post-hoc-noise 0.02 0.05 --spectral-cutoff 3.0
@@ -89,7 +94,7 @@ python scripts/sweep.py --post-hoc-noise 0.02 0.05 --spectral-cutoff 3.0
 python scripts/sweep.py --algorithms mstls --mstls-alpha 0.0 0.25 0.5
 
 # Polynomial jet library only
-python scripts/sweep.py --libraries polynomial_jet
+python scripts/sweep.py --libraries polyjet
 
 # WSINDy library only
 python scripts/sweep.py --libraries wsindy
@@ -103,8 +108,8 @@ Key CLI options for `sweep.py`:
 | Flag | Default | Description |
 |---|---|---|
 | `--methods` | `pointwise weak_direct weak_ibp` | Library evaluation methods |
-| `--algorithms` | `strridge sr3 mstls` | Regression algorithms (`strridge`, `sr3`, `mstls`) |
-| `--libraries` | `multigraphs standard polynomial_jet wsindy` | Library types (`multigraphs`, `standard`, `polynomial_jet`, `wsindy`) |
+| `--algorithms` | `stride mstls rfe` | Regression algorithms (`stride`, `mstls`, `rfe`, `brute`, `oracle`) |
+| `--libraries` | `multigraph pdefind polyjet wsindy` | Library types (`multigraph`, `mod_multigraph`, `pdefind`, `polyjet`, `wsindy`, `mwsindy`) |
 | `--backends` | `spectral polynomial` | Differentiation backends |
 | `--equations` | all | Filter by equation name prefix |
 | `--noise` | all | Filter by noise level (e.g. `0.0 0.02 0.05`) |
@@ -204,7 +209,7 @@ Notice that in general the terms in the library are not linearly independent. In
 | Multigraph | multigraph operators | 20 | ✅ | ❌ | ✅ |
 | Modified Multigraph | multigraph operators | 20 | ✅ | ~ | ✅ |
 
-## Equivariant operator library — canonical ordering
+## Multigraph operator library — O(2)-equivariant
 
 `get_operators(max_p, max_n)` returns operators in a **fixed three-level
 lexicographic order**:
@@ -241,6 +246,39 @@ For `get_operators(max_p=2, max_n=3)` the 20 operators are, in order:
 | 17 | 2 | 3 | `f·⟨∇Δf,∇f⟩` |
 | 18 | 2 | 3 | `‖∇f‖²·Δf` |
 | 19 | 2 | 3 | `∇²f(∇f,∇f)` |
+
+### Modified multigraph library
+
+We have also introduced a modified version of the multigraph library, which replaces 6 basis elements with elements that behave better under IBP in the weak formulation. The modified library is also O(2)-equivariant, non-redundant, and linearly independent.
+
+For `get_mod_multigraph_operators(max_p=2, max_n=3)` the 20 operators are, in order:
+
+| Index | p | k | Description | Replaces |
+|-------|---|---|-------------|----------|
+| 0  | 0 | 0 | `1` | — |
+| 1  | 0 | 1 | `f` | — |
+| 2  | 0 | 2 | `f²` | — |
+| 3  | 0 | 3 | `f³` | — |
+| 4  | 1 | 1 | `Δf` | — |
+| 5  | 1 | 2 | `Δf²` | `f·Δf` |
+| 6  | 1 | 2 | `‖∇f‖²` | — |
+| 7  | 1 | 3 | `f·‖∇f‖²` | — |
+| 8  | 1 | 3 | `Δf³` | `f²·Δf` |
+| 9  | 2 | 1 | `Δ²f` | — |
+| 10 | 2 | 2 | `Δf·Δf` | — |
+| 11 | 2 | 2 | `Δ²f²` | `f·Δ²f` |
+| 12 | 2 | 2 | `Δ‖∇f‖²` | `⟨∇Δf,∇f⟩` |
+| 13 | 2 | 2 | `‖∇²f‖²` | — |
+| 14 | 2 | 3 | `f·Δf·Δf` | — |
+| 15 | 2 | 3 | `f·‖∇²f‖²` | — |
+| 16 | 2 | 3 | `Δ(f·‖∇f‖²)` | `f·⟨∇Δf,∇f⟩` |
+| 17 | 2 | 3 | `Δ²f³` | `f²·Δ²f` |
+| 18 | 2 | 3 | `‖∇f‖²·Δf` | — |
+| 19 | 2 | 3 | `∇²f(∇f,∇f)` | — |
+
+The 6 replaced operators are those of the form f·(derivative) which are replaced by Δ(something) or Δ²(something) forms that are better suited for integration by parts in the weak formulation.
+
+
 
 ## Error metric
 
