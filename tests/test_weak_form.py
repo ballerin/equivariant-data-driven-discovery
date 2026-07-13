@@ -13,6 +13,12 @@ CODE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
 from equivariant_pde_find.library import weak_form as wf
+from equivariant_pde_find.simulations.weak_data import (
+    make_weak_regression_data,
+    weak_form_from_snapshots,
+    rescale_coefficients,
+    _rescale_factors,
+)
 from equivariant_pde_find import library
 
 
@@ -139,7 +145,7 @@ def test_make_weak_regression_data_random(test_field):
     ft_snaps = np.array([ft, ft + 0.05, ft - 0.05])
     idx_sets = [np.arange(50) for _ in range(3)]
 
-    Theta, b, descs, _rinfo = wf.make_weak_regression_data(
+    Theta, b, descs, _rinfo = make_weak_regression_data(
         f_snaps, ft_snaps, idx_sets, L, L, max_p=2, max_n=3, m=6, p=4, sample_stride=0
     )
     assert Theta.shape == (150, 20)
@@ -153,7 +159,7 @@ def test_make_weak_regression_data_strided(test_field):
     f_snaps = np.array([f, f])
     ft_snaps = np.array([ft, ft])
 
-    Theta, b, descs, _rinfo = wf.make_weak_regression_data(
+    Theta, b, descs, _rinfo = make_weak_regression_data(
         f_snaps, ft_snaps, [], L, L, max_p=2, max_n=3, m=6, p=4, sample_stride=4
     )
     # 2 snaps × ((N-2m)//4)² query points
@@ -400,10 +406,10 @@ def test_make_weak_regression_data_ibp_plumbing(test_field):
     ft_snaps = np.array([ft, ft])
     idx_sets = [np.arange(30) for _ in range(2)]
 
-    Theta_ibp, b_ibp, descs, _rinfo = wf.make_weak_regression_data(
+    Theta_ibp, b_ibp, descs, _rinfo = make_weak_regression_data(
         f_snaps, ft_snaps, idx_sets, L, L, m=6, p=4, sample_stride=0, use_ibp=True,
     )
-    Theta_dir, b_dir, descs2, _rinfo2 = wf.make_weak_regression_data(
+    Theta_dir, b_dir, descs2, _rinfo2 = make_weak_regression_data(
         f_snaps, ft_snaps, idx_sets, L, L, m=6, p=4, sample_stride=0, use_ibp=False,
     )
 
@@ -535,7 +541,7 @@ def test_rescale_roundtrip():
 
     # Rescale
     gamma_x, gamma_t, gamma_u = 2.0, 3.0, 0.5
-    col_scale, lhs_scale = wf._rescale_factors(gamma_x, gamma_t, gamma_u, max_p, max_n)
+    col_scale, lhs_scale = _rescale_factors(gamma_x, gamma_t, gamma_u, max_p, max_n)
     G_scaled = G * col_scale[np.newaxis, :]
     b_scaled = lhs_scale * b
 
@@ -548,7 +554,7 @@ def test_rescale_roundtrip():
         "col_scale": col_scale, "lhs_scale": lhs_scale,
         "max_p": max_p, "max_n": max_n,
     }
-    w_recovered = wf.rescale_coefficients(w_scaled, rescale_info)
+    w_recovered = rescale_coefficients(w_scaled, rescale_info)
     np.testing.assert_allclose(w_recovered, w_true, rtol=1e-10, atol=1e-10)
 
 
@@ -558,7 +564,7 @@ def test_make_weak_regression_data_rescale():
     ft_snaps = np.random.default_rng(1).standard_normal((2, 32, 32))
     idx_sets = [np.arange(10) for _ in range(2)]
 
-    Theta, b, descs, rinfo = wf.make_weak_regression_data(
+    Theta, b, descs, rinfo = make_weak_regression_data(
         f_snaps, ft_snaps, idx_sets, 1.0, 1.0, m=6, p=4,
         sample_stride=0, rescale=True,
     )
@@ -748,7 +754,7 @@ def test_make_weak_regression_data_no_rescale():
     ft_snaps = np.random.default_rng(1).standard_normal((2, 32, 32))
     idx_sets = [np.arange(10) for _ in range(2)]
 
-    Theta, b, descs, rinfo = wf.make_weak_regression_data(
+    Theta, b, descs, rinfo = make_weak_regression_data(
         f_snaps, ft_snaps, idx_sets, 1.0, 1.0, m=6, p=4,
         sample_stride=0, rescale=False,
     )

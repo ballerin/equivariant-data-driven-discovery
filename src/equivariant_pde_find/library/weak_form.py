@@ -1,23 +1,17 @@
 """
-Weak-form PDE discovery via convolution with compactly-supported test
-functions.
+Weak-form utilities to evlaluate library terms via convolution with
+compactly-supported test functions.
 
-Instead of evaluating the library at individual grid points, each operator
-is integrated against compactly-supported test functions ψ:
+Instead of evaluating the library at individual grid points (pointwise 
+formulation), each operator is integrated against compactly-supported
+test functions ψ:
 
-    G_{ij,k} = ∫ ψ_{ij}(x,y) · N_k[f](x,y)  dx dy
-    b_{ij}   = ∫ ψ_{ij}(x,y) · f_t(x,y)      dx dy
+    G_{ij,k} = ∫ ψ_{ij}(x,y) · N_k[f](x,y)  dx dy   # Space
+    b_{ij}   = ∫ ψ_{ij}(x,y) · f_t(x,y)     dx dy   # Time
 
-where ψ_{ij} is centred at query point (i, j).  The convolution provides
-natural noise averaging: integrating over a support of width (2m+1)² grid
-points reduces the noise standard deviation by a factor of 2m+1.
-
-Supports four library types in weak form (implemented in their respective
-library modules via ``_build_*_weak`` functions):
-  - Equivariant (multigraph-operator) library via ``multigraph._build_multigraph_weak``
-  - PDE-FIND library via ``pdefind._build_pdefind_weak``
-  - WSINDy library (∂^α(f^q)) via ``wsindy._build_wsindy_weak``
-  - Polynomial jet library via ``polyjet._build_polyjet_weak``
+where ψ_{ij} is centred at query point (i, j).  The convolution provides a
+natural noise averaging due to integrating over a support of width 2m+1 in
+both directions.
 
 For the equivariant library, operators like ‖∇f‖² and Δf cannot all be
 rewritten as ∂^α(f^β), so we use a **direct** approach:
@@ -27,11 +21,6 @@ rewritten as ∂^α(f^β), so we use a **direct** approach:
   - Subsample at query points to build (G, b).
 
 Regression is then ran by feeding G and b which replace the pointwise Θ and f_t.
-
-References
-----------
-.. [1] Messenger, D. A. & Bortz, D. M. (2021). Weak SINDy: Galerkin-based
-   data-driven model selection. J. Comput. Phys., 443, 110525.
 """
 
 from functools import lru_cache
@@ -45,27 +34,23 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 
-def _test_function_1d(m, p, dx=1.0):
-    """Build a 1-D polynomial bump test function supported on [-m·dx, m·dx].
+def _test_function_1d(m, p):
+    """Build a 1-D polynomial bump test function supported on [-m, m] in
+    grid-point units (dx=1).
 
-    ψ(x) = (1 - (x / (m·dx))²)^p   for |x| < m·dx,  0 otherwise.
+    ψ(x) = (1 - (x / m)²)^p   for |x| < m,  0 otherwise.
 
     The function is C^{p-1} at the boundary and integrates to a known
     normalisation constant.
 
     Parameters
     ----------
-    m : int
-        Half-support (number of grid points to each side of centre).
-    p : int
-        Polynomial degree.  Higher p → smoother, broader effective support.
-    dx : float
-        Grid spacing.  Default 1.0 returns kernel values on integer grid.
+    m : int - size of half-support (in grid points)
+    p : int - polynomial degree
 
     Returns
     -------
-    kernel : ndarray of shape (2*m + 1,)
-        Values of ψ at grid points −m·dx, …, 0, …, m·dx.
+    kernel : ndarray of shape (2*m + 1,) - values of ψ at grid points
     """
     if m < 2 or p < 1:
         raise ValueError("Require m >= 2, p >= 1.")
@@ -79,23 +64,35 @@ def _test_function_deriv_1d(m, p, order):
     """Return the *order*-th derivative of φ(t) = (1−t²)^p at grid points.
 
     Computed analytically via the polynomial expansion of (1−t²)^p and
-    scaled by 1/m^order to account for d/dx = (1/(m·dx)) · d/dt with
-    dx = 1 (grid-point units).  The result is exact (no finite-difference
-    approximation) and serves as the IBP kernel for linear differential
-    operators.
+    scaled by 1/m^order to account for d/dx = (1/m) · d/dt in grid-point
+    units (dx=1).  The result is exact.
+
+    For meaningful IBP application ``order < p`` is required, otherwise
+    a discontinuity arises at the boundary.  ``order == p`` is borderline
+    (the polynomial still exists but has a jump at t = ±1).
 
     Parameters
     ----------
-    m : int
-    p : int
+    m : int - size of half-support (in grid points)
+    p : int - polynomial degree (must be > order for a valid IBP kernel)
     order : int (≥ 0; 0 returns φ itself)
 
     Returns
     -------
     kernel : ndarray of shape (2*m + 1,)
+
+    Raises
+    ------
+    ValueError
+        If ``order > p`` (the polynomial collapses; derivative is
+        identically zero or otherwise invalid).
     """
+    if order > p:
+        raise ValueError(
+            f"order={order} must be ≤ p={p}"
+        )
     if order == 0:
-        return _test_function_1d(m, p, dx=1.0)
+        return _test_function_1d(m, p)
     # Build polynomial coefficients of (1 − t²)^p = Σ C(p,k)(−1)^k t^{2k}
     coeffs = np.zeros(2 * p + 1)
     for k in range(p + 1):
@@ -130,7 +127,7 @@ def _ibp_laplacian_kernels(m, p):
     kernel_xx : ndarray (2*m+1,) — analytic φ'' (grid-point units)
     kernel_0  : ndarray (2*m+1,) — φ
     """
-    phi = _test_function_1d(m, p, dx=1.0)
+    phi = _test_function_1d(m, p)
     d2 = _test_function_deriv_1d(m, p, 2)
     return d2, phi
 
@@ -152,7 +149,7 @@ def _ibp_bilaplacian_kernels(m, p):
     kernel_xx   : ndarray (2*m+1,) — φ″ (analytic) or D2_φ (discrete, p≤4)
     kernel_0    : ndarray (2*m+1,) — φ
     """
-    phi = _test_function_1d(m, p, dx=1.0)
+    phi = _test_function_1d(m, p)
     if p >= 5:
         # φ ∈ C⁴ — analytic derivatives are accurate
         d2 = _test_function_deriv_1d(m, p, 2)
@@ -286,7 +283,7 @@ def weak_convolution(f, kernel_x, kernel_y):
 
 @lru_cache(maxsize=64)
 def _cached_kernel_1d(m, p):
-    return _test_function_1d(m, p, dx=1.0)
+    return _test_function_1d(m, p)
 
 
 # ---------------------------------------------------------------------------
@@ -385,255 +382,6 @@ def compute_m_scale(G, b):
     col_norms = np.linalg.norm(G, axis=0)
     b_norm = np.linalg.norm(b)
     return col_norms / max(b_norm, 1e-30)
-
-
-# ---------------------------------------------------------------------------
-# Weak regression data (multiple snapshots + optional subsampling)
-# ---------------------------------------------------------------------------
-
-
-def make_weak_regression_data(
-    f_snaps,
-    ft_snaps,
-    idx_sets,
-    Lx,
-    Ly,
-    max_p=2,
-    max_n=3,
-    m=8,
-    p=4,
-    sample_stride=1,
-    use_ibp=False,
-    rescale=False,
-):
-    """Build weak-form regression matrices from a stack of snapshots.
-
-    This mirrors ``make_regression_data`` in ``simulations.py``:
-    for each snapshot, the weak library and weak RHS are computed, and
-    ``n_per_snap`` query points are drawn from the valid interior.
-
-    Parameters
-    ----------
-    f_snaps : ndarray of shape (n_snaps, Nx, Ny)
-    ft_snaps : ndarray of shape (n_snaps, Nx, Ny)
-    idx_sets : list of ndarray
-        Flat indices into the valid (N_valid,) domain for each snapshot.
-    Lx, Ly : float
-    max_p, max_n : int
-    m, p : int
-        Test function parameters.  Ignored when ``rescale=True`` and
-        ``auto_test_function_params`` is able to estimate them from data.
-    sample_stride : int
-        If > 1, subsample the weak grid uniformly with given stride.
-        idx_sets is ignored when sample_stride > 1.
-    use_ibp : bool
-        Forwarded to ``multigraph._build_multigraph_weak``.
-    rescale : bool
-        If True, compute scale-invariance factors (γ_x, γ_t, γ_u) from the
-        first snapshot and apply column/LHS rescaling.  The returned
-        ``Theta_all`` and ``f_t_all`` are scaled so that the solved
-        coefficients must be unscaled via ``rescale_coefficients``.
-
-    Returns
-    -------
-    Theta_all : ndarray of shape (n_total, K)
-    f_t_all : ndarray of shape (n_total,)
-    descriptions : list of K str
-    rescale_info : dict or None
-        ``{"col_scale": ..., "lhs_scale": ..., "meta": ...}`` if
-        ``rescale=True``, else ``None``.
-    """
-    kernel = _cached_kernel_1d(m, p)
-
-    Theta_parts, rhs_parts = [], []
-    descriptions = None
-
-    for snap_idx in range(len(f_snaps)):
-        f = f_snaps[snap_idx]
-        from .multigraph import _build_multigraph_weak
-        Theta_w, descs = _build_multigraph_weak(
-            f, Lx, Ly, max_p, max_n, m=m, p=p, use_ibp=use_ibp,
-        )
-        if descriptions is None:
-            descriptions = descs
-
-        b_w = build_weak_rhs(ft_snaps[snap_idx], kernel_x=kernel, kernel_y=kernel)
-
-        Nx, Ny = f.shape
-        Nv_x, Nv_y = Nx - 2 * m, Ny - 2 * m
-
-        if sample_stride > 1:
-            # Strided uniform grid of query points.
-            ix = np.arange(0, Nv_x, sample_stride)
-            iy = np.arange(0, Nv_y, sample_stride)
-            IX, IY = np.meshgrid(ix, iy, indexing="ij")
-            flat_idx = (IX * Nv_y + IY).ravel()
-            Theta_parts.append(Theta_w[flat_idx, :])
-            rhs_parts.append(b_w[flat_idx])
-        else:
-            # Random indices (provided by caller).
-            idx = idx_sets[snap_idx]
-            Theta_parts.append(Theta_w[idx, :])
-            rhs_parts.append(b_w[idx])
-
-    Theta_all = np.vstack(Theta_parts)
-    f_t_all = np.concatenate(rhs_parts)
-
-    rescale_info = None
-    if rescale:
-        # Compute rescaling factors from first snapshot
-        dx = Lx / f_snaps[0].shape[0]
-        gamma_x, gamma_t, gamma_u = compute_rescaling_scales(
-            f_snaps[0], dx, 1.0, m, m, p, p,
-            max_deriv_spatial=2 * max_p,
-            max_deriv_temporal=1,
-            max_poly_degree=max_n,
-        )
-        col_scale, lhs_scale = _rescale_factors(
-            gamma_x, gamma_t, gamma_u, max_p, max_n,
-        )
-        # Apply column scaling: G_scaled = G * diag(col_scale)
-        Theta_all = Theta_all * col_scale[np.newaxis, :]
-        # Apply LHS scaling: b_scaled = lhs_scale * b
-        f_t_all = lhs_scale * f_t_all
-        rescale_info = {
-            "gamma_x": gamma_x,
-            "gamma_t": gamma_t,
-            "gamma_u": gamma_u,
-            "col_scale": col_scale,
-            "lhs_scale": lhs_scale,
-            "max_p": max_p,
-            "max_n": max_n,
-        }
-
-    return Theta_all, f_t_all, descriptions, rescale_info
-
-
-def _rescale_factors(gamma_x, gamma_t, gamma_u, max_p, max_n):
-    """Compute per-column and LHS scaling factors for rescaling.
-
-    Returns
-    -------
-    col_scale : ndarray, shape (K,)
-        Column scaling factors: G_scaled = G * diag(col_scale).
-    lhs_scale : float
-        LHS scaling factor: b_scaled = lhs_scale * b.
-    """
-    from ..multigraph_operators import get_operator_metadata
-
-    meta = get_operator_metadata(max_p, max_n)
-    col_scale = np.empty(len(meta))
-    for j, (p, k) in enumerate(meta):
-        # Column j: N_j[ũ] = γ_u^{-k} γ_x^{-2p} N_j[u]
-        col_scale[j] = gamma_u ** (-k) * gamma_x ** (-2 * p)
-    # LHS: ∂_t̃ ũ = γ_u^{-1} γ_t^{-1} ∂_t u
-    lhs_scale = gamma_u ** (-1) * gamma_t ** (-1)
-    return col_scale, lhs_scale
-
-
-def rescale_coefficients(w_scaled, rescale_info):
-    """Recover original-scale coefficients from scaled solution.
-
-    Parameters
-    ----------
-    w_scaled : ndarray, shape (K,)
-        Coefficients solved on rescaled (G_scaled, b_scaled).
-    rescale_info : dict
-        Dictionary returned by ``make_weak_regression_data`` when
-        ``rescale=True``.
-
-    Returns
-    -------
-    w : ndarray, shape (K,)
-        Coefficients in original (unscaled) coordinates.
-    """
-    col_scale = np.asarray(rescale_info["col_scale"])
-    lhs_scale = float(rescale_info["lhs_scale"])
-    return w_scaled * col_scale / lhs_scale
-
-
-# ---------------------------------------------------------------------------
-# Convenience: full pipeline from simulation output
-# ---------------------------------------------------------------------------
-
-
-def weak_form_from_snapshots(
-    snapshots,
-    times,
-    Lx,
-    Ly,
-    max_p=2,
-    max_n=3,
-    m=8,
-    p=4,
-    n_per_snap=200,
-    skip_fraction=0.0,
-    sample_stride=1,
-    seed=0,
-    use_ibp=False,
-    rescale=False,
-    auto_params=False,
-):
-    """One-stop: produce (G, b) for weak-form regression from raw snapshots.
-
-    This wraps ``make_regression_data`` and ``make_weak_regression_data``
-    into a single call.
-
-    Parameters
-    ----------
-    snapshots : ndarray of shape (n_saved, Nx, Ny)
-    times : ndarray of shape (n_saved,)
-    Lx, Ly : float
-    max_p, max_n : int
-    m, p : int
-        Ignored when ``auto_params=True``.
-    n_per_snap : int
-        Ignored when sample_stride > 1.
-    skip_fraction : float
-    sample_stride : int
-    seed : int
-    use_ibp : bool
-        Forwarded to ``multigraph._build_multigraph_weak``.
-    rescale : bool
-        If True, apply scale-invariance rescaling to G and b.
-    auto_params : bool
-        If True, estimate (m, p) from the data via the changepoint method.
-
-    Returns
-    -------
-    G : ndarray of shape (n_total, K)
-    b : ndarray of shape (n_total,)
-    descriptions : list of K str
-    rescale_info : dict or None
-    """
-    from ..simulations import make_regression_data
-
-    # Auto-select test function params from the data
-    if auto_params:
-        dx = Lx / snapshots.shape[1]
-        dt_est = float(np.mean(np.diff(times))) if len(times) > 1 else 1.0
-        m_x, p_x, m_t, p_t = auto_test_function_params(
-            snapshots, dx, dt_est, max_deriv_spatial=2 * max_p,
-        )
-        m, p = m_x, p_x  # use spatial params for the 2D test functions
-
-    f_snaps, ft_snaps, idx_sets, _dt = make_regression_data(
-        snapshots, times, n_per_snap=n_per_snap, skip_fraction=skip_fraction, seed=seed
-    )
-    return make_weak_regression_data(
-        f_snaps,
-        ft_snaps,
-        idx_sets,
-        Lx,
-        Ly,
-        max_p=max_p,
-        max_n=max_n,
-        m=m,
-        p=p,
-        sample_stride=sample_stride,
-        use_ibp=use_ibp,
-        rescale=rescale,
-    )
 
 
 # ---------------------------------------------------------------------------
