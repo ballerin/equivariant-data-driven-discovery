@@ -357,7 +357,7 @@ def test_mstls_vs_stride_clean():
     from sweep import sweep_one
 
     # STRidge
-    _, w_s, _ = sweep_one(Theta, Ft, w_true, 1e-5, 0.05, "stride")
+    _, w_s, _ = sweep_one(Theta, Ft, w_true, 1e-5, 0.05, "stridge")
     # MSTLS
     _, w_m, _ = sweep_one(Theta, Ft, w_true, 0.0, 0.0, "mstls")
 

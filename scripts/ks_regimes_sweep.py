@@ -19,7 +19,7 @@ controlled negative example showing that spatiotemporal diversity is required.
 Usage
 -----
     cd paper-experimental/code
-    python scripts/ks_regimes_sweep.py [--algorithm strridge|sr3] [--name TAG]
+    python scripts/ks_regimes_sweep.py [--algorithm stridge|sr3] [--name TAG]
 """
 
 import argparse
@@ -195,7 +195,7 @@ def build_matrices(snapshots, times, n_per_snap, L, skip_fraction):
     return mats, Ft, desc_eq, desc_std
 
 
-def sweep_one(Theta, Ft, true_eq, lam, d_tol, algorithm="strridge"):
+def sweep_one(Theta, Ft, true_eq, lam, d_tol, algorithm="stridge"):
     """Run regression and return (n_active, fp, fn, exact_recovery, max_coeff_err)."""
     act = np.abs(true_eq) > 1e-10
     w   = TrainSR3(Theta, Ft, lam, d_tol) if algorithm == "sr3" else TrainSTRidge(Theta, Ft, lam, d_tol)
@@ -216,9 +216,9 @@ def main():
     )
     parser.add_argument(
         "--algorithm",
-        choices=["strridge", "sr3"],
-        default="strridge",
-        help="Regression algorithm (default: strridge).",
+        choices=["stridge", "sr3"],
+        default="stridge",
+        help="Regression algorithm (default: stride).",
     )
     parser.add_argument(
         "--name",

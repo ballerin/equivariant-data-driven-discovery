@@ -48,11 +48,12 @@ from equivariant_pde_find.equation_configs import (  # noqa: E402
     true_pme_mod_multigraph, normalize_eq_name,
 )
 from equivariant_pde_find.library import (  # noqa: E402
-    build_polyjet_library,
+    build_polyjet_library, build_multigraph_library,
+    build_mod_multigraph_library,
 )
 from equivariant_pde_find.regression import TrainSTRidge  # noqa: E402
 from equivariant_pde_find.simulations import make_regression_data  # noqa: E402
-from equivariant_pde_find.library import weak_form as wf  # noqa: E402
+from equivariant_pde_find.library.weak_form import build_weak_rhs  # noqa: E402
 
 RESULTS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "results"))
 DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "data"))
@@ -118,16 +119,16 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
             f = f_snaps[s]
             ft = ft_snaps[s]
             if library == "multigraph":
-                G, desc = wf.build_weak_multigraph_library(
-                    f, Lx, Ly, max_p=2, max_n=3, m=m, p=WEAK_P,
-                    use_ibp=use_ibp,
+                G, desc = build_multigraph_library(
+                    f, Lx, Ly, max_p=2, max_n=3,
+                    formulation="weak", m=m, p=WEAK_P, use_ibp=use_ibp,
                 )
             else:  # mod_multigraph
-                G, desc = wf.build_weak_mod_multigraph_library(
-                    f, Lx, Ly, max_p=2, max_n=3, m=m, p=WEAK_P,
-                    use_ibp=use_ibp,
+                G, desc = build_mod_multigraph_library(
+                    f, Lx, Ly, max_p=2, max_n=3,
+                    formulation="weak", m=m, p=WEAK_P, use_ibp=use_ibp,
                 )
-            b_w = wf.build_weak_rhs(ft, m=m, p=WEAK_P)
+            b_w = build_weak_rhs(ft, m=m, p=WEAK_P)
 
             Nx, Ny = f.shape
             Nv_x, Nv_y = Nx - 2 * m, Ny - 2 * m
@@ -279,11 +280,13 @@ def main():
                 for lib in libraries:
                     # Get the correct desc for this lib (cheap: just build on one snapshot)
                     if lib == "multigraph":
-                        _, desc_lib = wf.build_weak_multigraph_library(
-                            f_snaps[0], Lx, Ly, max_p=2, max_n=3, m=4, p=WEAK_P, use_ibp=False)
+                        _, desc_lib = build_multigraph_library(
+                            f_snaps[0], Lx, Ly, max_p=2, max_n=3,
+                            formulation="weak", m=4, p=WEAK_P, use_ibp=False)
                     else:
-                        _, desc_lib = wf.build_weak_mod_multigraph_library(
-                            f_snaps[0], Lx, Ly, max_p=2, max_n=3, m=4, p=WEAK_P, use_ibp=False)
+                        _, desc_lib = build_mod_multigraph_library(
+                            f_snaps[0], Lx, Ly, max_p=2, max_n=3,
+                            formulation="weak", m=4, p=WEAK_P, use_ibp=False)
                     if is_ch:
                         true_w = TRUTH_FNS[lib][true_fn_key](desc_lib, eps=ch_eps)
                     elif true_fn_key == "swift_hohenberg":
@@ -329,6 +332,13 @@ def main():
                         )
                         dt_ms = (time.time() - t_row) * 1000
 
+                        # Debug: if result is missing expected keys
+                        if "E" not in eval_result:
+                            print(f"WARNING: eval_result missing 'E' key. "
+                                  f"Keys: {sorted(eval_result.keys())}. "
+                                  f"lib={lib} eq={eq_name} noise={noise_label}",
+                                  flush=True)
+
                         row = dict(
                             equation=eq_name,
                             noise=noise_label,
@@ -338,11 +348,11 @@ def main():
                             weak_m=m_val,
                             lam=1e-6,
                             d_tol=d_tol,
-                            n_active=eval_result["n_active"],
-                            fp=eval_result["fp"],
-                            fn=eval_result["fn"],
-                            exact_recovery=eval_result["exact_recovery"],
-                            E=eval_result["E"],
+                            n_active=eval_result.get("n_active", 0),
+                            fp=eval_result.get("fp", float("nan")),
+                            fn=eval_result.get("fn", float("nan")),
+                            exact_recovery=eval_result.get("exact_recovery", 0),
+                            E=eval_result.get("E_coeff", eval_result.get("E", float("nan"))),
                             cond_theta=cond_val,
                             ch_eps=(ch_eps if ch_eps else ""),
                             time_ms=f"{dt_ms:.1f}",

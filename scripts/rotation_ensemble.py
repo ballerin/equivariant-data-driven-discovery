@@ -14,7 +14,7 @@ Usage
         --data data/swift_hohenberg_noise2pct.npz \\
         --libraries equivariant \\
         --methods pointwise \\
-        --algorithms strridge \\
+        --algorithms stridge \\
         --backends spectral
 
     # Full sweep: all libraries, methods, backends
@@ -202,8 +202,8 @@ def main():
     )
     parser.add_argument(
         "--algorithms", nargs="+",
-        default=["strridge"],
-        choices=["strridge", "mstls", "rfe"],
+        default=["stridge"],
+        choices=["stridge", "mstls", "rfe"],
     )
     parser.add_argument(
         "--backends", nargs="+",
@@ -423,7 +423,7 @@ def main():
                     # Build iteration list
                     iterations = []
                     for alg in args.algorithms:
-                        if alg == "strridge":
+                        if alg == "stridge":
                             for lam in lams_grid:
                                 for d_tol in d_tols_grid:
                                     iterations.append(

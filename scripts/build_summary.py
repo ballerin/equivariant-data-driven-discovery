@@ -51,8 +51,19 @@ from equivariant_pde_find.summary_metadata import (  # noqa: E402
 from equivariant_pde_find.markdown_tables import (  # noqa: E402
     MarkdownTable, _read_log_info,
     build_standard_summary_table, build_pointwise_table, build_weak_table,
-    build_oracle_table,
+    build_oracle_table, build_ablation_table,
 )
+
+# Normalize library names from sweep.py output to the legacy names expected
+# by markdown_tables.py (which was written for older sweep output formats).
+_LIB_NAME_NORMALIZE = {
+    "multigraph": "multigraphs",
+    "mod_multigraph": "multigraphs",
+    "pdefind": "standard",
+    "polyjet": "polynomial_jet",
+    "wsindy": "wsindy",        # unchanged but explicit
+    "mwsindy": "mwsindy",
+}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -69,6 +80,18 @@ def build_markdown(csv_paths, equation=None):
                 row["equation"] = normalize_eq_name(row["equation"])
                 if row.get("library") == "equivariant":
                     row["library"] = "multigraphs"
+                # Preserve original library name for display before normalizing
+                row["library_original"] = row["library"]
+                # Normalize current sweep.py library names to legacy names
+                row["library"] = _LIB_NAME_NORMALIZE.get(
+                    row["library"], row["library"],
+                )
+                # Normalize legacy algorithm spelling (strridge → stridge)
+                if row.get("algorithm") == "strridge":
+                    row["algorithm"] = "stridge"
+                # Some sweeps omit algorithm (all rows use STRidge)
+                if "algorithm" not in row:
+                    row["algorithm"] = "stridge"
                 # Legacy CSVs use "E", new CSVs use "E_coeff"
                 if "E" in row and "E_coeff" not in row:
                     row["E_coeff"] = row["E"]
@@ -108,6 +131,28 @@ def build_markdown(csv_paths, equation=None):
 
     # ── Summary table ─────────────────────────────────────────────────
     summary_t = build_standard_summary_table(rows)
+
+    # ── Ablation tables ───────────────────────────────────────────────
+    ablation_tables = build_ablation_table(rows)
+    ablation_sections = []
+    for noise_label in ["Clean", "2%", "5%"]:
+        at = ablation_tables.get(noise_label)
+        if at is not None:
+            ablation_sections.append(
+                f"### {noise_label} (0% noise)\n"
+                if noise_label == "Clean"
+                else f"### {noise_label} noise\n"
+            )
+            ablation_sections.append(f"{at.render()}\n")
+    ablation_block = (
+        "\n## Ablation\n\n"
+        "Each row shows the best configuration for a (library, algorithm) "
+        "pair, ranked from best to worst (exact recovery, then fn, then fp, "
+        "then E_coeff).  "
+        "vs. best = (E \u2212 E_best) / E_best \u00d7 100% "
+        "(\u2717 if method does not achieve exact recovery).\n\n"
+        + "\n".join(ablation_sections)
+    ) if ablation_sections else ""
 
     # ── Pointwise tables ──────────────────────────────────────────────
     pw_spec = build_pointwise_table(rows, "spectral", "Spectral derivatives")
@@ -162,6 +207,7 @@ or standard terms (PolyJet basis)
 
 {summary_t.render()}
 
+{ablation_block}
 ## Pointwise formulation
 
 ### Spectral derivatives

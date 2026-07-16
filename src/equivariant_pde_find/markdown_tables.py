@@ -125,7 +125,11 @@ class MarkdownTable:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def best_in_group(group_rows):
-    """Lexicographic best: exact → fp → fn → E_coeff.
+    """Lexicographic best: exact → fn → fp → E_coeff.
+
+    False negatives (missing terms) are penalised before false positives
+    (spurious terms), because failing to recover the support is worse
+    than adding extra candidate terms.
 
     Parameters
     ----------
@@ -139,10 +143,10 @@ def best_in_group(group_rows):
     """
     def key(r):
         exact = 0 if str(r.get("exact_recovery", "0")) == "1" else 1
-        fp = float(r["fp"]) if r.get("fp", "nan") != "nan" else float("inf")
         fn = float(r["fn"]) if r.get("fn", "nan") != "nan" else float("inf")
+        fp = float(r["fp"]) if r.get("fp", "nan") != "nan" else float("inf")
         e = float(r["E_coeff"]) if r.get("E_coeff", "nan") != "nan" else float("inf")
-        return (exact, fp, fn, e)
+        return (exact, fn, fp, e)
     return min(group_rows, key=key)
 
 
@@ -282,8 +286,17 @@ def _read_log_footer(csv_path):
 # Higher-level table builders (used by build_summary, build_anisotropic_summary)
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _best_in_lib(rows, lib, noise, method, backend, algorithm=None):
-    """Filter rows by library/noise/method/backend/algorithm, return best."""
+def _best_in_lib(rows, lib, noise, method, backend, algorithm=None,
+                 lib_original=None):
+    """Filter rows by library/noise/method/backend/algorithm, return best.
+
+    Parameters
+    ----------
+    lib_original : str or None
+        If not None, additionally filter by ``library_original``.
+        Use ``"multigraph"`` to exclude ``mod_multigraph`` rows, or
+        ``"mod_multigraph"`` to restrict to mod_multigraph only.
+    """
     grp = [
         r for r in rows
         if r["library"] == lib
@@ -292,6 +305,10 @@ def _best_in_lib(rows, lib, noise, method, backend, algorithm=None):
         and r["backend"] == backend
         and r.get("fp", "nan") != "nan"
     ]
+    if lib_original == "mod_multigraph":
+        grp = [r for r in grp if r.get("library_original", "") == "mod_multigraph"]
+    elif lib_original == "multigraph":
+        grp = [r for r in grp if r.get("library_original", "") != "mod_multigraph"]
     if algorithm:
         grp = [r for r in grp if r.get("algorithm", "") == algorithm]
     return best_in_group(grp) if grp else None
@@ -370,11 +387,11 @@ def build_standard_summary_table(rows):
     t = MarkdownTable(
         [
             "Noise", "Formulation", "Backend", "Eq wins?",
-            "Multigraphs fp/fn", "Mg E_coeff", "Mg E_data",
+            "Multigraphs fp/fn", "Mg E_coeff", "Mult. best", "Mg E_data",
             "Std best", "Std fp/fn", "Std E_coeff", "Std E_data",
             "E_data floor",
         ],
-        align=["left"] + ["center"] * 3 + ["left"] * 7 + ["right"],
+        align=["left"] + ["center"] * 3 + ["left"] * 8 + ["right"],
     )
 
     for noise, noise_label in [("0.0", "Clean"), ("0.02", "2%"), ("0.05", "5%")]:
@@ -393,6 +410,13 @@ def build_standard_summary_table(rows):
 
                 eq_fpf = f"{eq['fp']}/{eq['fn']}{status_mark(eq)}" if eq else "\u2014"
                 eq_E = fmt_val(eq["E_coeff"]) if eq else "\u2014"
+                eq_best = "\u2014"
+                if eq and not is_failure(eq):
+                    lib_orig = eq.get("library_original", eq.get("library", ""))
+                    alg_label = ALGORITHM_LABELS.get(
+                        eq.get("algorithm", ""), eq.get("algorithm", ""),
+                    )
+                    eq_best = f"{lib_orig}/{alg_label}"
                 eq_E_data = fmt_val(eq.get("E_data", "")) if eq else "\u2014"
 
                 if ne is None:
@@ -414,7 +438,7 @@ def build_standard_summary_table(rows):
 
                 t.add_row(
                     noise_label, method_label, be_label, winner,
-                    eq_fpf, eq_E, eq_E_data, ne_lib, ne_fpf, ne_E, ne_E_data, oracle_str,
+                    eq_fpf, eq_E, eq_best, eq_E_data, ne_lib, ne_fpf, ne_E, ne_E_data, oracle_str,
                 )
     return t
 
@@ -428,15 +452,17 @@ def build_pointwise_table(rows, backend, backend_label):
         ],
     )
 
-    for lib, lib_label in [
-        ("standard", "PDE-FIND"),
-        ("wsindy", "WSINDy"),
-        ("polynomial_jet", "PolyJet"),
-        ("multigraphs", "Multigraphs"),
+    for lib, lib_label, lib_orig in [
+        ("standard", "PDE-FIND", None),
+        ("wsindy", "WSINDy", None),
+        ("polynomial_jet", "PolyJet", None),
+        ("multigraphs", "Multigraphs", "multigraph"),
+        ("multigraphs", "Mod. Multigraphs", "mod_multigraph"),
     ]:
         for n, nl in [("0.0", "Clean"), ("0.02", "2%"), ("0.05", "5%")]:
-            for a, al in [("stride", "STRidge"), ("mstls", "MSTLS"), ("rfe", "RFE"), ("brute", "Brute-force")]:
-                b = _best_in_lib(rows, lib, n, "pointwise", backend, a)
+            for a, al in [("stridge", "STRidge"), ("mstls", "MSTLS"), ("rfe", "RFE"), ("brute", "Brute-force")]:
+                b = _best_in_lib(rows, lib, n, "pointwise", backend, a,
+                                 lib_original=lib_orig)
                 if b is None:
                     continue
                 fpf = f"{b['fp']}/{b['fn']}"
@@ -463,16 +489,18 @@ def build_weak_table(rows, backend, backend_label):
         ],
     )
 
-    for lib, lib_label in [
-        ("standard", "PDE-FIND"),
-        ("wsindy", "WSINDy"),
-        ("polynomial_jet", "PolyJet"),
-        ("multigraphs", "Multigraphs"),
+    for lib, lib_label, lib_orig in [
+        ("standard", "PDE-FIND", None),
+        ("wsindy", "WSINDy", None),
+        ("polynomial_jet", "PolyJet", None),
+        ("multigraphs", "Multigraphs", "multigraph"),
+        ("multigraphs", "Mod. Multigraphs", "mod_multigraph"),
     ]:
         for n, nl in [("0.0", "Clean"), ("0.02", "2%"), ("0.05", "5%")]:
             for mtd, ibp in [("weak_direct", "no"), ("weak_ibp", "yes")]:
-                for a, al in [("stride", "STRidge"), ("mstls", "MSTLS"), ("rfe", "RFE"), ("brute", "Brute-force")]:
-                    b = _best_in_lib(rows, lib, n, mtd, backend, a)
+                for a, al in [("stridge", "STRidge"), ("mstls", "MSTLS"), ("rfe", "RFE"), ("brute", "Brute-force")]:
+                    b = _best_in_lib(rows, lib, n, mtd, backend, a,
+                                     lib_original=lib_orig)
                     if b is None:
                         continue
                     fpf = f"{b['fp']}/{b['fn']}"
@@ -543,6 +571,235 @@ def build_oracle_table(rows):
                         fmt_val(float(best.get("cond_theta", 0)), 1),
                     )
     return t
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Shared ablation data collector (used by both markdown and LaTeX renderers)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _collect_ablation_entries(rows):
+    """Collect ranked ablation entries per noise level.
+
+    Returns
+    -------
+    dict[str, list[dict]]
+        Keys are noise labels ("Clean", "2%", "5%"), values are lists of
+        entry dicts sorted best→worst, each with keys:
+        label, conf, fpf, exact, E, E_str, fp, fn, time_str, vs_str.
+    """
+    from .summary_metadata import LIB_NAMES, ALGORITHM_LABELS, METHOD_MAP
+
+    _LIB_NORM = {
+        "multigraph": "multigraphs",
+        "mod_multigraph": "multigraphs",
+        "pdefind": "standard",
+        "wsindy": "wsindy",
+        "polyjet": "polynomial_jet",
+    }
+
+    def _is_lib(r, lib_orig):
+        norm = _LIB_NORM.get(lib_orig, lib_orig)
+        if r["library"] != norm:
+            return False
+        lo = r.get("library_original", "")
+        if lib_orig == "mod_multigraph":
+            return lo == "mod_multigraph"
+        if lib_orig == "multigraph":
+            return lo != "mod_multigraph"
+        return lo in ("", lib_orig)
+
+    def _best_for(lib_orig, alg, noise_str):
+        grp = [
+            r for r in rows
+            if _is_lib(r, lib_orig)
+            and r["algorithm"] == alg
+            and str(r["noise"]) == noise_str
+            and r.get("fp", "nan") != "nan"
+        ]
+        return best_in_group(grp) if grp else None
+
+    def _conf_str(r):
+        backend = r.get("backend", "")
+        method = METHOD_MAP.get(r.get("method", ""), r.get("method", ""))
+        wm = r.get("weak_m", "")
+        parts = [backend, method]
+        if wm not in ("", "nan", None):
+            parts.append(f"m={int(float(wm))}")
+        return ", ".join(parts)
+
+    LIB_ALG_PAIRS = [
+        ("multigraph",      "stridge"),
+        ("multigraph",      "rfe"),
+        ("multigraph",      "mstls"),
+        ("mod_multigraph",  "stridge"),
+        ("mod_multigraph",  "rfe"),
+        ("mod_multigraph",  "mstls"),
+        ("pdefind",         "stridge"),
+        ("pdefind",         "rfe"),
+        ("pdefind",         "mstls"),
+        ("wsindy",          "stridge"),
+        ("wsindy",          "rfe"),
+        ("wsindy",          "mstls"),
+        ("polyjet",         "stridge"),
+        ("polyjet",         "rfe"),
+        ("polyjet",         "mstls"),
+    ]
+
+    NOISE_LEVELS = [("0.0", "Clean"), ("0.02", "2%"), ("0.05", "5%")]
+    result = {}
+
+    for noise_str, noise_label in NOISE_LEVELS:
+        entries = []
+        seen = set()
+
+        for lib_orig, alg in LIB_ALG_PAIRS:
+            key = (lib_orig, alg)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            best = _best_for(lib_orig, alg, noise_str)
+            if best is None:
+                continue
+
+            fp = int(best["fp"])
+            fn = int(best["fn"])
+            exact = fp == 0 and fn == 0
+            E = float(best["E_coeff"])
+            time_s = float(best.get("time_ms", 0)) / 1000
+
+            lib_name = LIB_NAMES.get(
+                lib_orig,
+                LIB_NAMES.get(_LIB_NORM.get(lib_orig, ""), lib_orig),
+            )
+            alg_name = ALGORITHM_LABELS.get(alg, alg)
+
+            entries.append({
+                "label": f"{lib_name} + {alg_name}",
+                "conf": _conf_str(best),
+                "fpf": f"{fp}/{fn}",
+                "exact": exact,
+                "E": E,
+                "E_str": f"{E:.4f}",
+                "fp": fp,
+                "fn": fn,
+                "time_s": time_s,
+                "time_str": f"{time_s:.1f}",
+            })
+
+        if not entries:
+            result[noise_label] = []
+            continue
+
+        # Sort best→worst: exact → fn → fp → E_coeff
+        entries.sort(key=lambda e: (
+            0 if e["exact"] else 1, e["fn"], e["fp"], e["E"],
+        ))
+
+        # Compute "vs. best" for each entry
+        best_exact = entries[0]["exact"]
+        best_E = entries[0]["E"]
+        for i, e in enumerate(entries):
+            if e["exact"] and best_exact:
+                if i == 0:
+                    e["vs_str"] = "\u2014"
+                else:
+                    pct = (e["E"] - best_E) / best_E * 100
+                    e["vs_str"] = f"{pct:+.1f}%"
+            elif not e["exact"]:
+                e["vs_str"] = "\u2717"
+            else:
+                e["vs_str"] = "\u2014"
+
+        result[noise_label] = entries
+
+    return result
+
+
+def build_ablation_table(rows):
+    """Build per-noise ablation tables: ranked from best to worst.
+
+    For each noise level (Clean, 2%, 5%), collects the best configuration
+    for every (library, algorithm) pair and ranks them from best to worst
+    (exact recovery → fn → fp → E_coeff).  The "vs. best" column shows
+    E relative to the top-ranked entry.
+
+    Returns
+    -------
+    dict[str, MarkdownTable]
+        Keys are noise labels ("Clean", "2%", "5%"), values are the
+        corresponding ablation tables.
+    """
+    all_entries = _collect_ablation_entries(rows)
+    tables = {}
+
+    for noise_label, entries in all_entries.items():
+        t = MarkdownTable(
+            ["Method", "Best conf.", "fp/fn", "E_coeff", "Time (s)", "vs. best"],
+            align=["left", "left", "left", "right", "right", "right"],
+        )
+        for e in entries:
+            fpf = f"{e['fpf']} {'✓' if e['exact'] else '✗'}"
+            t.add_row(e["label"], e["conf"], fpf, e["E_str"], e["time_str"], e["vs_str"])
+        tables[noise_label] = t
+
+    return tables
+
+
+def build_ablation_latex(rows):
+    """Build per-noise ablation tables as LaTeX fragments.
+
+    Returns
+    -------
+    dict[str, str]
+        Keys are noise labels ("Clean", "2%", "5%"), values are LaTeX
+        ``tabular`` environments (without ``\\begin{table}`` wrapper)
+        that can be copy-pasted into a document.
+    """
+    all_entries = _collect_ablation_entries(rows)
+    tables = {}
+
+    for noise_label, entries in all_entries.items():
+        if not entries:
+            tables[noise_label] = ""
+            continue
+
+        lines = []
+        lines.append(r"\begin{tabular}{llrrrr}")
+        lines.append(r"\toprule")
+        lines.append(
+            r"Method & Best conf. & fp/fn & $E_\text{coeff}$ "
+            r"& Time (s) & vs.\ best \\"
+        )
+        lines.append(r"\midrule")
+
+        for e in entries:
+            if e["exact"]:
+                fpf = f"{e['fpf']} $\\checkmark$"
+            else:
+                fpf = f"{e['fpf']} $\\times$"
+
+            if e["vs_str"] == "\u2014":
+                vs = "---"
+            elif e["vs_str"] == "\u2717":
+                vs = "$\\times$"
+            else:
+                vs = e["vs_str"].replace("%", r"\%")
+
+            # Escape underscores in method/config names
+            label = e["label"].replace("_", r"\_")
+            conf = e["conf"].replace("_", r"\_")
+
+            lines.append(
+                f"{label} & {conf} & {fpf} & {e['E_str']} "
+                f"& {e['time_str']} & {vs} \\\\"
+            )
+
+        lines.append(r"\bottomrule")
+        lines.append(r"\end{tabular}")
+        tables[noise_label] = "\n".join(lines)
+
+    return tables
 
 
 def build_anisotropic_summary_table(rows):
@@ -636,7 +893,7 @@ def build_anisotropic_detailed_table(rows, method, method_label, backend, backen
         ("multigraphs", "Multigraphs"),
     ]:
         for n, nl in [("0.0", "Clean"), ("0.02", "2%"), ("0.05", "5%")]:
-            for alg, alg_label in [("stride", "STRidge"), ("mstls", "MSTLS"), ("rfe", "RFE")]:
+            for alg, alg_label in [("stridge", "STRidge"), ("mstls", "MSTLS"), ("rfe", "RFE")]:
                 for pt, pd in PROFILE_ORDER:
                     plabel = PROFILE_LABELS.get((pt, pd), f"{pt}/{pd}")
                     g = [

@@ -4,12 +4,12 @@ from ._imex import _run
 
 
 def cahn_hilliard(
-    N=64,
-    L=2 * np.pi,
-    T_end=20.0,
-    eps=0.3,
-    dt=0.01,
-    save_every=5,
+    N=128,
+    L=8 * np.pi,
+    T_end=30.0,
+    eps=0.2,
+    dt=0.005,
+    save_every=30,
     f0=None,
     seed=42,
     obs_noise=0.0,

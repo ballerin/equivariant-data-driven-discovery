@@ -12,7 +12,7 @@ preprocessing for additional ablation dimensions.
 Usage
 -----
     # Core equivariant vs standard comparison
-    python scripts/sweep.py --methods pointwise --algorithms strridge
+    python scripts/sweep.py --methods pointwise --algorithms stridge
 
     # Noise robustness (weak vs pointwise)
     python scripts/sweep.py \\
@@ -84,7 +84,7 @@ RFE_LAMS = [0.0]  # ridge regularisation for RFE (0 = pure OLS)
 MSTLS_N_LAMBDAS = 50
 MSTLS_ALPHAS = [0.25, 0.5, 0.75]
 MSTLS_MAXITS = 50
-D_TOLS = [1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 5e-2, 0.1, 0.2, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 7.0, 10.0]
+D_TOLS = [1e-3, 1e-2, 0.1, 1.0, 10.0]            # coarse grid (winners at 1.0, 10.0)
 BRUTE_L0_PENALTIES = [1e-4, 1e-2, 1.0]  # mild, moderate, strong sparsity
 BRUTE_MAX_K = 8  # cap for libraries > 20 cols; None for <= 20
 BACKENDS = ["spectral", "polynomial"]
@@ -185,29 +185,31 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
             f = f_snaps[s]
             ft = ft_snaps[s]
             if library == "multigraph":
-                G, desc = wf.build_weak_multigraph_library(
-                    f, Lx, Ly, max_p=2, max_n=3, m=m, p=WEAK_P,
+                G, desc = build_multigraph_library(
+                    f, Lx, Ly, max_p=2, max_n=3,
+                    formulation="weak", m=m, p=WEAK_P,
                     use_ibp=use_ibp,
                 )
             elif library == "mod_multigraph":
-                G, desc = wf.build_weak_mod_multigraph_library(
-                    f, Lx, Ly, max_p=2, max_n=3, m=m, p=WEAK_P,
+                G, desc = build_mod_multigraph_library(
+                    f, Lx, Ly, max_p=2, max_n=3,
+                    formulation="weak", m=m, p=WEAK_P,
                     use_ibp=use_ibp,
                 )
             elif library == "polyjet":
-                G, desc = wf.build_weak_polynomial_jet_library(
+                G, desc = build_polyjet_library(
                     f, Lx, Ly, max_order=4, max_degree=3,
-                    m=m, p=WEAK_P, use_ibp=use_ibp,
+                    formulation="weak", m=m, p=WEAK_P, use_ibp=use_ibp,
                 )
             elif library in ("wsindy", "mwsindy"):
-                G, desc = wf.build_weak_wsindy_library(
+                G, desc = build_wsindy_library(
                     f, Lx, Ly, max_order=4, max_poly=3,
-                    m=m, p=WEAK_P, use_ibp=use_ibp,
+                    formulation="weak", m=m, p=WEAK_P, use_ibp=use_ibp,
                 )
             else:
-                G, desc = wf.build_weak_pdefind_library(
-                    f, Lx, Ly, max_order=4, max_poly=3, m=m, p=WEAK_P,
-                    use_ibp=use_ibp,
+                G, desc = build_pdefind_library(
+                    f, Lx, Ly, max_order=4, max_poly=3,
+                    formulation="weak", m=m, p=WEAK_P, use_ibp=use_ibp,
                 )
             b_w = wf.build_weak_rhs(ft, m=m, p=WEAK_P)
 
@@ -249,7 +251,7 @@ def sweep_one(Theta, Ft, true_eq, lam, d_tol, algorithm, mstls_alpha=0.5, mstls_
         w = TrainRFE(Theta, Ft, lam=lam)
         lam_out = lam
     else:
-        w = TrainSTRidge(Theta, Ft, lam, d_tol)
+        w = TrainSTRidge(Theta, Ft, lam, d_tol)  # STRidge = Sequential Threshold Ridge
         lam_out = lam
     n_active = int(np.count_nonzero(np.abs(w) > 1e-10))
     return n_active, w, lam_out
@@ -286,8 +288,8 @@ def main():
     )
     parser.add_argument(
         "--algorithms", nargs="+",
-        default=["strridge", "mstls", "rfe"],
-        choices=["strridge", "mstls", "rfe", "brute", "oracle"],
+        default=["stridge", "mstls", "rfe"],
+        choices=["stridge", "mstls", "rfe", "brute", "oracle"],
     )
     parser.add_argument(
         "--libraries", nargs="+",

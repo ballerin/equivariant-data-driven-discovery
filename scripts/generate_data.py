@@ -62,7 +62,7 @@ EQUATIONS = [
     dict(
         name="ch",
         simulate_fn=cahn_hilliard,
-        sim_kwargs=dict(N=128, L=4 * np.pi, T_end=30.0, eps=0.2, dt=0.005,
+        sim_kwargs=dict(N=128, L=8 * np.pi, T_end=30.0, eps=0.2, dt=0.005,
                         save_every=30, seed=42),
     ),
     dict(

@@ -31,6 +31,7 @@ results/hyperparam_sweep_*.csv
 notebooks/**/results/
 notebooks/results/
 results/
+ablation_tables.tex
 
 # Build / packaging
 build/
