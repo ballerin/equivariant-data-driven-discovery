@@ -27,7 +27,15 @@ def _wavenumbers_2d(Nx, Ny, Lx, Ly):
     return np.meshgrid(kx, ky, indexing="ij")
 
 
-def _build_pdefind_pointwise(f, Lx, Ly, max_order=4, max_poly=3):
+def _wavenumbers_3d(Nx, Ny, Nz, Lx, Ly, Lz):
+    """Return 3-D wavenumber grids for an (Nx, Ny, Nz) FFT grid."""
+    kx = 2.0 * np.pi / Lx * np.fft.fftfreq(Nx) * Nx
+    ky = 2.0 * np.pi / Ly * np.fft.fftfreq(Ny) * Ny
+    kz = 2.0 * np.pi / Lz * np.fft.fftfreq(Nz) * Nz
+    return np.meshgrid(kx, ky, kz, indexing="ij")
+
+
+def _build_pdefind_pointwise(f, Lx, Ly, max_order=4, max_poly=3, Lz=None):
     """Build a coordinate-based library as used in PDE-Find.
 
     Columns = (all partial derivatives of f up to order max_order) ×
@@ -59,29 +67,58 @@ def _build_pdefind_pointwise(f, Lx, Ly, max_order=4, max_poly=3):
     descriptions : list of strings
     """
     method = _derivatives.get_backend()
-    Nx, Ny = f.shape
-    if method == "spectral":
-        KX, KY = _wavenumbers_2d(Nx, Ny, Lx, Ly)
-        fh = np.fft.fft2(f)
+    if f.ndim == 3:
+        Nx, Ny, Nz = f.shape
+        if method == "spectral":
+            KX, KY, KZ = _wavenumbers_3d(Nx, Ny, Nz, Lx, Ly, Lz)
+            fh = np.fft.fftn(f)
+        # 3-D multi-indices: all (a,b,c) with a+b+c <= max_order
+        multi_indices = []
+        for total in range(max_order + 1):
+            for a in range(total + 1):
+                for b in range(total - a + 1):
+                    multi_indices.append((a, b, total - a - b))
 
-    multi_indices = []
-    for total in range(max_order + 1):
-        for a in range(total + 1):
-            multi_indices.append((a, total - a))
+        derivs, deriv_names = [], []
+        for a, b, c in multi_indices:
+            if a + b + c == 0:
+                deriv = np.ones_like(f)
+            elif method == "spectral":
+                d_hat = (1j * KX) ** a * (1j * KY) ** b * (1j * KZ) ** c * fh
+                deriv = np.real(np.fft.ifftn(d_hat))
+            else:
+                raise NotImplementedError(
+                    "Polynomial backend does not support 3-D fields yet."
+                )
+            name = ("x" * a) + ("y" * b) + ("z" * c) if (a + b + c) > 0 else "1"
+            name = "f_" + name if (a + b + c) > 0 else "1"
+            derivs.append(deriv)
+            deriv_names.append(name)
+    else:
+        # 2-D path (original)
+        Nx, Ny = f.shape
+        if method == "spectral":
+            KX, KY = _wavenumbers_2d(Nx, Ny, Lx, Ly)
+            fh = np.fft.fft2(f)
 
-    derivs, deriv_names = [], []
-    for a, b in multi_indices:
-        if a + b == 0:
-            deriv = np.ones_like(f)
-        elif method == "spectral":
-            d_hat = (1j * KX) ** a * (1j * KY) ** b * fh
-            deriv = np.real(np.fft.ifft2(d_hat))
-        else:
-            deriv = poly_partial(f, Lx, Ly, a, b)
-        name = (("x" * a) + ("y" * b)) if (a + b) > 0 else "1"
-        name = f"f_{name}" if (a + b) > 0 else "1"
-        derivs.append(deriv)
-        deriv_names.append(name)
+        multi_indices = []
+        for total in range(max_order + 1):
+            for a in range(total + 1):
+                multi_indices.append((a, total - a))
+
+        derivs, deriv_names = [], []
+        for a, b in multi_indices:
+            if a + b == 0:
+                deriv = np.ones_like(f)
+            elif method == "spectral":
+                d_hat = (1j * KX) ** a * (1j * KY) ** b * fh
+                deriv = np.real(np.fft.ifft2(d_hat))
+            else:
+                deriv = poly_partial(f, Lx, Ly, a, b)
+            name = ("x" * a) + ("y" * b) if (a + b) > 0 else "1"
+            name = "f_" + name if (a + b) > 0 else "1"
+            derivs.append(deriv)
+            deriv_names.append(name)
 
     cols, descs = [], []
     for p in range(max_poly + 1):
@@ -164,31 +201,90 @@ def _build_pdefind_pointwise_1d(u, L, max_deriv=3, max_poly=3):
 
 
 def _build_pdefind_weak(f, Lx, Ly, max_order=4, max_poly=3,
-                        m=8, p=4, use_ibp=False):
-    """Build the weak-form PDE-FIND (coordinate-basis) library matrix.
+                        m=8, p=4, use_ibp=False, Lz=None):
+    """Build the weak-form PDE-FIND library matrix.
 
-    Mirrors ``_build_pdefind_pointwise`` but convolves each column with
-    the test function ψ.  IBP is applied to purely linear differential
-    operators (∂_x, ∂_y, ∂_xx, ∂_xy, ∂_yy, …) when ``use_ibp=True``.
-
-    Parameters
-    ----------
-    f : ndarray of shape (Nx, Ny)
-    Lx, Ly : float
-    max_order : int — highest partial derivative order (default 4)
-    max_poly  : int — highest polynomial degree factor (default 3)
-    m, p : int — test function parameters
-    use_ibp : bool — enable IBP for linear partial-derivative columns
-
-    Returns
-    -------
-    Theta_weak : ndarray of shape (N_valid, K)
-    descriptions : list of K str
+    Supports 2-D and 3-D fields.  In 3-D, uses 3-D separable convolution
+    and extends IBP to ∂_x^a ∂_y^b ∂_z^c terms.
     """
     from .weak_form import (
         _cached_kernel_1d, _test_function_deriv_1d, weak_convolution,
     )
 
+    kernel = _cached_kernel_1d(m, p)
+    method = _derivatives.get_backend()
+
+    if f.ndim == 3:
+        Nx, Ny, Nz = f.shape
+        if method == "spectral":
+            KX, KY, KZ = _wavenumbers_3d(Nx, Ny, Nz, Lx, Ly, Lz)
+            fh = np.fft.fftn(f)
+
+        # 3-D multi-indices
+        multi_indices = []
+        for total in range(max_order + 1):
+            for a in range(total + 1):
+                for b in range(total - a + 1):
+                    multi_indices.append((a, b, total - a - b))
+
+        derivs, deriv_names = [], []
+        for a, b, c in multi_indices:
+            if a + b + c == 0:
+                deriv = np.ones_like(f)
+            elif method == "spectral":
+                d_hat = (1j * KX) ** a * (1j * KY) ** b * (1j * KZ) ** c * fh
+                deriv = np.real(np.fft.ifftn(d_hat))
+            else:
+                raise NotImplementedError("Polynomial backend not supported for 3-D.")
+            name = ("x" * a) + ("y" * b) + ("z" * c) if (a + b + c) > 0 else "1"
+            name = "f_" + name if (a + b + c) > 0 else "1"
+            derivs.append(deriv)
+            deriv_names.append(name)
+
+        # Build columns with 3-D convolution
+        cols, descs = [], []
+        for poly_deg in range(max_poly + 1):
+            for deriv, dname in zip(derivs, deriv_names):
+                poly_field = f ** poly_deg if poly_deg > 0 else np.ones_like(f)
+                col_raw = poly_field * deriv
+
+                # IBP for pure linear terms: ∫ ψ · ∂_x^a∂_y^b∂_z^c f
+                a_plus_bc = 0
+                if dname != "1" and dname.startswith("f_"):
+                    dx_part = dname[2:]
+                    a_plus_bc = len(dx_part)
+
+                if use_ibp and poly_deg == 0 and a_plus_bc > 0:
+                    a_i = dx_part.count("x")
+                    b_i = dx_part.count("y")
+                    c_i = dx_part.count("z")
+                    kx_ibp = _test_function_deriv_1d(m, p, a_i)
+                    ky_ibp = _test_function_deriv_1d(m, p, b_i)
+                    kz_ibp = _test_function_deriv_1d(m, p, c_i)
+                    dx_a = (Lx / Nx) ** a_i
+                    dy_b = (Ly / Ny) ** b_i
+                    dz_c = (Lz / Nz) ** c_i
+                    kx_scaled = kx_ibp / dx_a
+                    ky_scaled = ky_ibp / dy_b
+                    kz_scaled = kz_ibp / dz_c
+                    col_weak = weak_convolution(f, kx_scaled, ky_scaled, kz_scaled)
+                else:
+                    col_weak = weak_convolution(col_raw, kernel, kernel, kernel)
+
+                cols.append(col_weak.ravel())
+
+                if poly_deg == 0:
+                    desc = dname
+                elif poly_deg == 1:
+                    desc = "f·" + dname if dname != "1" else "f"
+                else:
+                    sup = _sup(poly_deg)
+                    desc = f"f{sup}·{dname}" if dname != "1" else f"f{sup}"
+                descs.append(desc)
+
+        return np.column_stack(cols), descs
+
+    # ===== 2-D path (original) =====
     Nx, Ny = f.shape
     kernel = _cached_kernel_1d(m, p)
     method = _derivatives.get_backend()

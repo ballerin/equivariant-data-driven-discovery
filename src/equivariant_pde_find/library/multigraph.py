@@ -10,55 +10,49 @@ import numpy as np
 from ..multigraph_operators import get_operators
 
 
-def _build_multigraph_pointwise(f, Lx, Ly, max_p=2, max_n=3):
-    """Build the equivariant library matrix for a 2-D scalar field f.
+def _build_multigraph_pointwise(f, Lx, Ly, max_p=2, max_n=3, Lz=None):
+    """Build the equivariant library matrix for a scalar field f.
+
+    Supports 2-D (Nx, Ny) and 3-D (Nx, Ny, Nz) fields.
 
     Parameters
     ----------
-    f     : ndarray (Nx, Ny) - data
-    Lx    : float - domain length in x
-    Ly    : float - domain length in y
-    max_p : int - maximum multigraph edge count p (differential order = 2*max_p)
-    max_n : int - maximum polynomial degree
+    f     : ndarray (Nx, Ny) or (Nx, Ny, Nz)
+    Lx, Ly, Lz : float — domain lengths (Lz required for 3-D)
+    max_p : int
+    max_n : int
 
     Returns
     -------
-    Theta        : ndarray, shape (Nx*Ny, K)
+    Theta        : ndarray, shape (N_total, K)
     descriptions : list of K strings
     """
     ops = get_operators(max_p, max_n)
     cols, descs = [], []
     for op, name in ops:
-        cols.append(op(f, Lx, Ly).ravel())
+        cols.append(op(f, Lx, Ly, Lz).ravel())
         descs.append(name)
     return np.column_stack(cols), descs
 
 
 def _build_multigraph_weak(f, Lx, Ly, max_p=2, max_n=3, m=8, p=4,
-                           use_ibp=False):
+                           use_ibp=False, Lz=None):
     """Build the weak-form equivariant (multigraph) library matrix.
+
+    Supports 2-D and 3-D fields.
 
     Parameters
     ----------
-    f : ndarray of shape (Nx, Ny)
-    Lx, Ly : float
+    f : ndarray (Nx, Ny) or (Nx, Ny, Nz)
+    Lx, Ly, Lz : float
     max_p, max_n : int
-        Passed to ``get_operators()``.
-    m : int
-        Test function half-support in grid points.  The test function kernel
-        has length 2*m + 1.
-    p : int
-        Test function polynomial degree.
+    m : int — test function half-support
+    p : int — test function polynomial degree
     use_ibp : bool
-        If True, use integration by parts for operators of the form
-        Δ(something) or Δ²(something).  The Δ/Δ² is moved onto the
-        analytically-known test function, eliminating |k|² and |k|⁴
-        noise amplification.  Default False (direct weak-form).
 
     Returns
     -------
-    Theta_weak : ndarray of shape (N_valid, K)
-        Weak library matrix.  N_valid = (Nx - 2*m) * (Ny - 2*m).
+    Theta_weak : ndarray, shape (N_valid, K)
     descriptions : list of K str
     """
     from ..multigraph_operators import get_operators
@@ -74,19 +68,17 @@ def _build_multigraph_weak(f, Lx, Ly, max_p=2, max_n=3, m=8, p=4,
         ibp_info = _is_laplacian_of(desc) if use_ibp else None
         if ibp_info is not None:
             op_type, inner_func = ibp_info
-            inner_field = inner_func(f, Lx, Ly)
+            inner_field = inner_func(f, Lx, Ly, Lz)
             if op_type == "laplacian":
-                col_weak = weak_laplacian_ibp(inner_field, m, p, Lx, Ly)
+                col_weak = weak_laplacian_ibp(inner_field, m, p, Lx, Ly, Lz)
             elif op_type == "bilaplacian":
-                col_weak = weak_bilaplacian_ibp(inner_field, m, p, Lx, Ly)
+                col_weak = weak_bilaplacian_ibp(inner_field, m, p, Lx, Ly, Lz)
             else:
-                # Fallback
-                col_raw = func(f, Lx, Ly)
-                col_weak = weak_convolution(col_raw, kernel, kernel)
+                col_raw = func(f, Lx, Ly, Lz)
+                col_weak = weak_convolution(col_raw, kernel, kernel, kernel if f.ndim == 3 else None)
         else:
-            # Direct path: compute operator on data, then convolve.
-            col_raw = func(f, Lx, Ly)
-            col_weak = weak_convolution(col_raw, kernel, kernel)
+            col_raw = func(f, Lx, Ly, Lz)
+            col_weak = weak_convolution(col_raw, kernel, kernel, kernel if f.ndim == 3 else None)
         cols.append(col_weak.ravel())
 
     descriptions = [desc for _, desc in ops]

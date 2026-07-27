@@ -700,6 +700,84 @@ def test_wsindy_ibp_accuracy_by_order():
         )
 
 
+# =============================================================================
+# 3-D weak form tests
+# =============================================================================
+
+
+class TestWeakForm3D:
+    """3-D weak convolution and IBP tests."""
+
+    @pytest.fixture
+    def test_field_3d(self):
+        N, L = 32, 2 * math.pi
+        x = np.linspace(0.0, L, N, endpoint=False)
+        X, Y, Z = np.meshgrid(x, x, x, indexing="ij")
+        f = np.cos(2 * X + 3 * Y + Z) + 0.5 * np.sin(X - 2 * Y + Z)
+        ft = -np.sin(2 * X + 3 * Y + Z) + 0.5 * np.cos(X - 2 * Y + Z)
+        return f, ft, L, N
+
+    def test_weak_convolution_3d_shape(self, test_field_3d):
+        f, _, _, N = test_field_3d
+        m, p = 4, 4
+        kernel = wf._test_function_1d(m, p)
+        result = wf.weak_convolution(f, kernel, kernel, kernel)
+        assert result.shape == (N - 2 * m, N - 2 * m, N - 2 * m)
+
+    def test_weak_convolution_3d_constant(self):
+        N, L = 16, 2 * np.pi
+        f = np.ones((N, N, N))
+        m, p = 4, 4
+        kernel = wf._test_function_1d(m, p)
+        result = wf.weak_convolution(f, kernel, kernel, kernel)
+        expected = float(np.sum(kernel)) ** 3
+        np.testing.assert_allclose(result, expected, rtol=1e-10)
+
+    def test_weak_laplacian_ibp_3d_vs_direct(self, test_field_3d):
+        f, _, L, N = test_field_3d
+        m, p = 4, 4
+        from equivariant_pde_find import derivatives
+        derivatives.set_backend("spectral")
+
+        lap = derivatives.laplacian(f, L, L, L)
+        kernel = wf._test_function_1d(m, p)
+        direct = wf.weak_convolution(lap, kernel, kernel, kernel)
+        ibp = wf.weak_laplacian_ibp(f, m, p, L, L, L)
+
+        # IBP should match direct on clean data; the 3-D finite-difference
+        # φ'' vs spectral Laplacian gives ~5 % relative error on this grid.
+        rel_err = np.linalg.norm(ibp - direct) / max(np.linalg.norm(direct), 1e-15)
+        assert rel_err < 0.1, f"IBP relative error {rel_err:.4f} exceeds 10 %."
+
+    def test_weak_bilaplacian_ibp_3d_vs_direct(self, test_field_3d):
+        f, _, L, N = test_field_3d
+        m, p = 4, 4
+        from equivariant_pde_find import derivatives
+        derivatives.set_backend("spectral")
+
+        bilap = derivatives.bilaplacian(f, L, L, L)
+        kernel = wf._test_function_1d(m, p)
+        direct = wf.weak_convolution(bilap, kernel, kernel, kernel)
+        ibp = wf.weak_bilaplacian_ibp(f, m, p, L, L, L)
+
+        rel_err = np.linalg.norm(ibp - direct) / max(np.linalg.norm(direct), 1e-15)
+        assert rel_err < 0.3, f"IBP bilaplacian relative error {rel_err:.4f} exceeds 30 %."
+
+    def test_build_weak_rhs_3d(self, test_field_3d):
+        _, ft, _, N = test_field_3d
+        m, p = 4, 4
+        b = wf.build_weak_rhs(ft, m=m, p=p)
+        Nv = (N - 2 * m) ** 3
+        assert len(b) == Nv
+        assert np.all(np.isfinite(b))
+
+    def test_weak_convolution_3d_without_kernel_z_raises(self):
+        f = np.ones((8, 8, 8))
+        kernel = np.ones(3)
+        with pytest.raises(ValueError, match="kernel_z"):
+            wf.weak_convolution(f, kernel, kernel)
+
+
 def test_equivariant_laplacian_ibp_accuracy():
     """The equivariant library's Laplacian IBP must match direct to < 1 %
     (analytic φ″ kernel, guard against fallback to discrete differences)."""

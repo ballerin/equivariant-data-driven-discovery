@@ -28,31 +28,26 @@ Module                  Description
 
 
 def build_multigraph_library(f, Lx, Ly, max_p=2, max_n=3,
-                             formulation="pointwise", **weak_kwargs):
-    """Build the equivariant (multigraph) library matrix for a 2-D scalar field.
+                             formulation="pointwise", Lz=None, **weak_kwargs):
+    """Build the equivariant (multigraph) library matrix.
+
+    Supports 2-D and 3-D fields.
 
     Parameters
     ----------
-    f     : ndarray (Nx, Ny) - data
-    Lx    : float - domain length in x
-    Ly    : float - domain length in y
-    max_p : int - maximum multigraph edge count p (differential order = 2*max_p)
-    max_n : int - maximum polynomial degree
+    f     : ndarray (Nx, Ny) or (Nx, Ny, Nz)
+    Lx, Ly, Lz : float
+    max_p : int
+    max_n : int
     formulation : {"pointwise", "weak"}
-
-    Returns
-    -------
-    Theta        : ndarray, shape (Nx*Ny, K)  [pointwise]  or
-                   ndarray, shape (N_valid, K) [weak]
-    descriptions : list of K strings
     """
     if formulation == "pointwise":
         from .multigraph import _build_multigraph_pointwise
-        return _build_multigraph_pointwise(f, Lx, Ly, max_p, max_n)
+        return _build_multigraph_pointwise(f, Lx, Ly, max_p, max_n, Lz=Lz)
     elif formulation == "weak":
         from .multigraph import _build_multigraph_weak
         return _build_multigraph_weak(f, Lx, Ly, max_p, max_n,
-                                      **weak_kwargs)
+                                      Lz=Lz, **weak_kwargs)
     else:
         raise ValueError(
             f"Unknown formulation {formulation!r}. "
@@ -61,30 +56,18 @@ def build_multigraph_library(f, Lx, Ly, max_p=2, max_n=3,
 
 
 def build_mod_multigraph_library(f, Lx, Ly, max_p=2, max_n=3,
-                                 formulation="pointwise", **weak_kwargs):
+                                 formulation="pointwise", Lz=None, **weak_kwargs):
     """Build the modified multigraph (IBP-friendly) library matrix.
 
-    Parameters
-    ----------
-    f     : ndarray, shape (Nx, Ny)
-    Lx, Ly : float
-    max_p : int - maximum edge count (0, 1, or 2)
-    max_n : int - maximum polynomial degree (0..3)
-    formulation : {"pointwise", "weak"}
-
-    Returns
-    -------
-    Theta        : ndarray, shape (Nx*Ny, K)  [pointwise]  or
-                   ndarray, shape (N_valid, K) [weak]
-    descriptions : list of K strings
+    Supports 2-D and 3-D fields.
     """
     if formulation == "pointwise":
         from .mod_multigraph import _build_mod_multigraph_pointwise
-        return _build_mod_multigraph_pointwise(f, Lx, Ly, max_p, max_n)
+        return _build_mod_multigraph_pointwise(f, Lx, Ly, max_p, max_n, Lz=Lz)
     elif formulation == "weak":
         from .mod_multigraph import _build_mod_multigraph_weak
         return _build_mod_multigraph_weak(f, Lx, Ly, max_p, max_n,
-                                          **weak_kwargs)
+                                          Lz=Lz, **weak_kwargs)
     else:
         raise ValueError(
             f"Unknown formulation {formulation!r}. "
@@ -93,32 +76,19 @@ def build_mod_multigraph_library(f, Lx, Ly, max_p=2, max_n=3,
 
 
 def build_pdefind_library(f, Lx, Ly, max_order=4, max_poly=3,
-                          formulation="pointwise", **weak_kwargs):
-    """Build a coordinate-based (PDE-FIND) library for a 2-D scalar field.
+                          formulation="pointwise", Lz=None, **weak_kwargs):
+    """Build a coordinate-based (PDE-FIND) library.
 
-    For max_order=4 and max_poly=3 this gives 60 columns.
-
-    Parameters
-    ----------
-    f         : ndarray, shape (Nx, Ny) - data
-    Lx, Ly    : float - domain lengths
-    max_order : int - highest partial derivative order (default 4)
-    max_poly  : int - highest polynomial degree factor (default 3)
-    formulation : {"pointwise", "weak"}
-
-    Returns
-    -------
-    Theta        : ndarray, shape (Nx*Ny, n_cols)  [pointwise]  or
-                   ndarray, shape (N_valid, n_cols) [weak]
-    descriptions : list of strings
+    Supports 2-D and 3-D fields.
+    For max_order=4, max_poly=3: 60 columns (2-D) or 140 columns (3-D).
     """
     if formulation == "pointwise":
         from .pdefind import _build_pdefind_pointwise
-        return _build_pdefind_pointwise(f, Lx, Ly, max_order, max_poly)
+        return _build_pdefind_pointwise(f, Lx, Ly, max_order, max_poly, Lz=Lz)
     elif formulation == "weak":
         from .pdefind import _build_pdefind_weak
         return _build_pdefind_weak(f, Lx, Ly, max_order, max_poly,
-                                   **weak_kwargs)
+                                   Lz=Lz, **weak_kwargs)
     else:
         raise ValueError(
             f"Unknown formulation {formulation!r}. "

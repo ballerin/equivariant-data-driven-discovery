@@ -136,15 +136,13 @@ def _deriv(f, Lx, Ly, a, b, deg, r):
 # ---------------------------------------------------------------------------
 
 
-def polynomial_grad(f, Lx, Ly, prefilter_sigma=None):
-    """Gradient (f_x, f_y) via local degree-3 polynomial fit (5×5 stencil).
+def polynomial_grad(f, Lx, Ly, Lz=None, prefilter_sigma=None):
+    """Gradient via local polynomial fit.
 
-    Parameters
-    ----------
-    prefilter_sigma : float or (float, float), optional
-        If provided, apply a periodic Gaussian prefilter (sigma in physical
-        units) before fitting.
+    2-D: returns (f_x, f_y).  3-D: not yet supported.
     """
+    if f.ndim == 3:
+        raise NotImplementedError("Polynomial backend does not support 3-D fields yet")
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     # allow user overrides via set_default_stencil
     if 'get_default_stencil' in globals():
@@ -156,8 +154,10 @@ def polynomial_grad(f, Lx, Ly, prefilter_sigma=None):
     return fx, fy
 
 
-def polynomial_laplacian(f, Lx, Ly, prefilter_sigma=None):
-    """Laplacian Δf = f_xx + f_yy via local degree-3 polynomial fit (5×5 stencil)."""
+def polynomial_laplacian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
+    """Laplacian via local polynomial fit. 3-D not yet supported."""
+    if f.ndim == 3:
+        raise NotImplementedError("Polynomial backend does not support 3-D fields yet")
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     if 'get_default_stencil' in globals():
         deg, r = get_default_stencil(2)
@@ -166,8 +166,10 @@ def polynomial_laplacian(f, Lx, Ly, prefilter_sigma=None):
     return _deriv(f, Lx, Ly, 2, 0, deg, r) + _deriv(f, Lx, Ly, 0, 2, deg, r)
 
 
-def polynomial_hessian(f, Lx, Ly, prefilter_sigma=None):
-    """Hessian (f_xx, f_xy, f_yy) via local degree-3 polynomial fit (5×5 stencil)."""
+def polynomial_hessian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
+    """Hessian via local polynomial fit. 3-D not yet supported."""
+    if f.ndim == 3:
+        raise NotImplementedError("Polynomial backend does not support 3-D fields yet")
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     if 'get_default_stencil' in globals():
         deg, r = get_default_stencil(2)
@@ -179,8 +181,10 @@ def polynomial_hessian(f, Lx, Ly, prefilter_sigma=None):
     return fxx, fxy, fyy
 
 
-def polynomial_bilaplacian(f, Lx, Ly, prefilter_sigma=None):
-    """Bilaplacian Δ²f = f_xxxx + 2f_xxyy + f_yyyy via degree-5 fit (7×7 stencil)."""
+def polynomial_bilaplacian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
+    """Bilaplacian via local polynomial fit. 3-D not yet supported."""
+    if f.ndim == 3:
+        raise NotImplementedError("Polynomial backend does not support 3-D fields yet")
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     if 'get_default_stencil' in globals():
         deg, r = get_default_stencil(4)
@@ -193,13 +197,10 @@ def polynomial_bilaplacian(f, Lx, Ly, prefilter_sigma=None):
     )
 
 
-def polynomial_trilaplacian(f, Lx, Ly, prefilter_sigma=None):
-    """Trilaplacian Δ³f via local degree-7 polynomial fit (9×9 stencil).
-
-    Warning: sixth-order derivative estimation from local polynomials amplifies
-    noise substantially.  For noisy-data experiments, consider restricting to
-    max_p <= 2 (which avoids trilaplacian entirely).
-    """
+def polynomial_trilaplacian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
+    """Trilaplacian via local polynomial fit. 3-D not yet supported."""
+    if f.ndim == 3:
+        raise NotImplementedError("Polynomial backend does not support 3-D fields yet")
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     if 'get_default_stencil' in globals():
         deg, r = get_default_stencil(6)
@@ -213,9 +214,10 @@ def polynomial_trilaplacian(f, Lx, Ly, prefilter_sigma=None):
     )
 
 
-def polynomial_third_order(f, Lx, Ly, prefilter_sigma=None):
-    """Third-order partial derivatives (f_xxx, f_xxy, f_xyy, f_yyy)
-    via local degree-4 polynomial fit (5×5 stencil)."""
+def polynomial_third_order(f, Lx, Ly, Lz=None, prefilter_sigma=None):
+    """Third-order partial derivatives via local polynomial fit. 3-D not yet supported."""
+    if f.ndim == 3:
+        raise NotImplementedError("Polynomial backend does not support 3-D fields yet")
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
     if 'get_default_stencil' in globals():
         deg, r = get_default_stencil(3)

@@ -38,8 +38,8 @@ def make_regression_data(snapshots, times, n_per_snap=200, skip_fraction=0.0, se
     ft_snaps = (snapshots[2:] - snapshots[:-2]) / (2.0 * dt_snap)
     f_snaps = snapshots[1:-1]
 
-    N2 = f_snaps.shape[1] * f_snaps.shape[2]
+    N_total = np.prod(f_snaps.shape[1:]).item()
     rng = np.random.default_rng(seed)
-    idx_sets = [rng.choice(N2, n_per_snap, replace=False) for _ in range(len(f_snaps))]
+    idx_sets = [rng.choice(N_total, n_per_snap, replace=False) for _ in range(len(f_snaps))]
 
     return f_snaps, ft_snaps, idx_sets, dt_snap

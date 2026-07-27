@@ -317,3 +317,237 @@ def test_third_order_is_gradient_of_hessian():
 
     np.testing.assert_allclose(fxxy, d_fxx_dy, rtol=1e-10, atol=1e-10)
     np.testing.assert_allclose(fxyy, d_fyy_dx, rtol=1e-10, atol=1e-10)
+
+
+# =============================================================================
+# 3-D spectral derivative tests
+# =============================================================================
+
+
+def make_grid_3d(Nx, Ny, Nz, Lx, Ly, Lz):
+    """Build 3-D coordinate grids."""
+    x = np.linspace(0.0, Lx, Nx, endpoint=False)
+    y = np.linspace(0.0, Ly, Ny, endpoint=False)
+    z = np.linspace(0.0, Lz, Nz, endpoint=False)
+    return np.meshgrid(x, y, z, indexing="ij")
+
+
+class TestSpectralDerivatives3D:
+    """3-D spectral derivative correctness on trigonometric polynomials."""
+
+    def test_grad_3d_exact(self):
+        """Gradient on a pure cosine mode in 3-D."""
+        Nx, Ny, Nz = 16, 16, 16
+        Lx, Ly, Lz = 2 * math.pi, 2 * math.pi, 2 * math.pi
+        mx, my, mz = 2, 3, 1
+        X, Y, Z = make_grid_3d(Nx, Ny, Nz, Lx, Ly, Lz)
+        kx = 2 * math.pi * mx / Lx
+        ky = 2 * math.pi * my / Ly
+        kz = 2 * math.pi * mz / Lz
+        theta = kx * X + ky * Y + kz * Z
+        f = np.cos(theta)
+
+        fx, fy, fz = sd.spectral_grad(f, Lx, Ly, Lz)
+        np.testing.assert_allclose(fx, -kx * np.sin(theta), rtol=1e-12, atol=1e-12)
+        np.testing.assert_allclose(fy, -ky * np.sin(theta), rtol=1e-12, atol=1e-12)
+        np.testing.assert_allclose(fz, -kz * np.sin(theta), rtol=1e-12, atol=1e-12)
+
+    def test_laplacian_3d_exact(self):
+        """Laplacian on a pure cosine mode in 3-D."""
+        Nx, Ny, Nz = 16, 16, 16
+        Lx, Ly, Lz = 2 * math.pi, 2 * math.pi, 2 * math.pi
+        mx, my, mz = 2, 3, 1
+        X, Y, Z = make_grid_3d(Nx, Ny, Nz, Lx, Ly, Lz)
+        kx = 2 * math.pi * mx / Lx
+        ky = 2 * math.pi * my / Ly
+        kz = 2 * math.pi * mz / Lz
+        theta = kx * X + ky * Y + kz * Z
+        f = np.cos(theta)
+
+        lap = sd.spectral_laplacian(f, Lx, Ly, Lz)
+        lap_true = -(kx**2 + ky**2 + kz**2) * np.cos(theta)
+        np.testing.assert_allclose(lap, lap_true, rtol=1e-12, atol=1e-12)
+
+    def test_hessian_3d_exact(self):
+        """Hessian on a pure cosine mode in 3-D — 6 components."""
+        Nx, Ny, Nz = 16, 16, 16
+        Lx, Ly, Lz = 2 * math.pi, 2 * math.pi, 2 * math.pi
+        mx, my, mz = 2, 3, 1
+        X, Y, Z = make_grid_3d(Nx, Ny, Nz, Lx, Ly, Lz)
+        kx = 2 * math.pi * mx / Lx
+        ky = 2 * math.pi * my / Ly
+        kz = 2 * math.pi * mz / Lz
+        theta = kx * X + ky * Y + kz * Z
+        f = np.cos(theta)
+
+        fxx, fxy, fxz, fyy, fyz, fzz = sd.spectral_hessian(f, Lx, Ly, Lz)
+
+        np.testing.assert_allclose(fxx, -(kx**2) * np.cos(theta), rtol=1e-12, atol=1e-12)
+        np.testing.assert_allclose(fxy, -kx * ky * np.cos(theta), rtol=1e-12, atol=1e-12)
+        np.testing.assert_allclose(fxz, -kx * kz * np.cos(theta), rtol=1e-12, atol=1e-12)
+        np.testing.assert_allclose(fyy, -(ky**2) * np.cos(theta), rtol=1e-12, atol=1e-12)
+        np.testing.assert_allclose(fyz, -ky * kz * np.cos(theta), rtol=1e-12, atol=1e-12)
+        np.testing.assert_allclose(fzz, -(kz**2) * np.cos(theta), rtol=1e-12, atol=1e-12)
+
+    def test_bilaplacian_3d_exact(self):
+        """Bilaplacian on a pure cosine mode in 3-D."""
+        Nx, Ny, Nz = 16, 16, 16
+        Lx, Ly, Lz = 2 * math.pi, 2 * math.pi, 2 * math.pi
+        mx, my, mz = 2, 3, 1
+        X, Y, Z = make_grid_3d(Nx, Ny, Nz, Lx, Ly, Lz)
+        kx = 2 * math.pi * mx / Lx
+        ky = 2 * math.pi * my / Ly
+        kz = 2 * math.pi * mz / Lz
+        theta = kx * X + ky * Y + kz * Z
+        f = np.cos(theta)
+
+        bilap = sd.spectral_bilaplacian(f, Lx, Ly, Lz)
+        bilap_true = (kx**2 + ky**2 + kz**2) ** 2 * np.cos(theta)
+        np.testing.assert_allclose(bilap, bilap_true, rtol=1e-10, atol=1e-8)
+
+    def test_trilaplacian_3d_exact(self):
+        """Trilaplacian on a pure cosine mode in 3-D."""
+        Nx, Ny, Nz = 16, 16, 16
+        Lx, Ly, Lz = 2 * math.pi, 2 * math.pi, 2 * math.pi
+        mx, my, mz = 2, 3, 1
+        X, Y, Z = make_grid_3d(Nx, Ny, Nz, Lx, Ly, Lz)
+        kx = 2 * math.pi * mx / Lx
+        ky = 2 * math.pi * my / Ly
+        kz = 2 * math.pi * mz / Lz
+        theta = kx * X + ky * Y + kz * Z
+        f = np.cos(theta)
+
+        trilap = sd.spectral_trilaplacian(f, Lx, Ly, Lz)
+        trilap_true = -((kx**2 + ky**2 + kz**2) ** 3) * np.cos(theta)
+        np.testing.assert_allclose(trilap, trilap_true, rtol=1e-10, atol=1e-5)
+
+    def test_third_order_3d_exact(self):
+        """Third-order partials on a pure cosine mode in 3-D — 10 components."""
+        Nx, Ny, Nz = 16, 16, 16
+        Lx, Ly, Lz = 2 * math.pi, 2 * math.pi, 2 * math.pi
+        mx, my, mz = 2, 3, 1
+        X, Y, Z = make_grid_3d(Nx, Ny, Nz, Lx, Ly, Lz)
+        kx = 2 * math.pi * mx / Lx
+        ky = 2 * math.pi * my / Ly
+        kz = 2 * math.pi * mz / Lz
+        theta = kx * X + ky * Y + kz * Z
+        f = np.cos(theta)
+        # ∂^3 cos(θ) = sin(θ) · (+k_i k_j k_l)  (i³ = −i, −i·−i = −1, wait: i³=−i,
+        #  cos→sin has sign −1, so ∂^3 cos = +sin · product)
+        # For cos(k·x): ∂_i cos = −k_i sin, ∂_ij cos = −k_i k_j cos,
+        # ∂_ijk cos = +k_i k_j k_k sin
+        sin_theta = np.sin(theta)
+
+        derivs = sd.spectral_third_order(f, Lx, Ly, Lz)
+        names = ["f_xxx", "f_xxy", "f_xxz", "f_xyy", "f_xyz", "f_xzz",
+                 "f_yyy", "f_yyz", "f_yzz", "f_zzz"]
+        expected_multipliers = [
+            kx**3, kx**2 * ky, kx**2 * kz,
+            kx * ky**2, kx * ky * kz, kx * kz**2,
+            ky**3, ky**2 * kz, ky * kz**2,
+            kz**3,
+        ]
+
+        assert len(derivs) == 10, f"Expected 10 third-order components, got {len(derivs)}"
+        for i, (deriv, mult) in enumerate(zip(derivs, expected_multipliers)):
+            expected = mult * sin_theta
+            np.testing.assert_allclose(deriv, expected, rtol=1e-11, atol=1e-10,
+                                       err_msg=f"Component {names[i]} mismatch")
+
+    def test_hessian_trace_equals_laplacian_3d(self):
+        """f_xx + f_yy + f_zz must equal spectral_laplacian."""
+        Nx, Ny, Nz = 16, 16, 16
+        Lx, Ly, Lz = 2 * math.pi, 2 * math.pi, 2 * math.pi
+        X, Y, Z = make_grid_3d(Nx, Ny, Nz, Lx, Ly, Lz)
+        f = np.cos(2 * X + 3 * Y + Z)
+
+        fxx, fxy, fxz, fyy, fyz, fzz = sd.spectral_hessian(f, Lx, Ly, Lz)
+        lap = sd.spectral_laplacian(f, Lx, Ly, Lz)
+        np.testing.assert_allclose(fxx + fyy + fzz, lap, rtol=1e-12, atol=1e-12)
+
+    def test_output_shapes_preserved_3d(self):
+        """Every spectral operator returns arrays with the same shape as input."""
+        Nx, Ny, Nz = 16, 24, 20  # non-cubic on purpose
+        Lx, Ly, Lz = 2 * math.pi, 3 * math.pi, 4 * math.pi
+        X, Y, Z = make_grid_3d(Nx, Ny, Nz, Lx, Ly, Lz)
+        f = np.cos(2 * X + 3 * Y + Z)
+
+        assert sd.spectral_laplacian(f, Lx, Ly, Lz).shape == (Nx, Ny, Nz)
+        assert sd.spectral_bilaplacian(f, Lx, Ly, Lz).shape == (Nx, Ny, Nz)
+        assert sd.spectral_trilaplacian(f, Lx, Ly, Lz).shape == (Nx, Ny, Nz)
+        for arr in sd.spectral_grad(f, Lx, Ly, Lz):
+            assert arr.shape == (Nx, Ny, Nz)
+        for arr in sd.spectral_hessian(f, Lx, Ly, Lz):
+            assert arr.shape == (Nx, Ny, Nz)
+        for arr in sd.spectral_third_order(f, Lx, Ly, Lz):
+            assert arr.shape == (Nx, Ny, Nz)
+
+    def test_rectangular_3d_domain(self):
+        """Check correctness on a fully non-cubic domain (Nx≠Ny≠Nz, Lx≠Ly≠Lz)."""
+        Nx, Ny, Nz = 20, 16, 12
+        Lx, Ly, Lz = 4 * math.pi, 3 * math.pi, 2 * math.pi
+        mx, my, mz = 3, 2, 4
+        X, Y, Z = make_grid_3d(Nx, Ny, Nz, Lx, Ly, Lz)
+        kx = 2 * math.pi * mx / Lx
+        ky = 2 * math.pi * my / Ly
+        kz = 2 * math.pi * mz / Lz
+        theta = kx * X + ky * Y + kz * Z
+        f = np.cos(theta)
+
+        fx, fy, fz = sd.spectral_grad(f, Lx, Ly, Lz)
+        np.testing.assert_allclose(fx, -kx * np.sin(theta), rtol=1e-11, atol=1e-11)
+        np.testing.assert_allclose(fy, -ky * np.sin(theta), rtol=1e-11, atol=1e-11)
+        np.testing.assert_allclose(fz, -kz * np.sin(theta), rtol=1e-11, atol=1e-11)
+
+        lap = sd.spectral_laplacian(f, Lx, Ly, Lz)
+        lap_true = -(kx**2 + ky**2 + kz**2) * np.cos(theta)
+        np.testing.assert_allclose(lap, lap_true, rtol=1e-11, atol=1e-11)
+
+    def test_bilaplacian_equals_iterated_laplacian_3d(self):
+        """Δ²f = Δ(Δf) in 3-D."""
+        Nx, Ny, Nz = 16, 16, 16
+        Lx, Ly, Lz = 2 * math.pi, 2 * math.pi, 2 * math.pi
+        X, Y, Z = make_grid_3d(Nx, Ny, Nz, Lx, Ly, Lz)
+        f = np.cos(3 * X + 2 * Y + 4 * Z)
+
+        bilap_direct = sd.spectral_bilaplacian(f, Lx, Ly, Lz)
+        bilap_iter = sd.spectral_laplacian(
+            sd.spectral_laplacian(f, Lx, Ly, Lz), Lx, Ly, Lz
+        )
+        np.testing.assert_allclose(bilap_iter, bilap_direct, rtol=1e-10, atol=1e-8)
+
+    def test_linearity_3d(self):
+        """∂(a·f + b·g) = a·∂f + b·∂g in 3-D."""
+        Nx, Ny, Nz = 16, 16, 16
+        Lx, Ly, Lz = 2 * math.pi, 2 * math.pi, 2 * math.pi
+        X, Y, Z = make_grid_3d(Nx, Ny, Nz, Lx, Ly, Lz)
+        f = np.cos(2 * X + 3 * Y + Z)
+        g = np.sin(X - 2 * Y + 5 * Z)
+        a, b = 2.5, -1.3
+        h = a * f + b * g
+
+        fx, fy, fz = sd.spectral_grad(f, Lx, Ly, Lz)
+        gx, gy, gz = sd.spectral_grad(g, Lx, Ly, Lz)
+        hx, hy, hz = sd.spectral_grad(h, Lx, Ly, Lz)
+        np.testing.assert_allclose(hx, a * fx + b * gx, rtol=1e-12, atol=1e-12)
+        np.testing.assert_allclose(hy, a * fy + b * gy, rtol=1e-12, atol=1e-12)
+        np.testing.assert_allclose(hz, a * fz + b * gz, rtol=1e-12, atol=1e-12)
+
+        lap_f = sd.spectral_laplacian(f, Lx, Ly, Lz)
+        lap_g = sd.spectral_laplacian(g, Lx, Ly, Lz)
+        lap_h = sd.spectral_laplacian(h, Lx, Ly, Lz)
+        np.testing.assert_allclose(lap_h, a * lap_f + b * lap_g, rtol=1e-12, atol=1e-12)
+
+    def test_1d_input_raises_3d(self):
+        """A 1-D array should raise ValueError (too few dims for ndim==2 or 3)."""
+        arr = np.arange(16)
+        with pytest.raises(ValueError):
+            sd.spectral_grad(arr, 2 * math.pi, 2 * math.pi)
+
+    def test_polynomial_backend_raises_on_3d(self):
+        """Polynomial backend raises NotImplementedError for 3-D input."""
+        from equivariant_pde_find import derivatives
+        f = np.random.default_rng(0).standard_normal((8, 8, 8))
+        with derivatives.use_backend("polynomial"):
+            with pytest.raises(NotImplementedError):
+                derivatives.grad(f, 2 * math.pi, 2 * math.pi, 2 * math.pi)

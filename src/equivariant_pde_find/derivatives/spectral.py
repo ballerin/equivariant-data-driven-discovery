@@ -61,14 +61,29 @@ def _wavenumbers(N, L):
     return 2.0 * np.pi / L * np.fft.fftfreq(N) * N
 
 
-def spectral_grad(f, Lx, Ly, prefilter_sigma=None):
+def spectral_grad(f, Lx, Ly, Lz=None, prefilter_sigma=None):
     """
-    Gradient (f_x, f_y) via FFT.
+    Gradient via FFT.
 
-    Fourier multiplier: (i·k_x, i·k_y).  One FFT2 forward, two IFFT2 back.
+    2-D: returns (f_x, f_y).  3-D: returns (f_x, f_y, f_z).
+    Fourier multiplier: (i·k_x, i·k_y [, i·k_z]).
     """
-    # optionally prefilter in physical units (same units as Lx/Ly)
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
+    if f.ndim == 3:
+        if prefilter_sigma is not None:
+            raise NotImplementedError("prefilter_sigma not supported for 3-D fields")
+        Nx, Ny, Nz = f.shape
+        kx = _wavenumbers(Nx, Lx)
+        ky = _wavenumbers(Ny, Ly)
+        kz = _wavenumbers(Nz, Lz)
+        KX, KY, KZ = np.meshgrid(kx, ky, kz, indexing="ij")
+        fh = np.fft.fftn(f)
+        return (
+            np.real(np.fft.ifftn(1j * KX * fh)),
+            np.real(np.fft.ifftn(1j * KY * fh)),
+            np.real(np.fft.ifftn(1j * KZ * fh)),
+        )
+    # 2-D path (original)
     Nx, Ny = f.shape
     kx = _wavenumbers(Nx, Lx)
     ky = _wavenumbers(Ny, Ly)
@@ -79,13 +94,24 @@ def spectral_grad(f, Lx, Ly, prefilter_sigma=None):
     return fx, fy
 
 
-def spectral_laplacian(f, Lx, Ly, prefilter_sigma=None):
+def spectral_laplacian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
     """
-    Laplacian Δf = f_xx + f_yy via FFT.
+    Laplacian via FFT.
 
-    Fourier multiplier: −(k_x² + k_y²) = −|k|².
+    2-D: Δf = f_xx + f_yy.  3-D: Δf = f_xx + f_yy + f_zz.
+    Fourier multiplier: −(k_x² + k_y² [+ k_z²]) = −|k|².
     """
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
+    if f.ndim == 3:
+        if prefilter_sigma is not None:
+            raise NotImplementedError("prefilter_sigma not supported for 3-D fields")
+        Nx, Ny, Nz = f.shape
+        kx = _wavenumbers(Nx, Lx)
+        ky = _wavenumbers(Ny, Ly)
+        kz = _wavenumbers(Nz, Lz)
+        KX, KY, KZ = np.meshgrid(kx, ky, kz, indexing="ij")
+        K2 = KX**2 + KY**2 + KZ**2
+        return np.real(np.fft.ifftn(-K2 * np.fft.fftn(f)))
     Nx, Ny = f.shape
     kx = _wavenumbers(Nx, Lx)
     ky = _wavenumbers(Ny, Ly)
@@ -94,13 +120,33 @@ def spectral_laplacian(f, Lx, Ly, prefilter_sigma=None):
     return np.real(np.fft.ifft2(-K2 * np.fft.fft2(f)))
 
 
-def spectral_hessian(f, Lx, Ly, prefilter_sigma=None):
+def spectral_hessian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
     """
-    Hessian entries (f_xx, f_xy, f_yy) via FFT.
+    Hessian entries via FFT.
 
-    Fourier multipliers: −k_x², −k_x·k_y, −k_y².  One FFT2 forward, three IFFT2.
+    2-D: returns (f_xx, f_xy, f_yy).
+    3-D: returns (f_xx, f_xy, f_xz, f_yy, f_yz, f_zz) — 6 unique components.
+
+    Fourier multipliers: −k_i·k_j for i ≤ j.
     """
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
+    if f.ndim == 3:
+        if prefilter_sigma is not None:
+            raise NotImplementedError("prefilter_sigma not supported for 3-D fields")
+        Nx, Ny, Nz = f.shape
+        kx = _wavenumbers(Nx, Lx)
+        ky = _wavenumbers(Ny, Ly)
+        kz = _wavenumbers(Nz, Lz)
+        KX, KY, KZ = np.meshgrid(kx, ky, kz, indexing="ij")
+        fh = np.fft.fftn(f)
+        return (
+            np.real(np.fft.ifftn(-(KX**2) * fh)),
+            np.real(np.fft.ifftn(-KX * KY * fh)),
+            np.real(np.fft.ifftn(-KX * KZ * fh)),
+            np.real(np.fft.ifftn(-(KY**2) * fh)),
+            np.real(np.fft.ifftn(-KY * KZ * fh)),
+            np.real(np.fft.ifftn(-(KZ**2) * fh)),
+        )
     Nx, Ny = f.shape
     kx = _wavenumbers(Nx, Lx)
     ky = _wavenumbers(Ny, Ly)
@@ -112,13 +158,25 @@ def spectral_hessian(f, Lx, Ly, prefilter_sigma=None):
     return fxx, fxy, fyy
 
 
-def spectral_bilaplacian(f, Lx, Ly, prefilter_sigma=None):
+def spectral_bilaplacian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
     """
-    Bilaplacian Δ²f = f_xxxx + 2f_xxyy + f_yyyy via FFT.
+    Bilaplacian via FFT.
 
-    Fourier multiplier: (k_x² + k_y²)² = |k|⁴  (positive — even order).
+    2-D: Δ²f = f_xxxx + 2f_xxyy + f_yyyy.
+    3-D: Δ²f = f_xxxx + f_yyyy + f_zzzz + 2f_xxyy + 2f_xxzz + 2f_yyzz.
+    Fourier multiplier: (k_x² + k_y² [+ k_z²])² = |k|⁴.
     """
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
+    if f.ndim == 3:
+        if prefilter_sigma is not None:
+            raise NotImplementedError("prefilter_sigma not supported for 3-D fields")
+        Nx, Ny, Nz = f.shape
+        kx = _wavenumbers(Nx, Lx)
+        ky = _wavenumbers(Ny, Ly)
+        kz = _wavenumbers(Nz, Lz)
+        KX, KY, KZ = np.meshgrid(kx, ky, kz, indexing="ij")
+        K2 = KX**2 + KY**2 + KZ**2
+        return np.real(np.fft.ifftn(K2**2 * np.fft.fftn(f)))
     Nx, Ny = f.shape
     kx = _wavenumbers(Nx, Lx)
     ky = _wavenumbers(Ny, Ly)
@@ -127,13 +185,23 @@ def spectral_bilaplacian(f, Lx, Ly, prefilter_sigma=None):
     return np.real(np.fft.ifft2(K2**2 * np.fft.fft2(f)))
 
 
-def spectral_trilaplacian(f, Lx, Ly, prefilter_sigma=None):
+def spectral_trilaplacian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
     """
     Trilaplacian Δ³f via FFT.
 
-    Fourier multiplier: −(k_x² + k_y²)³ = −|k|⁶  (negative — odd power of Δ).
+    Fourier multiplier: −(k_x² + k_y² [+ k_z²])³ = −|k|⁶.
     """
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
+    if f.ndim == 3:
+        if prefilter_sigma is not None:
+            raise NotImplementedError("prefilter_sigma not supported for 3-D fields")
+        Nx, Ny, Nz = f.shape
+        kx = _wavenumbers(Nx, Lx)
+        ky = _wavenumbers(Ny, Ly)
+        kz = _wavenumbers(Nz, Lz)
+        KX, KY, KZ = np.meshgrid(kx, ky, kz, indexing="ij")
+        K2 = KX**2 + KY**2 + KZ**2
+        return np.real(np.fft.ifftn(-(K2**3) * np.fft.fftn(f)))
     Nx, Ny = f.shape
     kx = _wavenumbers(Nx, Lx)
     ky = _wavenumbers(Ny, Ly)
@@ -142,18 +210,40 @@ def spectral_trilaplacian(f, Lx, Ly, prefilter_sigma=None):
     return np.real(np.fft.ifft2(-(K2**3) * np.fft.fft2(f)))
 
 
-def spectral_third_order(f, Lx, Ly, prefilter_sigma=None):
+def spectral_third_order(f, Lx, Ly, Lz=None, prefilter_sigma=None):
     """
-    Third-order partial derivatives (f_xxx, f_xxy, f_xyy, f_yyy) via FFT.
+    Third-order partial derivatives via FFT.
 
-    Fourier multiplier for ∂^a_x ∂^b_y with a + b = 3:
+    2-D: returns (f_xxx, f_xxy, f_xyy, f_yyy) — 4 components.
+    3-D: returns 10 components (all cubic monomials):
+         f_xxx, f_xxy, f_xxz, f_xyy, f_xyz, f_xzz, f_yyy, f_yyz, f_yzz, f_zzz.
 
-        (i·k_x)^a (i·k_y)^b = i³ · k_x^a · k_y^b = −i · k_x^a · k_y^b
-
-    so the multipliers are −i·k_x³, −i·k_x²·k_y, −i·k_x·k_y², −i·k_y³.
-    One FFT2 forward, four IFFT2 back.
+    Fourier multiplier for ∂^a_x ∂^b_y ∂^c_z with a+b+c=3:
+        (i·k_x)^a (i·k_y)^b (i·k_z)^c = i³ · k_x^a k_y^b k_z^c = −i · k_x^a k_y^b k_z^c.
     """
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
+    if f.ndim == 3:
+        if prefilter_sigma is not None:
+            raise NotImplementedError("prefilter_sigma not supported for 3-D fields")
+        Nx, Ny, Nz = f.shape
+        kx = _wavenumbers(Nx, Lx)
+        ky = _wavenumbers(Ny, Ly)
+        kz = _wavenumbers(Nz, Lz)
+        KX, KY, KZ = np.meshgrid(kx, ky, kz, indexing="ij")
+        fh = np.fft.fftn(f)
+        return (
+            np.real(np.fft.ifftn(-1j * KX**3 * fh)),               # f_xxx
+            np.real(np.fft.ifftn(-1j * KX**2 * KY * fh)),           # f_xxy
+            np.real(np.fft.ifftn(-1j * KX**2 * KZ * fh)),           # f_xxz
+            np.real(np.fft.ifftn(-1j * KX * KY**2 * fh)),           # f_xyy
+            np.real(np.fft.ifftn(-1j * KX * KY * KZ * fh)),         # f_xyz
+            np.real(np.fft.ifftn(-1j * KX * KZ**2 * fh)),           # f_xzz
+            np.real(np.fft.ifftn(-1j * KY**3 * fh)),                # f_yyy
+            np.real(np.fft.ifftn(-1j * KY**2 * KZ * fh)),           # f_yyz
+            np.real(np.fft.ifftn(-1j * KY * KZ**2 * fh)),           # f_yzz
+            np.real(np.fft.ifftn(-1j * KZ**3 * fh)),                # f_zzz
+        )
+    # 2-D path (original)
     Nx, Ny = f.shape
     kx = _wavenumbers(Nx, Lx)
     ky = _wavenumbers(Ny, Ly)

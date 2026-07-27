@@ -2,7 +2,16 @@ import numpy as np
 
 
 def _imex_step(f, nonlin_fn, denom, dt, dyn_noise, rng):
-    """Single IMEX step: implicit linear + explicit nonlinear + optional noise."""
+    """Single IMEX step: implicit linear + explicit nonlinear + optional noise.
+
+    Supports 2-D (fft2) and 3-D (fftn) fields.
+    """
+    if f.ndim == 3:
+        fhat = np.fft.fftn(f) + dt * np.fft.fftn(nonlin_fn(f))
+        if dyn_noise > 0.0:
+            xi = rng.standard_normal(f.shape)
+            fhat += np.sqrt(dt) * dyn_noise * np.fft.fftn(xi)
+        return np.real(np.fft.ifftn(fhat / denom))
     fhat = np.fft.fft2(f) + dt * np.fft.fft2(nonlin_fn(f))
     if dyn_noise > 0.0:
         xi = rng.standard_normal(f.shape)

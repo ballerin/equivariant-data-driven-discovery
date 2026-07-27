@@ -89,14 +89,22 @@ def make_weak_regression_data(
 
         b_w = build_weak_rhs(ft_snaps[snap_idx], kernel_x=kernel, kernel_y=kernel)
 
-        Nx, Ny = f.shape
-        Nv_x, Nv_y = Nx - 2 * m, Ny - 2 * m
+        spatial_shape = f.shape
+        Nv = tuple(n - 2 * m for n in spatial_shape)
 
         if sample_stride > 1:
-            ix = np.arange(0, Nv_x, sample_stride)
-            iy = np.arange(0, Nv_y, sample_stride)
-            IX, IY = np.meshgrid(ix, iy, indexing="ij")
-            flat_idx = (IX * Nv_y + IY).ravel()
+            if f.ndim == 3:
+                ix = np.arange(0, Nv[0], sample_stride)
+                iy = np.arange(0, Nv[1], sample_stride)
+                iz = np.arange(0, Nv[2], sample_stride)
+                IX, IY, IZ = np.meshgrid(ix, iy, iz, indexing="ij")
+                flat_idx = (IX * Nv[1] * Nv[2] + IY * Nv[2] + IZ).ravel()
+            else:
+                Nv_x, Nv_y = Nv
+                ix = np.arange(0, Nv_x, sample_stride)
+                iy = np.arange(0, Nv_y, sample_stride)
+                IX, IY = np.meshgrid(ix, iy, indexing="ij")
+                flat_idx = (IX * Nv_y + IY).ravel()
             Theta_parts.append(Theta_w[flat_idx, :])
             rhs_parts.append(b_w[flat_idx])
         else:

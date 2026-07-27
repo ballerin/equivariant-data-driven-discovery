@@ -115,34 +115,47 @@ def use_backend(name: str):
 # ---------------------------------------------------------------------------
 
 
-def grad(f, Lx, Ly, prefilter_sigma=None):
-    """Gradient (f_x, f_y) via the active backend."""
-    return _DISPATCH[_active_name]["grad"](f, Lx, Ly, prefilter_sigma)
+def grad(f, Lx, Ly, Lz=None, prefilter_sigma=None):
+    """Gradient via the active backend.
+
+    2-D: returns (f_x, f_y).  3-D: returns (f_x, f_y, f_z).
+    3-D is only supported with the 'spectral' backend.
+    """
+    return _DISPATCH[_active_name]["grad"](f, Lx, Ly, Lz, prefilter_sigma)
 
 
-def laplacian(f, Lx, Ly, prefilter_sigma=None):
-    """Laplacian Δf = f_xx + f_yy via the active backend."""
-    return _DISPATCH[_active_name]["laplacian"](f, Lx, Ly, prefilter_sigma)
+def laplacian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
+    """Laplacian via the active backend.
+
+    2-D: Δf = f_xx + f_yy.  3-D: Δf = f_xx + f_yy + f_zz.
+    """
+    return _DISPATCH[_active_name]["laplacian"](f, Lx, Ly, Lz, prefilter_sigma)
 
 
-def hessian(f, Lx, Ly, prefilter_sigma=None):
-    """Hessian (f_xx, f_xy, f_yy) via the active backend."""
-    return _DISPATCH[_active_name]["hessian"](f, Lx, Ly, prefilter_sigma)
+def hessian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
+    """Hessian via the active backend.
+
+    2-D: returns (f_xx, f_xy, f_yy).  3-D: returns 6 components.
+    """
+    return _DISPATCH[_active_name]["hessian"](f, Lx, Ly, Lz, prefilter_sigma)
 
 
-def bilaplacian(f, Lx, Ly, prefilter_sigma=None):
+def bilaplacian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
     """Bilaplacian Δ²f via the active backend."""
-    return _DISPATCH[_active_name]["bilaplacian"](f, Lx, Ly, prefilter_sigma)
+    return _DISPATCH[_active_name]["bilaplacian"](f, Lx, Ly, Lz, prefilter_sigma)
 
 
-def trilaplacian(f, Lx, Ly, prefilter_sigma=None):
+def trilaplacian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
     """Trilaplacian Δ³f via the active backend."""
-    return _DISPATCH[_active_name]["trilaplacian"](f, Lx, Ly, prefilter_sigma)
+    return _DISPATCH[_active_name]["trilaplacian"](f, Lx, Ly, Lz, prefilter_sigma)
 
 
-def third_order(f, Lx, Ly, prefilter_sigma=None):
-    """Third-order partial derivatives (f_xxx, f_xxy, f_xyy, f_yyy) via the active backend."""
-    return _DISPATCH[_active_name]["third_order"](f, Lx, Ly, prefilter_sigma)
+def third_order(f, Lx, Ly, Lz=None, prefilter_sigma=None):
+    """Third-order partial derivatives via the active backend.
+
+    2-D: returns (f_xxx, f_xxy, f_xyy, f_yyy).  3-D: returns 10 components.
+    """
+    return _DISPATCH[_active_name]["third_order"](f, Lx, Ly, Lz, prefilter_sigma)
 
 
 # -------------------- configuration helpers --------------------

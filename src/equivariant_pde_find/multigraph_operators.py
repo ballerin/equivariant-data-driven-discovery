@@ -40,7 +40,7 @@ Operators are ordered by (total_p, k, m).
 ----------------------------------
 On R^2 two multigraph operators are linearly dependent on the others and are
 excluded from the non-redundant basis.  Both vanish identically in d=2 but are
-independent in d≥3 (Theorem 2 of the paper).
+independent in d≥3.
 
   k=3  Triangle graph (three vertices each of degree 2, mutually connected):
        tr((∇²f)^3)  is linearly dependent via the 2-D Cayley-Hamilton identity:
@@ -76,7 +76,7 @@ from .derivatives import (
 # --- p = 0 ---
 
 
-def _op_const(f, Lx, Ly):
+def _op_const(f, Lx, Ly, Lz=None):
     """
     p=0, k=0. Empty graph: the constant 1.
 
@@ -85,7 +85,7 @@ def _op_const(f, Lx, Ly):
     return np.ones_like(f)
 
 
-def _op_identity(f, Lx, Ly):
+def _op_identity(f, Lx, Ly, Lz=None):
     """
     p=0, k=1. Single isolated vertex: f.
 
@@ -97,7 +97,7 @@ def _op_identity(f, Lx, Ly):
 # --- p = 1 ---
 
 
-def _op_Delta(f, Lx, Ly):
+def _op_Delta(f, Lx, Ly, Lz=None):
     """
     p=1, k=1. One vertex with a single loop: Δf.
     The loop contracts both indices of ∇²f into a trace.
@@ -106,17 +106,20 @@ def _op_Delta(f, Lx, Ly):
     Graph:  ↺
             X
     """
-    return laplacian(f, Lx, Ly)
+    return laplacian(f, Lx, Ly, Lz)
 
 
-def _op_grad_sq(f, Lx, Ly):
+def _op_grad_sq(f, Lx, Ly, Lz=None):
     """
-    p=1, k=2. Single edge between two vertices: ‖∇f‖² = f_x² + f_y².
+    p=1, k=2. Single edge between two vertices: ‖∇f‖².
     Each vertex contributes ∇f (degree 1); the edge contracts their free indices.
     Vertex degrees: 1, 1.
 
     Graph:  X---X
     """
+    if f.ndim == 3:
+        fx, fy, fz = grad(f, Lx, Ly, Lz)
+        return fx**2 + fy**2 + fz**2
     fx, fy = grad(f, Lx, Ly)
     return fx**2 + fy**2
 
@@ -124,7 +127,7 @@ def _op_grad_sq(f, Lx, Ly):
 # --- p = 2 ---
 
 
-def _op_bilap(f, Lx, Ly):
+def _op_bilap(f, Lx, Ly, Lz=None):
     """
     p=2, k=1. One vertex with two loops: Δ²f.
     Vertex degree: 4.
@@ -132,10 +135,10 @@ def _op_bilap(f, Lx, Ly):
     Graph:  ↺↺
             X
     """
-    return bilaplacian(f, Lx, Ly)
+    return bilaplacian(f, Lx, Ly, Lz)
 
 
-def _op_grad_Delta_grad(f, Lx, Ly):
+def _op_grad_Delta_grad(f, Lx, Ly, Lz=None):
     """
     p=2, k=2. Single edge with one loop at an endpoint: ⟨∇Δf, ∇f⟩ = Σ_i (∂_i Δf)(∂_i f).
     The looped vertex (degree 3) contributes ∇Δf; the plain vertex (degree 1) contributes ∇f.
@@ -144,132 +147,116 @@ def _op_grad_Delta_grad(f, Lx, Ly):
     Graph:  ↺
             X---X
     """
-    Df = laplacian(f, Lx, Ly)
+    Df = laplacian(f, Lx, Ly, Lz)
+    if f.ndim == 3:
+        Dfx, Dfy, Dfz = grad(Df, Lx, Ly, Lz)
+        fx, fy, fz = grad(f, Lx, Ly, Lz)
+        return Dfx * fx + Dfy * fy + Dfz * fz
     Dfx, Dfy = grad(Df, Lx, Ly)
     fx, fy = grad(f, Lx, Ly)
     return Dfx * fx + Dfy * fy
 
 
-def _op_hess_norm_sq(f, Lx, Ly):
+def _op_hess_norm_sq(f, Lx, Ly, Lz=None):
     """
-    p=2, k=2. Double edge between two vertices: ‖∇²f‖² = f_xx² + 2f_xy² + f_yy².
+    p=2, k=2. Double edge between two vertices: ‖∇²f‖² = Σ_{ij} f_{ij}².
     Both vertices contribute ∇²f (degree 2); the double edge contracts all index pairs.
     Vertex degrees: 2, 2.
 
     Graph:  X===X
     """
+    if f.ndim == 3:
+        fxx, fxy, fxz, fyy, fyz, fzz = hessian(f, Lx, Ly, Lz)
+        return fxx**2 + fyy**2 + fzz**2 + 2 * (fxy**2 + fxz**2 + fyz**2)
     fxx, fxy, fyy = hessian(f, Lx, Ly)
     return fxx**2 + 2 * fxy**2 + fyy**2
 
 
-def _op_hess_grad_grad(f, Lx, Ly):
+def _op_hess_grad_grad(f, Lx, Ly, Lz=None):
     """
-    p=2, k=3. Path of three vertices: ∇²f(∇f,∇f) = f_xx f_x² + 2f_xy f_x f_y + f_yy f_y².
+    p=2, k=3. Path of three vertices: ∇²f(∇f,∇f) = Σ_{ij} f_{ij} f_i f_j.
     The center vertex (degree 2) contributes ∇²f; each endpoint (degree 1) contributes ∇f.
     Vertex degrees: 1, 2, 1.
 
     Graph:  X---X---X
     """
+    if f.ndim == 3:
+        fx, fy, fz = grad(f, Lx, Ly, Lz)
+        fxx, fxy, fxz, fyy, fyz, fzz = hessian(f, Lx, Ly, Lz)
+        return (fxx * fx**2 + fyy * fy**2 + fzz * fz**2
+                + 2 * (fxy * fx * fy + fxz * fx * fz + fyz * fy * fz))
     fx, fy = grad(f, Lx, Ly)
     fxx, fxy, fyy = hessian(f, Lx, Ly)
     return fxx * fx**2 + 2 * fxy * fx * fy + fyy * fy**2
 
 
-# --- p = 2, modified multigraph operators (Lemma 1 / Table 4) ---
+# --- p = 2, modified multigraph operators ---
 # These are the 6 operators in the IBP-friendly basis that differ from
 # the original multigraph basis.  All are computed via product-rule
 # expansion to avoid compounding numerical errors.
-#
-# NOTE: The paper's Lemma 1 proof contains two numerical errors that
-# are corrected here (see lemma1-errata.md):
-#   - Δ²f² uses 4‖∇²f‖² (not 2)
-#   - Δ²f³ uses 24f·⟨∇Δf,∇f⟩ (not 6)
 
-
-def _op_Delta_f2(f, Lx, Ly):
+def _op_Delta_f2(f, Lx, Ly, Lz=None):
     """Δ(f²) = 2f·Δf + 2‖∇f‖².  Replacement for f·Δf (N₁;₀²)."""
-    fx, fy = grad(f, Lx, Ly)
-    lap = laplacian(f, Lx, Ly)
-    return 2.0 * f * lap + 2.0 * (fx**2 + fy**2)
+    lap = laplacian(f, Lx, Ly, Lz)
+    return 2.0 * f * lap + 2.0 * _op_grad_sq(f, Lx, Ly, Lz)
 
 
-def _op_Delta_f3(f, Lx, Ly):
+def _op_Delta_f3(f, Lx, Ly, Lz=None):
     """Δ(f³) = 3f²·Δf + 6f·‖∇f‖².  Replacement for f²·Δf (N₁;₀³)."""
-    fx, fy = grad(f, Lx, Ly)
-    lap = laplacian(f, Lx, Ly)
-    return 3.0 * f**2 * lap + 6.0 * f * (fx**2 + fy**2)
+    lap = laplacian(f, Lx, Ly, Lz)
+    return 3.0 * f**2 * lap + 6.0 * f * _op_grad_sq(f, Lx, Ly, Lz)
 
 
-def _op_Delta_grad_sq(f, Lx, Ly):
+def _op_Delta_grad_sq(f, Lx, Ly, Lz=None):
     """Δ(‖∇f‖²) = 2⟨∇Δf,∇f⟩ + 2‖∇²f‖².  Replacement for ⟨∇Δf,∇f⟩ (N₂;₁²)."""
-    Df = laplacian(f, Lx, Ly)
-    Dfx, Dfy = grad(Df, Lx, Ly)
-    fx, fy = grad(f, Lx, Ly)
-    fxx, fxy, fyy = hessian(f, Lx, Ly)
-    return 2.0 * (Dfx * fx + Dfy * fy) + 2.0 * (fxx**2 + 2.0 * fxy**2 + fyy**2)
+    return 2.0 * _op_grad_Delta_grad(f, Lx, Ly, Lz) + 2.0 * _op_hess_norm_sq(f, Lx, Ly, Lz)
 
 
-def _op_Delta_f_grad_sq(f, Lx, Ly):
+def _op_Delta_f_grad_sq(f, Lx, Ly, Lz=None):
     """Δ(f·‖∇f‖²) = 2f·⟨∇Δf,∇f⟩ + 2f·‖∇²f‖² + ‖∇f‖²·Δf + 4∇²f(∇f,∇f).
     Replacement for f·⟨∇Δf,∇f⟩ (N₂;₁³)."""
-    Df = laplacian(f, Lx, Ly)
-    Dfx, Dfy = grad(Df, Lx, Ly)
-    fx, fy = grad(f, Lx, Ly)
-    fxx, fxy, fyy = hessian(f, Lx, Ly)
-    grad_sq = fx**2 + fy**2
-    hess_norm_sq = fxx**2 + 2.0 * fxy**2 + fyy**2
-    hess_grad_grad = fxx * fx**2 + 2.0 * fxy * fx * fy + fyy * fy**2
+    Df = laplacian(f, Lx, Ly, Lz)
     return (
-        2.0 * f * (Dfx * fx + Dfy * fy)
-        + 2.0 * f * hess_norm_sq
-        + grad_sq * Df
-        + 4.0 * hess_grad_grad
+        2.0 * f * _op_grad_Delta_grad(f, Lx, Ly, Lz)
+        + 2.0 * f * _op_hess_norm_sq(f, Lx, Ly, Lz)
+        + _op_grad_sq(f, Lx, Ly, Lz) * Df
+        + 4.0 * _op_hess_grad_grad(f, Lx, Ly, Lz)
     )
 
 
-def _op_Delta2_f2(f, Lx, Ly):
+def _op_Delta2_f2(f, Lx, Ly, Lz=None):
     """Δ²(f²) = 2f·Δ²f + 8⟨∇Δf,∇f⟩ + 4‖∇²f‖² + 2(Δf)².
-    Replacement for f·Δ²f (N₂;₀²).  CORRECTED: 4‖∇²f‖² (paper has 2)."""
-    Df = laplacian(f, Lx, Ly)
-    D2f = bilaplacian(f, Lx, Ly)
-    Dfx, Dfy = grad(Df, Lx, Ly)
-    fx, fy = grad(f, Lx, Ly)
-    fxx, fxy, fyy = hessian(f, Lx, Ly)
-    hess_norm_sq = fxx**2 + 2.0 * fxy**2 + fyy**2
+    Replacement for f·Δ²f (N₂;₀²)."""
+    Df = laplacian(f, Lx, Ly, Lz)
+    D2f = bilaplacian(f, Lx, Ly, Lz)
     return (
         2.0 * f * D2f
-        + 8.0 * (Dfx * fx + Dfy * fy)
-        + 4.0 * hess_norm_sq
+        + 8.0 * _op_grad_Delta_grad(f, Lx, Ly, Lz)
+        + 4.0 * _op_hess_norm_sq(f, Lx, Ly, Lz)
         + 2.0 * Df**2
     )
 
 
-def _op_Delta2_f3(f, Lx, Ly):
+def _op_Delta2_f3(f, Lx, Ly, Lz=None):
     """Δ²(f³) = 3f²·Δ²f + 24f·⟨∇Δf,∇f⟩ + 12f·‖∇²f‖² + 6f·(Δf)²
     + 24∇²f(∇f,∇f) + 12‖∇f‖²·Δf.
     Replacement for f²·Δ²f (N₂;₀³).  CORRECTED: 24f⟨∇Δf,∇f⟩ (paper has 6)."""
-    Df = laplacian(f, Lx, Ly)
-    D2f = bilaplacian(f, Lx, Ly)
-    Dfx, Dfy = grad(Df, Lx, Ly)
-    fx, fy = grad(f, Lx, Ly)
-    fxx, fxy, fyy = hessian(f, Lx, Ly)
-    grad_sq = fx**2 + fy**2
-    hess_norm_sq = fxx**2 + 2.0 * fxy**2 + fyy**2
-    hess_grad_grad = fxx * fx**2 + 2.0 * fxy * fx * fy + fyy * fy**2
+    Df = laplacian(f, Lx, Ly, Lz)
+    D2f = bilaplacian(f, Lx, Ly, Lz)
     return (
         3.0 * f**2 * D2f
-        + 24.0 * f * (Dfx * fx + Dfy * fy)
-        + 12.0 * f * hess_norm_sq
+        + 24.0 * f * _op_grad_Delta_grad(f, Lx, Ly, Lz)
+        + 12.0 * f * _op_hess_norm_sq(f, Lx, Ly, Lz)
         + 6.0 * f * Df**2
-        + 24.0 * hess_grad_grad
-        + 12.0 * grad_sq * Df
+        + 24.0 * _op_hess_grad_grad(f, Lx, Ly, Lz)
+        + 12.0 * _op_grad_sq(f, Lx, Ly, Lz) * Df
     )
 
 
 # --- p = 3 ---
 
 
-def _op_trilap(f, Lx, Ly):
+def _op_trilap(f, Lx, Ly, Lz=None):
     """
     p=3, k=1. One vertex with three loops: Δ³f.
     Vertex degree: 6.
@@ -277,10 +264,10 @@ def _op_trilap(f, Lx, Ly):
     Graph:  ↺↺↺
             X
     """
-    return trilaplacian(f, Lx, Ly)
+    return trilaplacian(f, Lx, Ly, Lz)
 
 
-def _op_hess_hess_Delta(f, Lx, Ly):
+def _op_hess_hess_Delta(f, Lx, Ly, Lz=None):
     """
     p=3, k=2. Double edge with one loop at an endpoint: ⟨∇²f, ∇²Δf⟩_F = Σ_{ij} f_{ij} (Δf)_{ij}.
     The looped vertex (degree 4) contributes ∇²Δf; the plain vertex (degree 2) contributes ∇²f.
@@ -289,7 +276,12 @@ def _op_hess_hess_Delta(f, Lx, Ly):
     Graph:  ↺
             X===X
     """
-    Df = laplacian(f, Lx, Ly)
+    Df = laplacian(f, Lx, Ly, Lz)
+    if f.ndim == 3:
+        fxx, fxy, fxz, fyy, fyz, fzz = hessian(f, Lx, Ly, Lz)
+        Dfxx, Dfxy, Dfxz, Dfyy, Dfyz, Dfzz = hessian(Df, Lx, Ly, Lz)
+        return (fxx * Dfxx + fyy * Dfyy + fzz * Dfzz
+                + 2 * (fxy * Dfxy + fxz * Dfxz + fyz * Dfyz))
     fxx, fxy, fyy = hessian(f, Lx, Ly)
     Dfxx, Dfxy, Dfyy = hessian(Df, Lx, Ly)
     return fxx * Dfxx + 2 * fxy * Dfxy + fyy * Dfyy
@@ -298,10 +290,10 @@ def _op_hess_hess_Delta(f, Lx, Ly):
 # --- p = 3, connected operators ---
 
 
-def _op_nabla3_nabla3(f, Lx, Ly):
+def _op_nabla3_nabla3(f, Lx, Ly, Lz=None):
     """
     p=3, k=4. Star graph: one central vertex (degree 3) with three pendant vertices (degree 1).
-    ∇³f(∇f,∇f,∇f) = f_xxx f_x³ + 3f_xxy f_x²f_y + 3f_xyy f_xf_y² + f_yyy f_y³.
+    ∇³f(∇f,∇f,∇f).
     The center contributes ∇³f; each leaf contributes ∇f.
     Vertex degrees: 1, 1, 1, 3 (center).
 
@@ -309,52 +301,83 @@ def _op_nabla3_nabla3(f, Lx, Ly):
                 |
             X---X---X
     """
+    if f.ndim == 3:
+        derivs = third_order(f, Lx, Ly, Lz)
+        fx, fy, fz = grad(f, Lx, Ly, Lz)
+        # In 3D the star graph gives a more complex expression.
+        # For simplicity, delegate to the general 3D third-order contraction.
+        raise NotImplementedError(
+            "_op_nabla3_nabla3 not yet implemented for 3-D. "
+            "Use max_p <= 2 for 3-D experiments."
+        )
     fxxx, fxxy, fxyy, fyyy = third_order(f, Lx, Ly)
     fx, fy = grad(f, Lx, Ly)
     return fxxx * fx**3 + 3 * fxxy * fx**2 * fy + 3 * fxyy * fx * fy**2 + fyyy * fy**3
 
 
-def _op_path_of_4(f, Lx, Ly):
+def _op_path_of_4(f, Lx, Ly, Lz=None):
     """
-    p=3, k=4. Path of four vertices. EXCLUDED in R² via the P⁰ identity:
-        ‖∇f‖²·(Δf)² - ‖∇f‖²·‖∇²f‖² + 2‖∇²f(∇f,·)‖² - 2Δf·∇²f(∇f,∇f) = 0.
-    ‖∇²f(∇f,·)‖² = (f_xx f_x + f_xy f_y)² + (f_xy f_x + f_yy f_y)².
+    p=3, k=4. Path of four vertices. EXCLUDED in R² via the P⁰ identity.
+    ‖∇²f(∇f,·)‖² = Σ_i (Σ_j f_{ij} f_j)².
     Vertex degrees: 1, 2, 2, 1.
 
     Graph:  X---X---X---X
     """
+    if f.ndim == 3:
+        fx, fy, fz = grad(f, Lx, Ly, Lz)
+        fxx, fxy, fxz, fyy, fyz, fzz = hessian(f, Lx, Ly, Lz)
+        return (
+            (fxx * fx + fxy * fy + fxz * fz) ** 2
+            + (fxy * fx + fyy * fy + fyz * fz) ** 2
+            + (fxz * fx + fyz * fy + fzz * fz) ** 2
+        )
     fx, fy = grad(f, Lx, Ly)
     fxx, fxy, fyy = hessian(f, Lx, Ly)
     return (fxx * fx + fxy * fy) ** 2 + (fxy * fx + fyy * fy) ** 2
 
 
-def _op_triangle(f, Lx, Ly):
+def _op_triangle(f, Lx, Ly, Lz=None):
     """
     p=3, k=3. Triangle (three vertices of degree 2, each pair connected by one edge).
-    EXCLUDED in R² via the Q⁰ (Cayley–Hamilton) identity:
-        tr((∇²f)³) = (Δf)³ - 3Δf·det(∇²f),   det(∇²f) = [(Δf)² - ‖∇²f‖²] / 2.
-    tr((∇²f)³) = f_xx³ + f_yy³ + 3f_xy²(f_xx + f_yy).
+    EXCLUDED in R² via the Q⁰ (Cayley–Hamilton) identity.
+    tr((∇²f)³).
     Vertex degrees: 2, 2, 2.
 
     Graph:      X
                / \
               X---X
     """
+    if f.ndim == 3:
+        fxx, fxy, fxz, fyy, fyz, fzz = hessian(f, Lx, Ly, Lz)
+        # tr(H³) for symmetric 3×3 Hessian H = [[a,d,e],[d,b,f],[e,f,c]]:
+        #   a³+b³+c³ + 3(ad²+ae²+bd²+bf²+ce²+cf²) + 6def
+        return (
+            fxx**3 + fyy**3 + fzz**3
+            + 3.0 * (
+                fxx * fxy**2 + fxx * fxz**2
+                + fyy * fxy**2 + fyy * fyz**2
+                + fzz * fxz**2 + fzz * fyz**2
+            )
+            + 6.0 * fxy * fxz * fyz
+        )
     fxx, fxy, fyy = hessian(f, Lx, Ly)
     return fxx**3 + fyy**3 + 3 * fxy**2 * (fxx + fyy)
 
 
-def _op_hess_inner_nabla3_grad(f, Lx, Ly):
+def _op_hess_inner_nabla3_grad(f, Lx, Ly, Lz=None):
     """
     p=3, k=3. Double edge between two vertices, one of which also has a single edge to a
     third vertex.
     ⟨∇²f, ∇³f(·,·,∇f)⟩_F = Σ_{ijk} f_{ij} f_{ijk} f_k.
-    Left vertex (degree 2) contributes ∇²f; center vertex (degree 3) contributes ∇³f;
-    right pendant (degree 1) contributes ∇f contracted with the free index of the center.
     Vertex degrees: 2, 3, 1.
 
     Graph:  X===X---X
     """
+    if f.ndim == 3:
+        raise NotImplementedError(
+            "_op_hess_inner_nabla3_grad not yet implemented for 3-D. "
+            "Use max_p <= 2 for 3-D experiments."
+        )
     fxxx, fxxy, fxyy, fyyy = third_order(f, Lx, Ly)
     fx, fy = grad(f, Lx, Ly)
     fxx, fxy, fyy = hessian(f, Lx, Ly)
@@ -363,67 +386,85 @@ def _op_hess_inner_nabla3_grad(f, Lx, Ly):
     return gx * fx + gy * fy
 
 
-def _op_hess_grad_gradDelta(f, Lx, Ly):
+def _op_hess_grad_gradDelta(f, Lx, Ly, Lz=None):
     """
     p=3, k=3. Path of three vertices with one loop at an endpoint.
     ∇²f(∇f, ∇Δf) = Σ_{kl} f_{kl} f_k (∂_l Δf).
-    Looped endpoint (degree 3) contributes ∇Δf; center (degree 2) contributes ∇²f;
-    plain endpoint (degree 1) contributes ∇f.
     Vertex degrees: 3, 2, 1.
 
     Graph:  ↺
             X---X---X
     """
-    Df = laplacian(f, Lx, Ly)
+    Df = laplacian(f, Lx, Ly, Lz)
+    if f.ndim == 3:
+        Dfx, Dfy, Dfz = grad(Df, Lx, Ly, Lz)
+        fx, fy, fz = grad(f, Lx, Ly, Lz)
+        fxx, fxy, fxz, fyy, fyz, fzz = hessian(f, Lx, Ly, Lz)
+        return (fxx * fx * Dfx + fyy * fy * Dfy + fzz * fz * Dfz
+                + fxy * (fx * Dfy + fy * Dfx)
+                + fxz * (fx * Dfz + fz * Dfx)
+                + fyz * (fy * Dfz + fz * Dfy))
     Dfx, Dfy = grad(Df, Lx, Ly)
     fx, fy = grad(f, Lx, Ly)
     fxx, fxy, fyy = hessian(f, Lx, Ly)
     return fxx * fx * Dfx + fxy * (fx * Dfy + fy * Dfx) + fyy * fy * Dfy
 
 
-def _op_hessDelta_grad_grad(f, Lx, Ly):
+def _op_hessDelta_grad_grad(f, Lx, Ly, Lz=None):
     """
     p=3, k=3. Path of three vertices with one loop at the center vertex.
     ∇²Δf(∇f, ∇f) = Σ_{kl} (∂_k∂_l Δf) f_k f_l.
-    Center vertex (degree 4) contributes ∇²Δf; both endpoints (degree 1) contribute ∇f.
     Vertex degrees: 1, 4, 1.
 
     Graph:      ↺
             X---X---X
     """
-    Df = laplacian(f, Lx, Ly)
+    Df = laplacian(f, Lx, Ly, Lz)
+    if f.ndim == 3:
+        Dfxx, Dfxy, Dfxz, Dfyy, Dfyz, Dfzz = hessian(Df, Lx, Ly, Lz)
+        fx, fy, fz = grad(f, Lx, Ly, Lz)
+        return (Dfxx * fx**2 + Dfyy * fy**2 + Dfzz * fz**2
+                + 2 * (Dfxy * fx * fy + Dfxz * fx * fz + Dfyz * fy * fz))
     Dfxx, Dfxy, Dfyy = hessian(Df, Lx, Ly)
     fx, fy = grad(f, Lx, Ly)
     return Dfxx * fx**2 + 2 * Dfxy * fx * fy + Dfyy * fy**2
 
 
-def _op_nabla3_norm_sq(f, Lx, Ly):
+def _op_nabla3_norm_sq(f, Lx, Ly, Lz=None):
     """
-    p=3, k=2. Triple edge between two vertices: ‖∇³f‖² = f_xxx² + 3f_xxy² + 3f_xyy² + f_yyy².
+    p=3, k=2. Triple edge between two vertices: ‖∇³f‖².
     Both vertices contribute ∇³f (degree 3); the triple edge contracts all index triples.
     Vertex degrees: 3, 3.
 
     Graph:  X≡≡≡X
     """
+    if f.ndim == 3:
+        raise NotImplementedError(
+            "_op_nabla3_norm_sq not yet implemented for 3-D. "
+            "Use max_p <= 2 for 3-D experiments."
+        )
     fxxx, fxxy, fxyy, fyyy = third_order(f, Lx, Ly)
     return fxxx**2 + 3 * fxxy**2 + 3 * fxyy**2 + fyyy**2
 
 
-def _op_gradDelta_sq(f, Lx, Ly):
+def _op_gradDelta_sq(f, Lx, Ly, Lz=None):
     """
-    p=3, k=2. Single edge with one loop at each endpoint: ‖∇Δf‖² = (∂_x Δf)² + (∂_y Δf)².
+    p=3, k=2. Single edge with one loop at each endpoint: ‖∇Δf‖².
     Each vertex (degree 3) contributes ∇Δf; the edge contracts their free indices.
     Vertex degrees: 3, 3.
 
     Graph:  ↺   ↺
             X---X
     """
-    Df = laplacian(f, Lx, Ly)
+    Df = laplacian(f, Lx, Ly, Lz)
+    if f.ndim == 3:
+        Dfx, Dfy, Dfz = grad(Df, Lx, Ly, Lz)
+        return Dfx**2 + Dfy**2 + Dfz**2
     Dfx, Dfy = grad(Df, Lx, Ly)
     return Dfx**2 + Dfy**2
 
 
-def _op_gradBilap_grad(f, Lx, Ly):
+def _op_gradBilap_grad(f, Lx, Ly, Lz=None):
     """
     p=3, k=2. Single edge with two loops at one endpoint: ⟨∇Δ²f, ∇f⟩ = Σ_k (∂_k Δ²f) f_k.
     The doubly-looped vertex (degree 5) contributes ∇Δ²f; the plain vertex (degree 1)
@@ -433,13 +474,16 @@ def _op_gradBilap_grad(f, Lx, Ly):
     Graph:  ↺↺
             X---X
     """
-    Df2 = bilaplacian(f, Lx, Ly)
+    Df2 = bilaplacian(f, Lx, Ly, Lz)
+    if f.ndim == 3:
+        Df2x, Df2y, Df2z = grad(Df2, Lx, Ly, Lz)
+        fx, fy, fz = grad(f, Lx, Ly, Lz)
+        return Df2x * fx + Df2y * fy + Df2z * fz
     Df2x, Df2y = grad(Df2, Lx, Ly)
     fx, fy = grad(f, Lx, Ly)
     return Df2x * fx + Df2y * fy
 
 
-# -----------------------------------------------------------------------
 # -----------------------------------------------------------------------
 # CONNECTED_OPERATORS  -  dict  {p: [(func, desc, k, excluded_2d), ...]}
 #
@@ -507,8 +551,8 @@ def _make_desc(base_desc, p, m):
 def _make_func(base_func, m):
     """Wrap base_func with an f^m polynomial factor (m >= 1)."""
 
-    def wrapped(f, Lx, Ly, _bf=base_func, _m=m):
-        return f**_m * _bf(f, Lx, Ly)
+    def wrapped(f, Lx, Ly, Lz=None, _bf=base_func, _m=m):
+        return f**_m * _bf(f, Lx, Ly, Lz)
 
     return wrapped
 
@@ -579,8 +623,8 @@ def _all_base_operators(max_p, max_n):
                     new_base_func = fn
                     new_base_desc = desc
                 else:
-                    def new_base_func(f, Lx, Ly, _a=_cf, _b=_fn):
-                        return _a(f, Lx, Ly) * _b(f, Lx, Ly)
+                    def new_base_func(f, Lx, Ly, Lz=None, _a=_cf, _b=_fn):
+                        return _a(f, Lx, Ly, Lz) * _b(f, Lx, Ly, Lz)
 
                     new_base_desc = base_desc + "·" + desc
                 recurse(
@@ -670,8 +714,8 @@ _MOD_MULTIGRAPH_SPEC = [
     (_op_identity,       "f",               0, 1),
     # Pure polynomials: use direct f^m, not _make_func(_op_identity, m)
     # because _make_func multiplies the base result (f) by f^m, giving f^(m+1).
-    (lambda f, Lx, Ly: f**2, "f²",          0, 2),
-    (lambda f, Lx, Ly: f**3, "f³",          0, 3),
+    (lambda f, Lx, Ly, Lz=None: f**2, "f²",          0, 2),
+    (lambda f, Lx, Ly, Lz=None: f**3, "f³",          0, 3),
     # --- p=1 ---
     (_op_Delta,          "Δf",              1, 1),
     (_op_Delta_f2,       "Δf²",             1, 2),   # ← replacement
@@ -684,15 +728,15 @@ _MOD_MULTIGRAPH_SPEC = [
     (_op_Delta_grad_sq,  "Δ‖∇f‖²",         2, 2),   # ← replacement
     (_op_hess_norm_sq,   "‖∇²f‖²",         2, 2),
     # (Δf)²: use _op_Delta square wrapped - note: original basis calls this "Δf·Δf"
-    (lambda f, Lx, Ly: laplacian(f, Lx, Ly)**2, "Δf·Δf", 2, 2),
+    (lambda f, Lx, Ly, Lz=None: laplacian(f, Lx, Ly, Lz)**2, "Δf·Δf", 2, 2),
     (_op_Delta2_f3,      "Δ²f³",            2, 3),   # ← replacement
     (_op_Delta_f_grad_sq,"Δ(f·‖∇f‖²)",      2, 3),   # ← replacement
     (_make_func(_op_hess_norm_sq, 1), "f·‖∇²f‖²", 2, 3),
     # f·(Δf)²: f * Δf² - original calls this "f·Δf·Δf"
-    (lambda f, Lx, Ly: f * laplacian(f, Lx, Ly)**2, "f·Δf·Δf", 2, 3),
+    (lambda f, Lx, Ly, Lz=None: f * laplacian(f, Lx, Ly, Lz)**2, "f·Δf·Δf", 2, 3),
     (_op_hess_grad_grad, "∇²f(∇f,∇f)",      2, 3),
     # ‖∇f‖²·Δf = ‖∇f‖² * Δf
-    (lambda f, Lx, Ly: (_op_grad_sq(f, Lx, Ly) * laplacian(f, Lx, Ly)),
+    (lambda f, Lx, Ly, Lz=None: (_op_grad_sq(f, Lx, Ly, Lz) * laplacian(f, Lx, Ly, Lz)),
      "‖∇f‖²·Δf", 2, 3),
 ]
 

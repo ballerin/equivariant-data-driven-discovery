@@ -152,3 +152,115 @@ def test_operator_descriptions_1_2():
     ops = get_operators(1, 2)
     actual = [desc for _, desc in ops]
     assert actual == expected
+
+
+# =============================================================================
+# 3-D operator tests
+# =============================================================================
+
+
+class TestMultigraphOperators3D:
+    """3-D operator evaluation correctness."""
+
+    def test_all_operators_callable_3d(self):
+        """Every operator accepts (f_3d, Lx, Ly, Lz) and returns correct shape."""
+        ops = get_operators(2, 3)
+        N = 16
+        L = 2 * np.pi
+        x = np.linspace(0, L, N, endpoint=False)
+        X, Y, Z = np.meshgrid(x, x, x, indexing="ij")
+        f = np.sin(X) * np.cos(Y) * np.cos(Z) + 0.5
+
+        for func, desc in ops:
+            result = func(f, L, L, L)
+            assert result.shape == f.shape, (
+                f"Operator '{desc}' returned shape {result.shape}, expected {f.shape}"
+            )
+            assert np.isfinite(result).all(), (
+                f"Operator '{desc}' returned non-finite values."
+            )
+
+    def test_grad_sq_3d_vs_manual(self):
+        """_op_grad_sq in 3D = fx² + fy² + fz²."""
+        from equivariant_pde_find.multigraph_operators import _op_grad_sq
+        from equivariant_pde_find import derivatives
+        N = 16
+        L = 2 * np.pi
+        x = np.linspace(0, L, N, endpoint=False)
+        X, Y, Z = np.meshgrid(x, x, x, indexing="ij")
+        f = np.sin(2 * X) * np.cos(3 * Y) * np.cos(Z)
+
+        result = _op_grad_sq(f, L, L, L)
+        fx, fy, fz = derivatives.grad(f, L, L, L)
+        expected = fx**2 + fy**2 + fz**2
+        np.testing.assert_allclose(result, expected, rtol=1e-12, atol=1e-12)
+
+    def test_grad_Delta_grad_3d_vs_manual(self):
+        """_op_grad_Delta_grad in 3D = Dfx·fx + Dfy·fy + Dfz·fz."""
+        from equivariant_pde_find.multigraph_operators import _op_grad_Delta_grad
+        from equivariant_pde_find import derivatives
+        N = 16
+        L = 2 * np.pi
+        x = np.linspace(0, L, N, endpoint=False)
+        X, Y, Z = np.meshgrid(x, x, x, indexing="ij")
+        f = np.sin(2 * X) * np.cos(3 * Y) * np.cos(Z)
+
+        result = _op_grad_Delta_grad(f, L, L, L)
+        Df = derivatives.laplacian(f, L, L, L)
+        Dfx, Dfy, Dfz = derivatives.grad(Df, L, L, L)
+        fx, fy, fz = derivatives.grad(f, L, L, L)
+        expected = Dfx * fx + Dfy * fy + Dfz * fz
+        np.testing.assert_allclose(result, expected, rtol=1e-11, atol=1e-11)
+
+    def test_hess_norm_sq_3d_vs_manual(self):
+        """_op_hess_norm_sq in 3D = Σ f_{ij}²."""
+        from equivariant_pde_find.multigraph_operators import _op_hess_norm_sq
+        from equivariant_pde_find import derivatives
+        N = 16
+        L = 2 * np.pi
+        x = np.linspace(0, L, N, endpoint=False)
+        X, Y, Z = np.meshgrid(x, x, x, indexing="ij")
+        f = np.sin(2 * X) * np.cos(3 * Y) * np.cos(Z)
+
+        result = _op_hess_norm_sq(f, L, L, L)
+        fxx, fxy, fxz, fyy, fyz, fzz = derivatives.hessian(f, L, L, L)
+        expected = fxx**2 + fyy**2 + fzz**2 + 2 * (fxy**2 + fxz**2 + fyz**2)
+        np.testing.assert_allclose(result, expected, rtol=1e-11, atol=1e-11)
+
+    def test_hess_grad_grad_3d_vs_manual(self):
+        """_op_hess_grad_grad in 3D = Σ f_{ij} f_i f_j."""
+        from equivariant_pde_find.multigraph_operators import _op_hess_grad_grad
+        from equivariant_pde_find import derivatives
+        N = 16
+        L = 2 * np.pi
+        x = np.linspace(0, L, N, endpoint=False)
+        X, Y, Z = np.meshgrid(x, x, x, indexing="ij")
+        f = np.sin(2 * X) * np.cos(3 * Y) * np.cos(Z)
+
+        result = _op_hess_grad_grad(f, L, L, L)
+        fx, fy, fz = derivatives.grad(f, L, L, L)
+        fxx, fxy, fxz, fyy, fyz, fzz = derivatives.hessian(f, L, L, L)
+        expected = (fxx * fx**2 + fyy * fy**2 + fzz * fz**2
+                    + 2 * (fxy * fx * fy + fxz * fx * fz + fyz * fy * fz))
+        np.testing.assert_allclose(result, expected, rtol=1e-11, atol=1e-11)
+
+    def test_2d_backward_compat(self):
+        """Calling operators without Lz on 2D field gives same results as before."""
+        from equivariant_pde_find.multigraph_operators import (
+            _op_grad_sq, _op_hess_norm_sq, _op_hess_grad_grad, _op_grad_Delta_grad,
+        )
+        N = 16
+        L = 2 * np.pi
+        x = np.linspace(0, L, N, endpoint=False)
+        X, Y = np.meshgrid(x, x, indexing="ij")
+        f = np.sin(2 * X) * np.cos(3 * Y)
+
+        # These should work without Lz (old calling convention)
+        r1 = _op_grad_sq(f, L, L)
+        r2 = _op_hess_norm_sq(f, L, L)
+        r3 = _op_hess_grad_grad(f, L, L)
+        r4 = _op_grad_Delta_grad(f, L, L)
+        assert r1.shape == f.shape
+        assert r2.shape == f.shape
+        assert r3.shape == f.shape
+        assert r4.shape == f.shape

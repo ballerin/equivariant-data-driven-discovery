@@ -166,61 +166,88 @@ def _ibp_bilaplacian_kernels(m, p):
 # ---------------------------------------------------------------------------
 
 
-def weak_laplacian_ibp(f, m, p, Lx, Ly):
-    """Compute ∫ ψ · Δf ≈ ∫ Δψ · f  via integration by parts.
-
-    Uses the analytic second derivative of the test function φ (computed
-    from the exact polynomial expansion), scaled to physical units.  This
-    gives ~0.05 % relative error against the spectral direct method (vs
-    ~0.86 % for the discrete 3-point stencil).
+def weak_laplacian_ibp(f, m, p, Lx, Ly, Lz=None):
+    """Compute ∫ ψ · Δf ≈ ∫ Δψ · f via integration by parts.
 
     No derivatives of *f* are computed — the differential operator is
     moved entirely onto the analytically-known test function.
 
+    Supports 2-D and 3-D fields.
+
     Parameters
     ----------
-    f : ndarray of shape (Nx, Ny)
+    f : ndarray (Nx, Ny) or (Nx, Ny, Nz)
     m, p : int — test function parameters
-    Lx, Ly : float — domain lengths
+    Lx, Ly, Lz : float — domain lengths (Lz required for 3-D)
 
     Returns
     -------
-    ndarray of shape (Nx − 2*m, Ny − 2*m)
+    ndarray of shape (Nx−2m, Ny−2m) or (Nx−2m, Ny−2m, Nz−2m)
     """
+    kxx_grid, k0 = _ibp_laplacian_kernels(m, p)
+    if f.ndim == 3:
+        Nx, Ny, Nz = f.shape
+        dx2 = (Lx / Nx) ** 2
+        dy2 = (Ly / Ny) ** 2
+        dz2 = (Lz / Nz) ** 2
+        kxx = kxx_grid / dx2
+        kyy = kxx_grid / dy2
+        kzz = kxx_grid / dz2
+        return (weak_convolution(f, kxx, k0, k0)
+                + weak_convolution(f, k0, kyy, k0)
+                + weak_convolution(f, k0, k0, kzz))
     Nx, Ny = f.shape
     dx2 = (Lx / Nx) ** 2
     dy2 = (Ly / Ny) ** 2
-    kxx_grid, k0 = _ibp_laplacian_kernels(m, p)
-    kxx = kxx_grid / dx2   # analytic φ'' → φ''/dx² (physical units)
+    kxx = kxx_grid / dx2
     kyy = kxx_grid / dy2
     return weak_convolution(f, kxx, k0) + weak_convolution(f, k0, kyy)
 
 
-def weak_bilaplacian_ibp(f, m, p, Lx, Ly):
-    """Compute ∫ ψ · Δ²f ≈ ∫ Δ²ψ · f  via discrete summation by parts.
-
-    Uses discrete 4th differences of ψ (D4 = D2∘D2).  For p=4 the bump
-    function is C³, so its 4th derivative has a jump at the boundary;
-    the discrete kernel is preferred over the analytic one in this case.
-    Relative error against the spectral direct method is ~5.6 % (O(dx²)).
+def weak_bilaplacian_ibp(f, m, p, Lx, Ly, Lz=None):
+    """Compute ∫ ψ · Δ²f ≈ ∫ Δ²ψ · f via integration by parts.
 
     No derivatives of *f* are computed.
 
+    Supports 2-D and 3-D fields.
+    For 3-D: Δ²ψ has 6 terms (3 pure 4th derivatives + 3 mixed).
+
     Parameters
     ----------
-    f : ndarray of shape (Nx, Ny)
+    f : ndarray (Nx, Ny) or (Nx, Ny, Nz)
     m, p : int — test function parameters
-    Lx, Ly : float — domain lengths
+    Lx, Ly, Lz : float — domain lengths
 
     Returns
     -------
-    ndarray of shape (Nx − 2*m, Ny − 2*m)
+    ndarray, shape (Nx−2m, Ny−2m) or (Nx−2m, Ny−2m, Nz−2m)
     """
+    kxxxx_grid, kxx_grid, k0 = _ibp_bilaplacian_kernels(m, p)
+    if f.ndim == 3:
+        Nx, Ny, Nz = f.shape
+        dx2 = (Lx / Nx) ** 2
+        dy2 = (Ly / Ny) ** 2
+        dz2 = (Lz / Nz) ** 2
+        kxxxx = kxxxx_grid / (dx2 ** 2)
+        kxx = kxx_grid / dx2
+        kyyyy = kxxxx_grid / (dy2 ** 2)
+        kyy = kxx_grid / dy2
+        kzzzz = kxxxx_grid / (dz2 ** 2)
+        kzz = kxx_grid / dz2
+        # Δ²ψ = φ⁗(x)φ(y)φ(z)/dx⁴ + φ(x)φ⁗(y)φ(z)/dy⁴ + φ(x)φ(y)φ⁗(z)/dz⁴
+        #       + 2φ″(x)φ″(y)φ(z)/(dx²dy²) + 2φ″(x)φ(y)φ″(z)/(dx²dz²)
+        #       + 2φ(x)φ″(y)φ″(z)/(dy²dz²)
+        return (
+            weak_convolution(f, kxxxx, k0, k0)
+            + weak_convolution(f, k0, kyyyy, k0)
+            + weak_convolution(f, k0, k0, kzzzz)
+            + 2.0 * weak_convolution(f, kxx, kyy, k0)
+            + 2.0 * weak_convolution(f, kxx, k0, kzz)
+            + 2.0 * weak_convolution(f, k0, kyy, kzz)
+        )
     Nx, Ny = f.shape
     dx2 = (Lx / Nx) ** 2
     dy2 = (Ly / Ny) ** 2
-    kxxxx_grid, kxx_grid, k0 = _ibp_bilaplacian_kernels(m, p)
-    # Δ²ψ = D4_φ(x)·φ(y)/dx⁴ + 2·D2_φ(x)·D2_φ(y)/(dx²·dy²) + φ(x)·D4_φ(y)/dy⁴
     kxxxx = kxxxx_grid / (dx2 ** 2)
     kxx   = kxx_grid   / dx2
     kyyyy = kxxxx_grid / (dy2 ** 2)
@@ -237,41 +264,54 @@ def weak_bilaplacian_ibp(f, m, p, Lx, Ly):
 # ---------------------------------------------------------------------------
 
 
-def weak_convolution(f, kernel_x, kernel_y):
-    """Compute the 2-D weak form of field `f` by separable 1-D convolution.
+def weak_convolution(f, kernel_x, kernel_y, kernel_z=None):
+    """Compute the weak form of field `f` by separable 1-D convolution.
 
-    The convolution is
-
-        f_weak[i,j] = Σ_{di} Σ_{dj} ker_x[di] · ker_y[dj] · f[i+di, j+dj]
-
-    with ``mode='valid'``, so the output has shape
-    ``(Nx - 2*mx, Ny - 2*my)`` where ``mx = len(kernel_x)//2``.
-
-    Uses ``np.convolve`` applied separably: first along axis=0 (x), then
-    axis=1 (y).  No scipy dependency.
+    Supports 2-D (two kernels) and 3-D (three kernels).
 
     Parameters
     ----------
-    f : ndarray of shape (Nx, Ny)
-    kernel_x : ndarray of shape (2*mx + 1,)
-    kernel_y : ndarray of shape (2*my + 1,)
+    f : ndarray (Nx, Ny) or (Nx, Ny, Nz)
+    kernel_x, kernel_y : ndarray (2*mx+1,), (2*my+1,)
+    kernel_z : ndarray (2*mz+1,) or None — required for 3-D
 
     Returns
     -------
-    f_weak : ndarray of shape (Nx - 2*mx, Ny - 2*my)
+    ndarray, shape (Nx-2mx, Ny-2my) or (Nx-2mx, Ny-2my, Nz-2mz)
     """
     kx = kernel_x.ravel()
     ky = kernel_y.ravel()
     mx, my = len(kx) // 2, len(ky) // 2
 
-    # Convolve along axis=0 (rows) for each column, then axis=1 for each row.
+    if f.ndim == 3:
+        if kernel_z is None:
+            raise ValueError("kernel_z is required for 3-D fields")
+        kz = kernel_z.ravel()
+        mz = len(kz) // 2
+        Nx, Ny, Nz = f.shape
+        # Step 1: convolve along axis=0
+        temp0 = np.empty((Nx - 2*mx, Ny, Nz), dtype=np.float64)
+        for j in range(Ny):
+            for k in range(Nz):
+                temp0[:, j, k] = np.convolve(f[:, j, k], kx, mode="valid")
+        # Step 2: convolve along axis=1
+        temp1 = np.empty((Nx - 2*mx, Ny - 2*my, Nz), dtype=np.float64)
+        for i in range(temp0.shape[0]):
+            for k in range(Nz):
+                temp1[i, :, k] = np.convolve(temp0[i, :, k], ky, mode="valid")
+        # Step 3: convolve along axis=2
+        result = np.empty((Nx - 2*mx, Ny - 2*my, Nz - 2*mz), dtype=np.float64)
+        for i in range(temp1.shape[0]):
+            for j in range(temp1.shape[1]):
+                result[i, j, :] = np.convolve(temp1[i, j, :], kz, mode="valid")
+        return result
+
+    # 2-D path (original)
     Nx, Ny = f.shape
-    # Step 1: convolve each column (axis=0) with kernel_x
-    temp = np.empty((Nx - 2 * mx, Ny), dtype=np.float64)
+    temp = np.empty((Nx - 2*mx, Ny), dtype=np.float64)
     for j in range(Ny):
         temp[:, j] = np.convolve(f[:, j], kx, mode="valid")
-    # Step 2: convolve each row (axis=1) with kernel_y
-    result = np.empty((Nx - 2 * mx, Ny - 2 * my), dtype=np.float64)
+    result = np.empty((Nx - 2*mx, Ny - 2*my), dtype=np.float64)
     for i in range(temp.shape[0]):
         result[i, :] = np.convolve(temp[i, :], ky, mode="valid")
     return result
@@ -304,37 +344,38 @@ def _is_laplacian_of(desc):
     """
     # Laplacian-of operators: Δf, Δf², Δf³, Δ‖∇f‖², Δ(f·‖∇f‖²)
     if desc == "Δf":
-        return ("laplacian", lambda f, Lx, Ly: f)
+        return ("laplacian", lambda f, Lx, Ly, Lz=None: f)
     if desc == "Δf²":
-        return ("laplacian", lambda f, Lx, Ly: f**2)
+        return ("laplacian", lambda f, Lx, Ly, Lz=None: f**2)
     if desc == "Δf³":
-        return ("laplacian", lambda f, Lx, Ly: f**3)
+        return ("laplacian", lambda f, Lx, Ly, Lz=None: f**3)
     if desc == "Δ‖∇f‖²":
         from ..multigraph_operators import _op_grad_sq
         return ("laplacian", _op_grad_sq)
     if desc == "Δ(f·‖∇f‖²)":
         from ..multigraph_operators import _op_grad_sq
-        return ("laplacian", lambda f, Lx, Ly: f * _op_grad_sq(f, Lx, Ly))
+        return ("laplacian", lambda f, Lx, Ly, Lz=None: f * _op_grad_sq(f, Lx, Ly, Lz))
 
     # Bilaplacian-of operators: Δ²f, Δ²f², Δ²f³
     if desc == "Δ²f":
-        return ("bilaplacian", lambda f, Lx, Ly: f)
+        return ("bilaplacian", lambda f, Lx, Ly, Lz=None: f)
     if desc == "Δ²f²":
-        return ("bilaplacian", lambda f, Lx, Ly: f**2)
+        return ("bilaplacian", lambda f, Lx, Ly, Lz=None: f**2)
     if desc == "Δ²f³":
-        return ("bilaplacian", lambda f, Lx, Ly: f**3)
+        return ("bilaplacian", lambda f, Lx, Ly, Lz=None: f**3)
 
     return None
 
 
-def build_weak_rhs(ft, kernel_x=None, kernel_y=None, m=8, p=4):
+def build_weak_rhs(ft, kernel_x=None, kernel_y=None, kernel_z=None, m=8, p=4):
     """Build the weak-form RHS vector b = ψ ∗ f_t.
+
+    Supports 2-D and 3-D fields.
 
     Parameters
     ----------
-    ft : ndarray of shape (Nx, Ny)
-        Time derivative of f.
-    kernel_x, kernel_y : ndarray or None
+    ft : ndarray (Nx, Ny) or (Nx, Ny, Nz) — time derivative of f.
+    kernel_x, kernel_y, kernel_z : ndarray or None
         If None, build from (m, p).
     m, p : int
         Used only if kernels are None.
@@ -347,7 +388,9 @@ def build_weak_rhs(ft, kernel_x=None, kernel_y=None, m=8, p=4):
         kernel_x = _cached_kernel_1d(m, p)
     if kernel_y is None:
         kernel_y = _cached_kernel_1d(m, p)
-    return weak_convolution(ft, kernel_x, kernel_y).ravel()
+    if ft.ndim == 3 and kernel_z is None:
+        kernel_z = _cached_kernel_1d(m, p)
+    return weak_convolution(ft, kernel_x, kernel_y, kernel_z).ravel()
 
 
 # ---------------------------------------------------------------------------
