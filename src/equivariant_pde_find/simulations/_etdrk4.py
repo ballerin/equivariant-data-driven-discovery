@@ -1,3 +1,12 @@
+"""ETDRK4 (exponential time-differencing 4th-order Runge-Kutta) machinery.
+
+Implements the Kassam & Trefethen (2005) contour-integral method for
+stably evaluating the ETDRK4 coefficients near the removable singularity
+at z=0, plus the corresponding time-stepping loop. Used by
+``kuramoto_sivashinsky`` (default ``scheme="etdrk4"``); hardcoded for 2-D
+fields (``fft2``/``ifft2``), unlike the ndim-generic ``_imex`` module.
+"""
+
 import numpy as np
 
 
@@ -81,6 +90,10 @@ def _etdrk4_run(f0, nonlin_hat_fn, E, E2, phi1_dt2, f1, f2, f4, n_steps, save_ev
     -------
     snapshots : ndarray of shape (n_saved, N, N)  [physical space]
     times : ndarray of shape (n_saved,)
+
+    A snapshot saved when ``step % save_every == 0`` is the state *after*
+    that iteration's update, i.e. after ``step + 1`` total steps -- so it
+    is labeled with step index ``step + 1``, not ``step``.
     """
     uhat = np.fft.fft2(f0)
     snapshots, steps = [], []
@@ -97,6 +110,6 @@ def _etdrk4_run(f0, nonlin_hat_fn, E, E2, phi1_dt2, f1, f2, f4, n_steps, save_ev
 
         if step % save_every == 0:
             snapshots.append(np.real(np.fft.ifft2(uhat)))
-            steps.append(step)
+            steps.append(step + 1)
 
     return np.array(snapshots), np.array(steps, dtype=float)

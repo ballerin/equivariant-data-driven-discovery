@@ -1,14 +1,25 @@
-"""Shared equation configurations for sweep scripts.
+"""Equation ground-truth coefficients, utilities, and registry.
 
-TODO: fix the sweep scripts location. Either all in the src directory or move this file out
+This module is the single source of truth for all benchmark PDE
+definitions.  It is organised in three dependency-ordered sections:
 
-Provides canonical ground-truth coefficient vectors, operator-finding
-utilities, and per-equation metadata used across all sweep and experiment
-scripts.  These functions are character-for-character identical across
-scripts — extracting them avoids maintaining 5–6 redundant copies.
+  1. **Utilities** — general-purpose helpers and constants
+     (``find_op``, ``CH_EPSILON``, ``mask_pme``, ``_pdefind_axis_labels``)
+  2. **Ground-truth coefficient vectors** — one function per equation × basis
+     that returns a length-``n_cols`` NumPy array of true operator coefficients
+  3. **Equation registry & naming** — ``EQUATION_META`` maps canonical
+     equation keys to their truth functions, and ``normalize_eq_name``
+     canonicalises legacy / aliased names
 """
 
 import numpy as np
+
+# ============================================================================
+# Section 1 — Utilities
+# ============================================================================
+
+# Cahn-Hilliard interface width — fixed at generation time and for ground truth.
+CH_EPSILON = 0.2
 
 
 def find_op(descriptions, name):
@@ -35,6 +46,33 @@ def find_op(descriptions, name):
     except ValueError:
         raise KeyError(f"Operator {name!r} not in library. Available: {descriptions}")
 
+
+def mask_pme(field):
+    """Column mask for the Porous Medium Equation: discard near-zero values.
+
+    Only spatial points where ``field > 0.05`` are retained.
+    """
+    return field.ravel() > 0.05
+
+
+# PDE-FIND coordinate labels (up to 8-D).
+_AXIS_LABELS = ['x', 'y', 'z', 'w', 'v', 'u', 't', 's']
+_MAX_NDIM = len(_AXIS_LABELS)
+
+
+def _pdefind_axis_labels(ndim):
+    """Return list of axis label strings for the given dimension count."""
+    if not 1 <= ndim <= _MAX_NDIM:
+        raise ValueError(f"ndim must be 1-{_MAX_NDIM}, got {ndim}")
+    return _AXIS_LABELS[:ndim]
+
+
+# ============================================================================
+# Section 2 — Ground-truth coefficient vectors
+# ============================================================================
+#
+# Subsection 2a — Original multigraph basis
+# -----------------------------------------
 
 def true_allen_cahn(descriptions, eps=0.15):
     """Ground-truth coefficients for the Allen-Cahn equation.
@@ -77,7 +115,7 @@ def true_ks(descriptions):
     return w
 
 
-def true_cahn_hilliard(descriptions, eps=0.2):
+def true_cahn_hilliard(descriptions, eps=CH_EPSILON):
     """Ground-truth coefficients for the Cahn-Hilliard equation.
 
     .. math::
@@ -105,14 +143,12 @@ def true_pme(descriptions):
     return w
 
 
-# -----------------------------------------------------------------------
-# Modified Multigraph (IBP-friendly) ground truth
-# -----------------------------------------------------------------------
+# Subsection 2b — Modified multigraph (IBP-friendly) basis
+# --------------------------------------------------------
 # For equations whose terms are all in the unchanged set (AC, SH, KS),
 # the ground truth is identical.  For CH and PME, the changed operator
 # f²·Δf is replaced by Δf³, and coefficients are transformed via the
 # change-of-basis matrix.
-
 
 def true_allen_cahn_mod_multigraph(descriptions, eps=0.15):
     """Allen-Cahn in the modified multigraph basis.  Identical to original."""
@@ -129,7 +165,7 @@ def true_ks_mod_multigraph(descriptions):
     return true_ks(descriptions)
 
 
-def true_cahn_hilliard_mod_multigraph(descriptions, eps=0.2):
+def true_cahn_hilliard_mod_multigraph(descriptions, eps=CH_EPSILON):
     """Cahn-Hilliard in the modified multigraph basis.
 
     In the original basis:  -Δf + 3·f²·Δf + 6·f·‖∇f‖² - ε²·Δ²f.
@@ -155,6 +191,60 @@ def true_pme_mod_multigraph(descriptions):
     return w
 
 
+# Subsection 2c — PDE-FIND (coordinate-basis) ground truth
+# --------------------------------------------------------
+
+def true_allen_cahn_pdefind(ndim, eps=0.15):
+    """Ground-truth coefficients for Allen-Cahn in the PDE-FIND basis.
+
+    f_t = eps^2 * Delta f + f - f^3
+
+    Delta f splits into *ndim* pure second derivatives (f_xx, f_yy, ...).
+    """
+    if not 1 <= ndim <= _MAX_NDIM:
+        raise ValueError(f"ndim must be 1-{_MAX_NDIM}, got {ndim}")
+    axes = _pdefind_axis_labels(ndim)
+    result = {"f": 1.0, "f\u00b3": -1.0}
+    for a in axes:
+        result[f"f_{a}{a}"] = eps ** 2
+    return result
+
+
+def true_cahn_hilliard_pdefind(ndim, eps=CH_EPSILON):
+    """Ground-truth coefficients for Cahn-Hilliard in the PDE-FIND basis.
+
+    f_t = -eps^2 * Delta^2 f + Delta f - Delta(f^3)
+
+    PDE-FIND expansion (partial -- f*(first_derivative)^2 terms omitted):
+      - Pure 4th derivatives:        -eps^2     (ndim terms)
+      - Mixed 4th derivatives:       -2*eps^2   (C(ndim,2) terms)
+      - Pure 2nd derivatives:        +1         (ndim terms)
+      - f^2 * pure 2nd derivatives:  -3         (ndim terms)
+    """
+    if not 1 <= ndim <= _MAX_NDIM:
+        raise ValueError(f"ndim must be 1-{_MAX_NDIM}, got {ndim}")
+    axes = _pdefind_axis_labels(ndim)
+    result = {}
+    # Pure 4th: f_xxxx, f_yyyy, ...
+    for a in axes:
+        result[f"f_{a*4}"] = -(eps ** 2)
+    # Mixed 4th: f_xxyy, f_xxzz, ... (lexicographic order)
+    for i in range(ndim):
+        for j in range(i + 1, ndim):
+            a, b = axes[i], axes[j]
+            result[f"f_{a*2}{b*2}"] = -2.0 * (eps ** 2)
+    # Pure 2nd: f_xx, f_yy, ...
+    for a in axes:
+        result[f"f_{a*2}"] = 1.0
+    # f^2 * pure 2nd: f^2.f_xx, f^2.f_yy, ...
+    for a in axes:
+        result[f"f\u00b2\u00b7f_{a*2}"] = -3.0
+    return result
+
+
+# Subsection 2d — WSINDy basis ground truth
+# -----------------------------------------
+
 def true_pme_wsindy(descriptions):
     """Ground-truth coefficients for PME in the WSINDy basis ∂^α(f^q).
 
@@ -171,15 +261,11 @@ def true_pme_wsindy(descriptions):
     return w
 
 
-def mask_pme(field):
-    """Column mask for the Porous Medium Equation: discard near-zero values.
+# ============================================================================
+# Section 3 — Equation registry & naming
+# ============================================================================
 
-    Only spatial points where ``field > 0.05`` are retained.
-    """
-    return field.ravel() > 0.05
-
-
-# Equation registry: maps canonical short name → (true_fn, skip_fraction, mask_fn).
+# Maps canonical short name → (true_fn, skip_fraction, mask_fn).
 # KS variants (ks_cell, ks_wchaos, ks_chaos) all use true_ks.
 #
 # Legacy data files use long names (allen_cahn, swift_hohenberg, …);

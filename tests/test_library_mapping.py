@@ -1,10 +1,13 @@
 """
-Tests for ``library/conversions.py`` — Leibniz expansion, WSINDy-to-jet mapping,
-and the hard-coded multigraph jet decomposition dictionaries.
+Tests for ``library/conversions.py`` — symbolic Leibniz expansion (via
+jet_algebra.JetExpr), WSINDy-to-jet mapping, and the multigraph jet
+decomposition dictionaries (now generated from jet_algebra formulas rather
+than hand-written, for any ndim).
 
 Covers:
-- The hard-coded decomposition dictionaries (completeness, linear independence).
-- _expand_fq_deriv for simple cases.
+- The decomposition dictionaries (completeness, linear independence).
+- JetExpr-based Leibniz expansion for simple cases (replaces the old
+  hand-rolled _expand_fq_deriv/_terms_to_jet_dict, which no longer exist).
 - build_wsindy_to_jet_map correctness.
 - map_standard_to_jet, map_multigraph_to_jet, map_mod_multigraph_to_jet.
 - Known-equation mapping tests (SH, AC, KS, CH, PME).
@@ -23,14 +26,13 @@ sys.path.insert(0, CODE_DIR)
 from equivariant_pde_find.library.conversions import (
     _MULTIGRAPH_TO_JET_DECOMPOSITION,
     _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION,
-    _expand_fq_deriv,
-    _terms_to_jet_dict,
     build_wsindy_to_jet_map,
     map_multigraph_to_jet,
     map_mod_multigraph_to_jet,
     map_standard_to_jet,
     map_wsindy_to_jet,
 )
+from equivariant_pde_find.jet_algebra import JetExpr, expr_to_dict
 from equivariant_pde_find.library import (
     build_multigraph_library,
     build_mod_multigraph_library,
@@ -38,7 +40,7 @@ from equivariant_pde_find.library import (
     build_polyjet_library,
     build_wsindy_library,
 )
-from equivariant_pde_find.equation_configs import (
+from equivariant_pde_find.equations import (
     true_allen_cahn,
     true_cahn_hilliard,
     true_ks,
@@ -83,96 +85,77 @@ def test_mod_multigraph_decomposition_has_all_20_operators():
 
 
 # ======================================================================
-# _expand_fq_deriv — Leibniz expansion
+# JetExpr-based Leibniz expansion (replaces the old hand-rolled
+# _expand_fq_deriv/_terms_to_jet_dict; same mathematical assertions,
+# expressed via .deriv() + expr_to_dict())
 # ======================================================================
 
 
-class TestExpandFqDeriv:
+def _expand(q, *axes):
+    """∂_axes(f^q) as a {jet_description: coeff} dict, ndim=2."""
+    expr = JetExpr.var(2) ** q
+    for axis in axes:
+        expr = expr.deriv(axis)
+    return expr_to_dict(expr)
+
+
+class TestJetExprLeibnizExpansion:
     def test_f1_no_derivs(self):
         """∂^0(f^1) = f."""
-        terms = _expand_fq_deriv(0, 0, 1)
-        assert len(terms) == 1
-        key = tuple((0, 0) for _ in range(1))
-        assert key in terms
-        assert terms[key] == (1, 1.0)
+        assert _expand(1) == {"f": 1.0}
 
     def test_f1_dx(self):
         """∂_x(f) = f_x."""
-        terms = _expand_fq_deriv(1, 0, 1)
-        assert len(terms) == 1
-        key = ((1, 0),)
-        assert key in terms
+        assert _expand(1, 0) == {"f_x": 1.0}
 
     def test_f2_dx(self):
         """∂_x(f²) = 2f·f_x."""
-        terms = _expand_fq_deriv(1, 0, 2)
-        # Should expand to 2 * ((1,0), (0,0))
-        key = ((0, 0), (1, 0))
-        assert key in terms
-        assert terms[key][1] == pytest.approx(2.0)
+        result = _expand(2, 0)
+        assert result == {"f·f_x": pytest.approx(2.0)}
 
     def test_f2_dxx(self):
         """∂_xx(f²) = 2f·f_xx + 2(f_x)²."""
-        terms = _expand_fq_deriv(2, 0, 2)
-        # ((0,0),(2,0)) with coeff 2 and ((1,0),(1,0)) with coeff 2
-        key1 = ((0, 0), (2, 0))
-        key2 = ((1, 0), (1, 0))
-        assert key1 in terms
-        assert key2 in terms
-        assert terms[key1][1] == pytest.approx(2.0)
-        assert terms[key2][1] == pytest.approx(2.0)
+        result = _expand(2, 0, 0)
+        assert result["f·f_xx"] == pytest.approx(2.0)
+        assert result["f_x²"] == pytest.approx(2.0)
 
     def test_f3_dxx(self):
         """∂_xx(f³) = 6f·(f_x)² + 3f²·f_xx."""
-        terms = _expand_fq_deriv(2, 0, 3)
-        # ((0,0),(1,0),(1,0)) with coeff 6 and ((0,0),(0,0),(2,0)) with coeff 3
-        coeffs = {k: v[1] for k, v in terms.items()}
-        # Should have terms with coefficients 3 and 6
-        assert any(abs(c - 3.0) < 1e-10 for c in coeffs.values())
-        assert any(abs(c - 6.0) < 1e-10 for c in coeffs.values())
+        result = _expand(3, 0, 0)
+        assert any(abs(c - 3.0) < 1e-10 for c in result.values())
+        assert any(abs(c - 6.0) < 1e-10 for c in result.values())
 
     def test_f3_dx_dy(self):
         """∂_x ∂_y(f³) = 6f·f_x·f_y + 3f²·f_xy."""
-        terms = _expand_fq_deriv(1, 1, 3)
-        # Should have 2 different term structures
-        assert len(terms) == 2
+        result = _expand(3, 0, 1)
+        assert len(result) == 2
 
     def test_f2_dx_dy(self):
         """∂_x ∂_y(f²) = 2f·f_xy + 2f_x·f_y."""
-        terms = _expand_fq_deriv(1, 1, 2)
-        coeffs = {k: v[1] for k, v in terms.items()}
-        assert any(abs(c - 2.0) < 1e-10 for c in coeffs.values())
+        result = _expand(2, 0, 1)
+        assert any(abs(c - 2.0) < 1e-10 for c in result.values())
 
 
 # ======================================================================
-# _terms_to_jet_dict
+# expr_to_dict rendering (replaces the old _terms_to_jet_dict unit tests)
 # ======================================================================
 
 
-class TestTermsToJetDict:
+class TestExprToDictRendering:
     def test_single_f(self):
-        terms = {((0, 0),): (1, 1.0)}
-        jet_names = {(0, 0): "f", (1, 0): "f_x", (0, 1): "f_y"}
-        result = _terms_to_jet_dict(terms, jet_names)
-        assert result == {"f": 1.0}
+        assert expr_to_dict(JetExpr.var(2)) == {"f": 1.0}
 
     def test_fx(self):
-        terms = {((1, 0),): (1, 1.0)}
-        jet_names = {(0, 0): "f", (1, 0): "f_x"}
-        result = _terms_to_jet_dict(terms, jet_names)
-        assert result == {"f_x": 1.0}
+        assert expr_to_dict(JetExpr.var(2).deriv(0)) == {"f_x": 1.0}
 
     def test_fx_squared(self):
-        terms = {((1, 0), (1, 0)): (2, 2.0)}
-        jet_names = {(0, 0): "f", (1, 0): "f_x"}
-        result = _terms_to_jet_dict(terms, jet_names)
-        assert result == {"f_x²": 2.0}
+        fx = JetExpr.var(2).deriv(0)
+        assert expr_to_dict(2.0 * fx * fx) == {"f_x²": 2.0}
 
     def test_f_times_fx(self):
-        terms = {((0, 0), (1, 0)): (2, 3.0)}
-        jet_names = {(0, 0): "f", (1, 0): "f_x"}
-        result = _terms_to_jet_dict(terms, jet_names)
-        assert result == {"f·f_x": 3.0}
+        f = JetExpr.var(2)
+        fx = f.deriv(0)
+        assert expr_to_dict(3.0 * f * fx) == {"f·f_x": 3.0}
 
 
 # ======================================================================

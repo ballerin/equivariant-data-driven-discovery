@@ -20,7 +20,7 @@ from equivariant_pde_find.library import (
 )
 from equivariant_pde_find.library import weak_form as wf
 from equivariant_pde_find.regression import TrainRFE
-from equivariant_pde_find.simulations.allen_cahn import allen_cahn_3d
+from equivariant_pde_find.simulations.allen_cahn import allen_cahn_nd
 
 
 @pytest.fixture(scope="module")
@@ -32,8 +32,8 @@ def ac_3d_small():
     dt = 0.01
     save_every = 20
 
-    snaps, times = allen_cahn_3d(
-        N=N, L=L, T_end=T_end, eps=eps, dt=dt,
+    snaps, times = allen_cahn_nd(
+        ndim=3, N=N, L=L, T_end=T_end, eps=eps, dt=dt,
         save_every=save_every, seed=42, obs_noise=0.0,
     )
     return snaps, times, L, eps

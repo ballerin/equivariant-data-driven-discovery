@@ -11,11 +11,13 @@ import numpy as np
 def _build_mod_multigraph_pointwise(f, Lx, Ly, max_p=2, max_n=3, Lz=None):
     """Build the modified multigraph (IBP-friendly) library matrix.
 
-    Supports 2-D and 3-D fields.
+    Supports any ndim (the modified basis is always max_p<=2; see
+    multigraph_operators.py's module docstring for the isotropic-beyond-3D
+    domain convention).
 
     Parameters
     ----------
-    f     : ndarray (Nx, Ny) or (Nx, Ny, Nz)
+    f     : ndarray, shape (N_1, ..., N_ndim)
     Lx, Ly, Lz : float
     max_p : int
     max_n : int
@@ -38,11 +40,11 @@ def _build_mod_multigraph_weak(f, Lx, Ly, max_p=2, max_n=3,
                                m=8, p=4, use_ibp=False, Lz=None):
     """Build the weak-form **modified multigraph** library matrix.
 
-    Supports 2-D and 3-D fields.
+    Supports any ndim (see _build_mod_multigraph_pointwise).
 
     Parameters
     ----------
-    f : ndarray (Nx, Ny) or (Nx, Ny, Nz)
+    f : ndarray, shape (N_1, ..., N_ndim)
     Lx, Ly, Lz : float
     max_p, max_n : int
     m, p : int — test function parameters
@@ -68,10 +70,10 @@ def _build_mod_multigraph_weak(f, Lx, Ly, max_p=2, max_n=3,
                 col_weak = weak_bilaplacian_ibp(inner_field, m, p, Lx, Ly, Lz)
             else:
                 col_raw = func(f, Lx, Ly, Lz)
-                col_weak = weak_convolution(col_raw, kernel, kernel, kernel if f.ndim == 3 else None)
+                col_weak = weak_convolution(col_raw, [kernel] * f.ndim)
         else:
             col_raw = func(f, Lx, Ly, Lz)
-            col_weak = weak_convolution(col_raw, kernel, kernel, kernel if f.ndim == 3 else None)
+            col_weak = weak_convolution(col_raw, [kernel] * f.ndim)
         cols.append(col_weak.ravel())
 
     descriptions = [desc for _, desc in ops]

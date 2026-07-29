@@ -59,10 +59,10 @@ from equivariant_pde_find.evaluation import (  # noqa: E402
 from equivariant_pde_find.library.conversions import (  # noqa: E402
     build_wsindy_to_jet_map, _MULTIGRAPH_TO_JET_DECOMPOSITION,
 )
-from equivariant_pde_find.equation_configs import (  # noqa: E402
+from equivariant_pde_find.equations import (  # noqa: E402
     find_op, true_allen_cahn, true_swift_hohenberg, true_ks,
     true_cahn_hilliard, true_pme, mask_pme, EQUATION_META,
-    normalize_eq_name,
+    normalize_eq_name, CH_EPSILON,
 )
 from equivariant_pde_find.library import (  # noqa: E402
     build_multigraph_library, build_pdefind_library,
@@ -92,8 +92,7 @@ WEAK_M = [4, 8, 12]
 WEAK_P = 6
 SAMPLE_STRIDE = 4
 
-# CH epsilon values for Cahn-Hilliard ablation
-CH_EPSILONS = [0.1, 0.2, 0.4]
+# (CH epsilon is stored in equations.CH_EPSILON)
 
 
 def _get_meta(name):
@@ -161,7 +160,7 @@ def build_pointwise(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend):
                 T, desc = build_polyjet_library(
                     f_snaps[s], Lx, Ly, max_order=4, max_degree=3,
                 )
-            elif library in ("wsindy", "mwsindy"):
+            elif library == "wsindy":
                 T, desc = build_wsindy_library(
                     f_snaps[s], Lx, Ly, max_order=4, max_poly=3,
                 )
@@ -201,7 +200,7 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
                     f, Lx, Ly, max_order=4, max_degree=3,
                     formulation="weak", m=m, p=WEAK_P, use_ibp=use_ibp,
                 )
-            elif library in ("wsindy", "mwsindy"):
+            elif library == "wsindy":
                 G, desc = build_wsindy_library(
                     f, Lx, Ly, max_order=4, max_poly=3,
                     formulation="weak", m=m, p=WEAK_P, use_ibp=use_ibp,
@@ -294,7 +293,7 @@ def main():
     parser.add_argument(
         "--libraries", nargs="+",
         default=["multigraph", "pdefind", "polyjet", "wsindy"],
-        choices=["multigraph", "mod_multigraph", "pdefind", "polyjet", "wsindy", "mwsindy"],
+        choices=["multigraph", "mod_multigraph", "pdefind", "polyjet", "wsindy"],
     )
     parser.add_argument(
         "--backends", nargs="+",
@@ -315,11 +314,6 @@ def main():
         "--spectral-cutoff", type=float, default=None,
         help="Apply spectral low-pass filter to snapshots before building "
              "libraries (cutoff wavenumber).",
-    )
-    parser.add_argument(
-        "--ch-epsilons", nargs="+", type=float, default=None,
-        help="Cahn-Hilliard epsilon values to sweep (default: 0.1 0.2 0.4). "
-             "Only applies when an equation contains 'cahn_hilliard'.",
     )
     parser.add_argument(
         "--mstls-alpha", nargs="+", type=float, default=None,
@@ -390,7 +384,6 @@ def main():
     weak_m_vals = args.weak_m
     post_hoc_noises = args.post_hoc_noise or [None]
     spectral_cutoffs = [args.spectral_cutoff] if args.spectral_cutoff else [None]
-    ch_epsilons = args.ch_epsilons or CH_EPSILONS
     mstls_alphas = args.mstls_alpha or MSTLS_ALPHAS
     rfe_lams = args.rfe_lam or RFE_LAMS
     brute_l0_penalties = args.brute_l0 or BRUTE_L0_PENALTIES
@@ -408,7 +401,7 @@ def main():
         "weak_m", "lam", "d_tol", "mstls_alpha",
         "n_active", "fp", "fn", "exact_recovery", "E_coeff", "max_coeff_err",
         "E_data", "cond_theta", "n_samples",
-        "post_hoc_noise", "spectral_cutoff", "ch_eps",
+        "post_hoc_noise", "spectral_cutoff",
         "profile_type", "profile_direction",
         "time_ms",
     ]
@@ -434,9 +427,9 @@ def main():
             eq_name = normalize_eq_name(eq_name)
             true_fn, skip_frac, mask_fn = _get_meta(eq_name)
 
-            # Determine CH epsilon sweep if applicable
+            # CH epsilon is fixed in equations.CH_EPSILON
             is_ch = eq_name == "ch"
-            eps_list = ch_epsilons if is_ch else [None]
+            eps_list = [CH_EPSILON] if is_ch else [None]
 
             eq_exact_count = 0
             eq_total = 0
@@ -469,8 +462,7 @@ def main():
                 for ch_eps in eps_list:
                     print(f"  eq={eq_name}  noise={noise_label:.3f}"
                           + (f"  cutoff={args.spectral_cutoff}"
-                             if args.spectral_cutoff else "")
-                          + (f"  ch_eps={ch_eps}" if ch_eps else ""),
+                             if args.spectral_cutoff else ""),
                           flush=True)
 
                     # Build ground truth with appropriate parameters
@@ -644,7 +636,6 @@ def main():
                                 spectral_cutoff=(
                                     args.spectral_cutoff
                                     if args.spectral_cutoff else ""),
-                                ch_eps=(ch_eps if ch_eps else ""),
                                 profile_type=profile_type,
                                 profile_direction=profile_direction,
                                 time_ms="0.0",
@@ -733,7 +724,6 @@ def main():
                                                 args.spectral_cutoff
                                                 if args.spectral_cutoff
                                                 else ""),
-                                            ch_eps=(ch_eps if ch_eps else ""),
                                             profile_type=profile_type,
                                             profile_direction=profile_direction,
                                             time_ms=f"{dt_ms:.1f}",
@@ -792,8 +782,6 @@ def main():
                                                 args.spectral_cutoff
                                                 if args.spectral_cutoff
                                                 else ""),
-                                            ch_eps=(ch_eps
-                                                    if ch_eps else ""),
                                             profile_type=profile_type,
                                             profile_direction=
                                                 profile_direction,
@@ -862,8 +850,6 @@ def main():
                                                 args.spectral_cutoff
                                                 if args.spectral_cutoff
                                                 else ""),
-                                            ch_eps=(ch_eps
-                                                    if ch_eps else ""),
                                             profile_type=profile_type,
                                             profile_direction=
                                                 profile_direction,
@@ -922,7 +908,6 @@ def main():
                                                 args.spectral_cutoff
                                                 if args.spectral_cutoff
                                                 else ""),
-                                            ch_eps=(ch_eps if ch_eps else ""),
                                             profile_type=profile_type,
                                             profile_direction=profile_direction,
                                             time_ms=f"{dt_ms:.1f}",

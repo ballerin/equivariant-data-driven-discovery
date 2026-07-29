@@ -54,7 +54,26 @@ independent in d≥3.
            + 2||∇²f(∇f,·)||^2 - 2Δf·∇²f(∇f,∇f) = 0   (in R^2).
        Excluded: star graph ∇³f(∇f,∇f,∇f) and the three disconnected k=4
        operators survive as basis elements.
+
+N-dimensional generalization (max_p <= 2 only)
+------------------------------------------------
+Every p<=2 operator (both in this module's original basis and in the
+modified/IBP-friendly basis below) is an isotropic scalar contraction of
+grad/Hessian/Laplacian and therefore generalizes to an arbitrary number of
+spatial dimensions.  Each is defined symbolically once, as a formula over
+``jet_algebra.JetExpr`` (see that module), and evaluated numerically via
+``_evaluate_jet_expr``; the same symbolic formula also drives the analytic
+jet-space decomposition used by ``library/conversions.py`` for arbitrary
+ndim, so the two can never silently disagree.
+
+p=3 operators (below) are NOT generalized: three of them already require a
+full third-order derivative tensor contraction and were never implemented
+beyond ndim=3 in the first place.  Calling any p=3 operator with a field of
+ndim not in (2, 3) raises ``NotImplementedError`` with a clear message; use
+``max_p<=2`` for N-D (ndim>3) support.
 """
+
+from functools import lru_cache
 
 import numpy as np
 
@@ -66,6 +85,7 @@ from .derivatives import (
     third_order,
     trilaplacian,
 )
+from .jet_algebra import JetExpr
 
 # -----------------------------------------------------------------------
 # Private base operator functions  (no polynomial prefactor)
@@ -94,163 +114,179 @@ def _op_identity(f, Lx, Ly, Lz=None):
     return f.copy()
 
 
+# -----------------------------------------------------------------------
+# Symbolic formulas for max_p<=2 (numeric- and jet-decomposition-generic).
+# See jet_algebra.py's module docstring for the design.
+# -----------------------------------------------------------------------
+
+
+def _evaluate_jet_expr(expr, f, Lx, Ly, Lz):
+    """Numerically evaluate a JetExpr for field f (any ndim)."""
+    from . import derivatives
+
+    Ls = derivatives.axis_lengths(f, Lx, Ly, Lz)
+    cache = {}
+
+    def get(multi_index):
+        if multi_index not in cache:
+            cache[multi_index] = (
+                f if not any(multi_index) else derivatives.partial_nd(f, Ls, multi_index)
+            )
+        return cache[multi_index]
+
+    total = np.zeros(f.shape, dtype=float)
+    for mono, coeff in expr.monomials():
+        term = np.full(f.shape, float(coeff))
+        for factor in mono:
+            term = term * get(factor)
+        total = total + term
+    return total
+
+
+def _make_symbolic_op(sym_fn):
+    """Wrap a symbolic formula ``sym_fn(ndim) -> JetExpr`` as a numeric
+    operator function ``op(f, Lx, Ly, Lz=None) -> ndarray``."""
+
+    def op(f, Lx, Ly, Lz=None, _sym=sym_fn):
+        return _evaluate_jet_expr(_sym(f.ndim), f, Lx, Ly, Lz)
+
+    return op
+
+
+@lru_cache(maxsize=None)
+def _sym_Delta(ndim):
+    F = JetExpr.var(ndim)
+    return sum((F.deriv(i).deriv(i) for i in range(ndim)), JetExpr.zero(ndim))
+
+
+@lru_cache(maxsize=None)
+def _sym_grad_sq(ndim):
+    F = JetExpr.var(ndim)
+    return sum((F.deriv(i) * F.deriv(i) for i in range(ndim)), JetExpr.zero(ndim))
+
+
+@lru_cache(maxsize=None)
+def _sym_bilap(ndim):
+    F = JetExpr.var(ndim)
+    DF = sum((F.deriv(i).deriv(i) for i in range(ndim)), JetExpr.zero(ndim))
+    return sum((DF.deriv(i).deriv(i) for i in range(ndim)), JetExpr.zero(ndim))
+
+
+@lru_cache(maxsize=None)
+def _sym_grad_Delta_grad(ndim):
+    F = JetExpr.var(ndim)
+    DF = sum((F.deriv(i).deriv(i) for i in range(ndim)), JetExpr.zero(ndim))
+    return sum(
+        (DF.deriv(i) * F.deriv(i) for i in range(ndim)), JetExpr.zero(ndim)
+    )
+
+
+@lru_cache(maxsize=None)
+def _sym_hess_norm_sq(ndim):
+    F = JetExpr.var(ndim)
+    return sum(
+        (F.deriv(i).deriv(j) * F.deriv(i).deriv(j)
+         for i in range(ndim) for j in range(ndim)),
+        JetExpr.zero(ndim),
+    )
+
+
+@lru_cache(maxsize=None)
+def _sym_hess_grad_grad(ndim):
+    F = JetExpr.var(ndim)
+    return sum(
+        (F.deriv(i).deriv(j) * F.deriv(i) * F.deriv(j)
+         for i in range(ndim) for j in range(ndim)),
+        JetExpr.zero(ndim),
+    )
+
+
+@lru_cache(maxsize=None)
+def _sym_Delta_f2(ndim):
+    """Δ(f²) = 2f·Δf + 2‖∇f‖². Replacement for f·Δf."""
+    F = JetExpr.var(ndim)
+    G = F * F
+    return sum((G.deriv(i).deriv(i) for i in range(ndim)), JetExpr.zero(ndim))
+
+
+@lru_cache(maxsize=None)
+def _sym_Delta_f3(ndim):
+    """Δ(f³) = 3f²·Δf + 6f·‖∇f‖². Replacement for f²·Δf."""
+    F = JetExpr.var(ndim)
+    G = F * F * F
+    return sum((G.deriv(i).deriv(i) for i in range(ndim)), JetExpr.zero(ndim))
+
+
+@lru_cache(maxsize=None)
+def _sym_Delta_grad_sq(ndim):
+    """Δ(‖∇f‖²) = 2⟨∇Δf,∇f⟩ + 2‖∇²f‖². Replacement for ⟨∇Δf,∇f⟩."""
+    G = _sym_grad_sq(ndim)
+    return sum((G.deriv(i).deriv(i) for i in range(ndim)), JetExpr.zero(ndim))
+
+
+@lru_cache(maxsize=None)
+def _sym_Delta_f_grad_sq(ndim):
+    """Δ(f·‖∇f‖²). Replacement for f·⟨∇Δf,∇f⟩."""
+    F = JetExpr.var(ndim)
+    G = F * _sym_grad_sq(ndim)
+    return sum((G.deriv(i).deriv(i) for i in range(ndim)), JetExpr.zero(ndim))
+
+
+@lru_cache(maxsize=None)
+def _sym_Delta2_f2(ndim):
+    """Δ²(f²). Replacement for f·Δ²f."""
+    F = JetExpr.var(ndim)
+    G = F * F
+    D1 = sum((G.deriv(i).deriv(i) for i in range(ndim)), JetExpr.zero(ndim))
+    return sum((D1.deriv(i).deriv(i) for i in range(ndim)), JetExpr.zero(ndim))
+
+
+@lru_cache(maxsize=None)
+def _sym_Delta2_f3(ndim):
+    """Δ²(f³). Replacement for f²·Δ²f."""
+    F = JetExpr.var(ndim)
+    G = F * F * F
+    D1 = sum((G.deriv(i).deriv(i) for i in range(ndim)), JetExpr.zero(ndim))
+    return sum((D1.deriv(i).deriv(i) for i in range(ndim)), JetExpr.zero(ndim))
+
+
 # --- p = 1 ---
 
+_op_Delta = _make_symbolic_op(_sym_Delta)
+"""p=1, k=1. One vertex with a single loop: Δf = Σ_i f_ii."""
 
-def _op_Delta(f, Lx, Ly, Lz=None):
-    """
-    p=1, k=1. One vertex with a single loop: Δf.
-    The loop contracts both indices of ∇²f into a trace.
-    Vertex degree: 2 (a loop counts as 2).
-
-    Graph:  ↺
-            X
-    """
-    return laplacian(f, Lx, Ly, Lz)
-
-
-def _op_grad_sq(f, Lx, Ly, Lz=None):
-    """
-    p=1, k=2. Single edge between two vertices: ‖∇f‖².
-    Each vertex contributes ∇f (degree 1); the edge contracts their free indices.
-    Vertex degrees: 1, 1.
-
-    Graph:  X---X
-    """
-    if f.ndim == 3:
-        fx, fy, fz = grad(f, Lx, Ly, Lz)
-        return fx**2 + fy**2 + fz**2
-    fx, fy = grad(f, Lx, Ly)
-    return fx**2 + fy**2
+_op_grad_sq = _make_symbolic_op(_sym_grad_sq)
+"""p=1, k=2. Single edge between two vertices: ‖∇f‖² = Σ_i f_i²."""
 
 
 # --- p = 2 ---
 
+_op_bilap = _make_symbolic_op(_sym_bilap)
+"""p=2, k=1. One vertex with two loops: Δ²f."""
 
-def _op_bilap(f, Lx, Ly, Lz=None):
-    """
-    p=2, k=1. One vertex with two loops: Δ²f.
-    Vertex degree: 4.
+_op_grad_Delta_grad = _make_symbolic_op(_sym_grad_Delta_grad)
+"""p=2, k=2. Single edge with one loop at an endpoint: ⟨∇Δf, ∇f⟩ = Σ_i (Δf)_i f_i."""
 
-    Graph:  ↺↺
-            X
-    """
-    return bilaplacian(f, Lx, Ly, Lz)
+_op_hess_norm_sq = _make_symbolic_op(_sym_hess_norm_sq)
+"""p=2, k=2. Double edge between two vertices: ‖∇²f‖² = Σ_ij f_ij²."""
 
-
-def _op_grad_Delta_grad(f, Lx, Ly, Lz=None):
-    """
-    p=2, k=2. Single edge with one loop at an endpoint: ⟨∇Δf, ∇f⟩ = Σ_i (∂_i Δf)(∂_i f).
-    The looped vertex (degree 3) contributes ∇Δf; the plain vertex (degree 1) contributes ∇f.
-    Vertex degrees: 3, 1.
-
-    Graph:  ↺
-            X---X
-    """
-    Df = laplacian(f, Lx, Ly, Lz)
-    if f.ndim == 3:
-        Dfx, Dfy, Dfz = grad(Df, Lx, Ly, Lz)
-        fx, fy, fz = grad(f, Lx, Ly, Lz)
-        return Dfx * fx + Dfy * fy + Dfz * fz
-    Dfx, Dfy = grad(Df, Lx, Ly)
-    fx, fy = grad(f, Lx, Ly)
-    return Dfx * fx + Dfy * fy
-
-
-def _op_hess_norm_sq(f, Lx, Ly, Lz=None):
-    """
-    p=2, k=2. Double edge between two vertices: ‖∇²f‖² = Σ_{ij} f_{ij}².
-    Both vertices contribute ∇²f (degree 2); the double edge contracts all index pairs.
-    Vertex degrees: 2, 2.
-
-    Graph:  X===X
-    """
-    if f.ndim == 3:
-        fxx, fxy, fxz, fyy, fyz, fzz = hessian(f, Lx, Ly, Lz)
-        return fxx**2 + fyy**2 + fzz**2 + 2 * (fxy**2 + fxz**2 + fyz**2)
-    fxx, fxy, fyy = hessian(f, Lx, Ly)
-    return fxx**2 + 2 * fxy**2 + fyy**2
-
-
-def _op_hess_grad_grad(f, Lx, Ly, Lz=None):
-    """
-    p=2, k=3. Path of three vertices: ∇²f(∇f,∇f) = Σ_{ij} f_{ij} f_i f_j.
-    The center vertex (degree 2) contributes ∇²f; each endpoint (degree 1) contributes ∇f.
-    Vertex degrees: 1, 2, 1.
-
-    Graph:  X---X---X
-    """
-    if f.ndim == 3:
-        fx, fy, fz = grad(f, Lx, Ly, Lz)
-        fxx, fxy, fxz, fyy, fyz, fzz = hessian(f, Lx, Ly, Lz)
-        return (fxx * fx**2 + fyy * fy**2 + fzz * fz**2
-                + 2 * (fxy * fx * fy + fxz * fx * fz + fyz * fy * fz))
-    fx, fy = grad(f, Lx, Ly)
-    fxx, fxy, fyy = hessian(f, Lx, Ly)
-    return fxx * fx**2 + 2 * fxy * fx * fy + fyy * fy**2
+_op_hess_grad_grad = _make_symbolic_op(_sym_hess_grad_grad)
+"""p=2, k=3. Path of three vertices: ∇²f(∇f,∇f) = Σ_ij f_ij f_i f_j."""
 
 
 # --- p = 2, modified multigraph operators ---
-# These are the 6 operators in the IBP-friendly basis that differ from
-# the original multigraph basis.  All are computed via product-rule
-# expansion to avoid compounding numerical errors.
+# These are the 6 operators in the IBP-friendly basis that differ from the
+# original multigraph basis -- each is Δ(something) or Δ²(something),
+# expanded via the product rule (the symbolic .deriv() chain rule handles
+# this automatically, so no compounded numerical differentiation occurs:
+# every jet monomial is still evaluated via a single joint derivative call).
 
-def _op_Delta_f2(f, Lx, Ly, Lz=None):
-    """Δ(f²) = 2f·Δf + 2‖∇f‖².  Replacement for f·Δf (N₁;₀²)."""
-    lap = laplacian(f, Lx, Ly, Lz)
-    return 2.0 * f * lap + 2.0 * _op_grad_sq(f, Lx, Ly, Lz)
-
-
-def _op_Delta_f3(f, Lx, Ly, Lz=None):
-    """Δ(f³) = 3f²·Δf + 6f·‖∇f‖².  Replacement for f²·Δf (N₁;₀³)."""
-    lap = laplacian(f, Lx, Ly, Lz)
-    return 3.0 * f**2 * lap + 6.0 * f * _op_grad_sq(f, Lx, Ly, Lz)
-
-
-def _op_Delta_grad_sq(f, Lx, Ly, Lz=None):
-    """Δ(‖∇f‖²) = 2⟨∇Δf,∇f⟩ + 2‖∇²f‖².  Replacement for ⟨∇Δf,∇f⟩ (N₂;₁²)."""
-    return 2.0 * _op_grad_Delta_grad(f, Lx, Ly, Lz) + 2.0 * _op_hess_norm_sq(f, Lx, Ly, Lz)
-
-
-def _op_Delta_f_grad_sq(f, Lx, Ly, Lz=None):
-    """Δ(f·‖∇f‖²) = 2f·⟨∇Δf,∇f⟩ + 2f·‖∇²f‖² + ‖∇f‖²·Δf + 4∇²f(∇f,∇f).
-    Replacement for f·⟨∇Δf,∇f⟩ (N₂;₁³)."""
-    Df = laplacian(f, Lx, Ly, Lz)
-    return (
-        2.0 * f * _op_grad_Delta_grad(f, Lx, Ly, Lz)
-        + 2.0 * f * _op_hess_norm_sq(f, Lx, Ly, Lz)
-        + _op_grad_sq(f, Lx, Ly, Lz) * Df
-        + 4.0 * _op_hess_grad_grad(f, Lx, Ly, Lz)
-    )
-
-
-def _op_Delta2_f2(f, Lx, Ly, Lz=None):
-    """Δ²(f²) = 2f·Δ²f + 8⟨∇Δf,∇f⟩ + 4‖∇²f‖² + 2(Δf)².
-    Replacement for f·Δ²f (N₂;₀²)."""
-    Df = laplacian(f, Lx, Ly, Lz)
-    D2f = bilaplacian(f, Lx, Ly, Lz)
-    return (
-        2.0 * f * D2f
-        + 8.0 * _op_grad_Delta_grad(f, Lx, Ly, Lz)
-        + 4.0 * _op_hess_norm_sq(f, Lx, Ly, Lz)
-        + 2.0 * Df**2
-    )
-
-
-def _op_Delta2_f3(f, Lx, Ly, Lz=None):
-    """Δ²(f³) = 3f²·Δ²f + 24f·⟨∇Δf,∇f⟩ + 12f·‖∇²f‖² + 6f·(Δf)²
-    + 24∇²f(∇f,∇f) + 12‖∇f‖²·Δf.
-    Replacement for f²·Δ²f (N₂;₀³).  CORRECTED: 24f⟨∇Δf,∇f⟩ (paper has 6)."""
-    Df = laplacian(f, Lx, Ly, Lz)
-    D2f = bilaplacian(f, Lx, Ly, Lz)
-    return (
-        3.0 * f**2 * D2f
-        + 24.0 * f * _op_grad_Delta_grad(f, Lx, Ly, Lz)
-        + 12.0 * f * _op_hess_norm_sq(f, Lx, Ly, Lz)
-        + 6.0 * f * Df**2
-        + 24.0 * _op_hess_grad_grad(f, Lx, Ly, Lz)
-        + 12.0 * _op_grad_sq(f, Lx, Ly, Lz) * Df
-    )
+_op_Delta_f2 = _make_symbolic_op(_sym_Delta_f2)
+_op_Delta_f3 = _make_symbolic_op(_sym_Delta_f3)
+_op_Delta_grad_sq = _make_symbolic_op(_sym_Delta_grad_sq)
+_op_Delta_f_grad_sq = _make_symbolic_op(_sym_Delta_f_grad_sq)
+_op_Delta2_f2 = _make_symbolic_op(_sym_Delta2_f2)
+_op_Delta2_f3 = _make_symbolic_op(_sym_Delta2_f3)
 
 
 # --- p = 3 ---
@@ -520,6 +556,29 @@ CONNECTED_OPERATORS = {
         (_op_trilap, "Δ³f", 1, False),  # triple loop
     ],
 }
+
+
+def _require_ndim_2_or_3(func, desc):
+    """Wrap a p=3 operator so it fails clearly outside ndim in (2, 3),
+    instead of a confusing shape/unpack error from the underlying
+    2-D/3-D-hardcoded implementation."""
+
+    def wrapped(f, Lx, Ly, Lz=None, _fn=func, _desc=desc):
+        if f.ndim not in (2, 3):
+            raise NotImplementedError(
+                f"multigraph operator {_desc!r} (p=3) is only implemented for "
+                f"ndim in (2, 3); got ndim={f.ndim}. Use max_p<=2 for N-D "
+                f"(ndim>3) support."
+            )
+        return _fn(f, Lx, Ly, Lz)
+
+    return wrapped
+
+
+CONNECTED_OPERATORS[3] = [
+    (_require_ndim_2_or_3(fn, desc), desc, k, excl)
+    for fn, desc, k, excl in CONNECTED_OPERATORS[3]
+]
 
 
 # -----------------------------------------------------------------------

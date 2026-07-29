@@ -328,16 +328,11 @@ def _best_eq(rows, noise, method, backend):
     return best_in_group(grp) if grp else None
 
 
-def _best_mwsindy(rows, noise, method, backend):
-    """Best MWSINDy result."""
-    return _best_in_lib(rows, "mwsindy", noise, method, backend)
-
-
 def _best_non_eq(rows, noise, method, backend):
-    """Best non-multigraph result (excludes multigraphs, mwsindy, oracle)."""
+    """Best non-multigraph result (excludes multigraphs, oracle)."""
     grp = [
         r for r in rows
-        if r["library"] not in ("multigraphs", "mwsindy")
+        if r["library"] != "multigraphs"
         and r.get("algorithm", "") != "oracle"
         and str(r.get("noise", "")) == str(noise)
         and r["method"] == method
@@ -839,7 +834,7 @@ def build_anisotropic_summary_table(rows):
                         r for r in rows
                         if r.get("profile_type", "") == pt
                         and r.get("profile_direction", "") == pd
-                        and r["library"] not in ("multigraphs", "mwsindy")
+                        and r["library"] != "multigraphs"
                         and str(r["noise"]) == str(noise)
                         and r["method"] == method
                         and r["backend"] == be

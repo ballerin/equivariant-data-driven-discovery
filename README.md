@@ -46,6 +46,8 @@ Install in editable mode:
 This makes the ``equivariant_pde_find`` package importable from anywhere.
 Scripts in the ``scripts/`` directory automatically add ``src/`` to ``sys.path`` so they also work without a pip install.
 
+Requires Python >= 3.10. `pyproject.toml` declares loose lower bounds; `requirements-lock.txt` pins the exact versions this codebase has been tested against, if you want an exact reproduction of the development environment (`pip install -r requirements-lock.txt`).
+
 #### 1. Generate simulation data
 
 Generate all datasets with the default parameters (all equations, all noise levels):
@@ -98,9 +100,6 @@ python scripts/sweep.py --libraries polyjet
 
 # WSINDy library only
 python scripts/sweep.py --libraries wsindy
-
-# Cahn-Hilliard epsilon ablation
-python scripts/sweep.py --equations ch --ch-epsilons 0.1 0.2 0.4
 ```
 
 Key CLI options for `sweep.py`:
@@ -109,7 +108,7 @@ Key CLI options for `sweep.py`:
 |---|---|---|
 | `--methods` | `pointwise weak_direct weak_ibp` | Library evaluation methods |
 | `--algorithms` | `stride mstls rfe` | Regression algorithms (`stride`, `mstls`, `rfe`, `brute`, `oracle`) |
-| `--libraries` | `multigraph pdefind polyjet wsindy` | Library types (`multigraph`, `mod_multigraph`, `pdefind`, `polyjet`, `wsindy`, `mwsindy`) |
+| `--libraries` | `multigraph pdefind polyjet wsindy` | Library types (`multigraph`, `mod_multigraph`, `pdefind`, `polyjet`, `wsindy`) |
 | `--backends` | `spectral polynomial` | Differentiation backends |
 | `--equations` | all | Filter by equation name prefix |
 | `--noise` | all | Filter by noise level (e.g. `0.0 0.02 0.05`) |
@@ -194,6 +193,34 @@ Sweep outputs are CSV files with naming convention `sweep_<YYYYMMDD>_<HHMMSS>_<c
 ### Summaries (`summaries/`)
 
 Per-PDE markdown summaries of best recovery results, one per equation. Also includes a `README.md` summary index.
+
+## N-dimensional extension (experimental)
+
+The paper's results are all 2D. In parallel, the whole discovery pipeline — simulators, derivative backends (spectral and polynomial), all 5 libraries (multigraph, mod_multigraph, pdefind, polyjet, wsindy) in both pointwise and weak/IBP formulations, and cross-library jet-space scoring — generalizes to arbitrary spatial dimension via an explicit `ndim` parameter. Domains are isotropic beyond 3D (a single length reused for every axis, matching every N-D simulator); axis names beyond `z` use `w, v, u, t, s` (up to ndim=8).
+
+- **Equations**: Allen-Cahn and Cahn-Hilliard have `ndim`-generic simulators (`allen_cahn_nd`, `cahn_hilliard_nd`, 1 ≤ ndim ≤ 8) and ground truth. Swift-Hohenberg and Porous Medium also have `ndim`-generic simulators (`swift_hohenberg_nd`, `porous_medium_nd`), but are **not yet wired into `generate_nd_data.py`/`sweep_nd.py`** below. Kuramoto-Sivashinsky explicitly does **not** generalize: `kuramoto_sivashinsky(ndim=...)` raises `ValueError` for any value other than 2, because its ETDRK4/IMEX integrators (`simulations/_etdrk4.py`) are hardcoded around 2-D FFTs and have not been validated at higher dimension.
+- **Libraries**: all 5 library types (`multigraph`, `mod_multigraph`, `pdefind`, `polyjet`, `wsindy`) are dimension-generic for any ndim, pointwise and weak (with IBP). The equivariant (multigraph/mod_multigraph) operator basis is generalized for `max_p<=2` (the 20-operator basis this repo's results actually use) — `max_p=3` raises `NotImplementedError` outside ndim in `{2, 3}`, since 3 of its 11 operators already required a full 3rd-order derivative tensor contraction that was never implemented beyond 3D in the first place. Verified end-to-end at ndim=4: simulate → build weak-form multigraph library with IBP → RFE regression → exact recovery (see `tests/test_library_nd.py`).
+- **Polynomial derivative backend**: also generalized to N-D (local least-squares fit over an ndim stencil), alongside the spectral backend — but cost grows as `(2r+1)^ndim`, so expect it to become impractical well before the spectral backend does as ndim grows.
+
+Generate n-D data (Allen-Cahn and Cahn-Hilliard only):
+
+```bash
+python scripts/generate_nd_data.py
+python scripts/generate_nd_data.py --equations ac ch --ndim 2 3
+python scripts/generate_nd_data.py --noise 0.0 0.02
+```
+
+Output: `data/<equation>_nd<ndim>_<label>.npz`.
+
+Run the n-D sweep (multigraph / mod_multigraph / pdefind, STRidge / RFE, weak-form IBP):
+
+```bash
+python scripts/sweep_nd.py
+python scripts/sweep_nd.py --equations ac ch --ndim 2 3
+python scripts/sweep_nd.py --libraries multigraph pdefind --algorithms stride
+```
+
+Output: `results/sweep_nd_<YYYYMMDD>_<HHMMSS>_<name>.csv`.
 
 ## Libraries
 
@@ -293,7 +320,8 @@ This is a good metric if the PDE to recover is representable in the library, but
 
 # References
 
-[1] Ballerin, F. & Grong, E. (2026). Equivariant PDE discovery. (This paper.)
+[1] Ballerin, F. & Grong, E. (2026). Equivariant PDE discovery. (This paper; currently unpublished.)
+<!-- TODO: replace with the arXiv/DOI link and full citation once the PDE-discovery paper is published. -->
 
 [2] Ballerin, F. & Grong, E. (2026). Equivariant nonlinear partial differential operators on constant curvature spaces. *arXiv preprint arXiv:2605.16847*. https://arxiv.org/abs/2605.16847
 

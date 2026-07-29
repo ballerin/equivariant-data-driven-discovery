@@ -772,9 +772,11 @@ class TestWeakForm3D:
         assert np.all(np.isfinite(b))
 
     def test_weak_convolution_3d_without_kernel_z_raises(self):
+        """weak_convolution now generalizes to any ndim and requires exactly
+        f.ndim kernels; a 3-D field with only 2 kernels still raises."""
         f = np.ones((8, 8, 8))
         kernel = np.ones(3)
-        with pytest.raises(ValueError, match="kernel_z"):
+        with pytest.raises(ValueError, match="need exactly f.ndim kernels"):
             wf.weak_convolution(f, kernel, kernel)
 
 
@@ -837,133 +839,3 @@ def test_make_weak_regression_data_no_rescale():
         sample_stride=0, rescale=False,
     )
     assert rinfo is None
-
-
-# ---------------------------------------------------------------------------
-# MWSINDy tests (WSINDy regression + multigraph fine-tuning)
-# ---------------------------------------------------------------------------
-
-
-def test_mwsindy_symmetry_check_rejects_anisotropic():
-    """MWSINDy's O(2) symmetry check: if WSINDy finds f_xx but not f_yy,
-    the multigraph operator Δf is NOT considered discovered (fn>0)."""
-    f, L = _build_separable_field()
-    from equivariant_pde_find import derivatives
-    derivatives.set_backend("spectral")
-
-    m, p = 8, 6
-
-    G_ws, desc_ws = library.build_wsindy_library(f, L, L, m=m, p=p, use_ibp=False, formulation="weak")
-    G_mg, desc_mg = library.build_multigraph_library(f, L, L, m=m, p=p, use_ibp=False, formulation="weak")
-
-    from equivariant_pde_find.library import build_polyjet_library
-    _, desc_jet = build_polyjet_library(f, L, L, max_order=4, max_degree=3)
-    from equivariant_pde_find.evaluation import build_wsindy_to_jet_map
-    M = build_wsindy_to_jet_map(desc_ws, desc_jet)
-
-    # Ground truth: f_t = Δf
-    true_mg = np.zeros(len(desc_mg))
-    true_mg[desc_mg.index("Δf")] = 1.0
-    from equivariant_pde_find.evaluation import _MULTIGRAPH_TO_JET_DECOMPOSITION
-    true_jet = np.zeros(len(desc_jet))
-    for j, (name, coeff) in enumerate(zip(desc_mg, true_mg)):
-        if abs(coeff) < 1e-12: continue
-        if name not in _MULTIGRAPH_TO_JET_DECOMPOSITION: continue
-        for jet_name, mult in _MULTIGRAPH_TO_JET_DECOMPOSITION[name]:
-            true_jet[desc_jet.index(jet_name)] += coeff * mult
-
-    # Create an anisotropic WSINDy vector: keep f_{xx} but NOT f_{yy}
-    w_broken = np.zeros(len(desc_ws))
-    w_broken[desc_ws.index("f_{xx}")] = 1.0
-    # f_{yy} is intentionally left at 0
-
-    # Use the evaluation Theta from the G matrix itself (just test fn/fp logic)
-    # Map w_broken to jet
-    w_jet = M @ w_broken
-    nz_jet = np.abs(w_jet) > 1e-10
-
-    # Check: Δf requires f_xx AND f_yy
-    # f_xx is active, f_yy is not → Δf is incomplete
-    idx_fxx = desc_jet.index("f_xx")
-    idx_fyy = desc_jet.index("f_yy")
-    assert nz_jet[idx_fxx], "f_xx should be active"
-    assert not nz_jet[idx_fyy], "f_yy should be inactive"
-
-    # Now verify that MWSINDy's operator check would detect this
-    # Δf decomposition: f_xx + f_yy → both must be active
-    mg_ops_missing = []
-    for j_mg, mg_name in enumerate(desc_mg):
-        if mg_name not in _MULTIGRAPH_TO_JET_DECOMPOSITION:
-            continue
-        all_active = True
-        for jet_name, _mult in _MULTIGRAPH_TO_JET_DECOMPOSITION[mg_name]:
-            j_jet = desc_jet.index(jet_name)
-            if not nz_jet[j_jet]:
-                all_active = False
-                break
-        if not all_active and mg_name == "Δf":
-            mg_ops_missing.append(mg_name)
-
-    assert "Δf" in mg_ops_missing, (
-        "Δf should be marked as incomplete when f_yy is missing"
-    )
-
-
-def test_mwsindy_pipeline_produces_valid_result():
-    """MWSINDy produces valid fp/fn/E/n_samples on a real dataset."""
-    import numpy as np
-    data_path = os.path.join(
-        os.path.dirname(__file__), "..", "data", "swift_hohenberg_clean.npz",
-    )
-    if not os.path.exists(data_path):
-        pytest.skip("Data file not available (gitignored *.npz)")
-    data = np.load(data_path)
-    f = data["snapshots"][20]
-    Lx = float(data["Lx"]); Ly = float(data["Ly"])
-
-    from equivariant_pde_find import derivatives
-    derivatives.set_backend("spectral")
-    m, p = 8, 6
-
-    G_ws, desc_ws = library.build_wsindy_library(f, Lx, Ly, m=m, p=p, use_ibp=False, formulation="weak")
-    G_mg, desc_mg = library.build_multigraph_library(f, Lx, Ly, m=m, p=p, use_ibp=False, formulation="weak")
-    ft = derivatives.bilaplacian(f, Lx, Ly)
-    b = wf.build_weak_rhs(ft, m=m, p=p)
-
-    from equivariant_pde_find.library import build_polyjet_library
-    _, desc_jet = build_polyjet_library(f, Lx, Ly, max_order=4, max_degree=3)
-    from equivariant_pde_find.evaluation import build_wsindy_to_jet_map
-    M = build_wsindy_to_jet_map(desc_ws, desc_jet)
-
-    # Ground truth: f_t = Δ²f
-    true_mg = np.zeros(len(desc_mg))
-    true_mg[desc_mg.index("Δ²f")] = 1.0
-    from equivariant_pde_find.evaluation import _MULTIGRAPH_TO_JET_DECOMPOSITION
-    true_jet = np.zeros(len(desc_jet))
-    for j, (name, coeff) in enumerate(zip(desc_mg, true_mg)):
-        if abs(coeff) < 1e-12: continue
-        if name not in _MULTIGRAPH_TO_JET_DECOMPOSITION: continue
-        for jet_name, mult in _MULTIGRAPH_TO_JET_DECOMPOSITION[name]:
-            true_jet[desc_jet.index(jet_name)] += coeff * mult
-
-    from equivariant_pde_find.regression import TrainSTRidge
-    from equivariant_pde_find.evaluation import evaluate_mwsindy, build_eval_theta_jet
-    from equivariant_pde_find.simulations import make_regression_data
-
-    # Build proper evaluation Theta from the full snapshot array
-    snaps = data["snapshots"]
-    times = data["times"]
-    Theta_jet, Ft_jet = build_eval_theta_jet(
-        snaps, times, Lx, Ly, skip_fraction=0.1, seed=0,
-    )
-
-    w_ws = TrainSTRidge(G_ws, b, lam=1e-6, d_tol=0.5, maxit=25)
-    result = evaluate_mwsindy(
-        w_ws, desc_ws, desc_mg, desc_jet, M,
-        Theta_jet, Ft_jet, true_jet, G_mg, b,
-    )
-
-    assert isinstance(result["fp"], (int, float))
-    assert isinstance(result["fn"], (int, float))
-    assert result["n_samples"] > 0
-    assert result["E"] >= 0

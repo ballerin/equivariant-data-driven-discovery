@@ -210,3 +210,46 @@ class TestPolynomialStencilConfig:
         deg, r = derivatives.get_polynomial_stencil(1)
         assert isinstance(deg, int)
         assert isinstance(r, int)
+
+
+class TestAxisLengthsIsSingleSourced:
+    """``axis_lengths`` used to exist as three independent copies (spectral.py,
+    polynomial.py, derivatives/__init__.py), with nothing asserting they
+    agreed -- a silent-divergence risk, since ``partial_nd`` used one copy
+    while the named operators used the others.  They now all delegate to
+    ``derivatives/_common.py``; these tests pin that."""
+
+    def test_all_three_entry_points_are_the_same_function(self):
+        from equivariant_pde_find.derivatives import polynomial as poly
+        from equivariant_pde_find.derivatives import spectral as spec
+
+        assert derivatives.axis_lengths is spec._axis_lengths
+        assert derivatives.axis_lengths is poly._axis_lengths
+
+    @pytest.mark.parametrize("ndim", [1, 2, 3, 4, 5, 6])
+    def test_convention_by_dimension(self, ndim):
+        f = np.zeros((3,) * ndim)
+        Lx, Ly, Lz = 1.0, 2.0, 3.0
+        got = derivatives.axis_lengths(f, Lx, Ly, Lz)
+        assert len(got) == ndim
+        if ndim == 1:
+            assert got == (Lx,)
+        elif ndim == 2:
+            assert got == (Lx, Ly)  # anisotropic 2-D preserved
+        elif ndim == 3:
+            assert got == (Lx, Ly, Lz)  # anisotropic 3-D preserved
+        else:
+            assert got == (Lx,) * ndim  # isotropic beyond 3-D
+
+    def test_missing_lz_in_3d_raises_a_clear_error(self):
+        """Previously this surfaced as a TypeError deep inside the FFT
+        wavenumber construction ('unsupported operand type(s) for /: float
+        and NoneType')."""
+        f = np.zeros((4, 4, 4))
+        with pytest.raises(ValueError, match="Lz is required for 3-D fields"):
+            derivatives.axis_lengths(f, 1.0, 2.0)
+
+    def test_lz_is_ignored_beyond_3d(self):
+        """Beyond 3-D the domain is isotropic, so a stray Lz must not leak in."""
+        f = np.zeros((3,) * 5)
+        assert derivatives.axis_lengths(f, 1.0, 2.0, 99.0) == (1.0,) * 5

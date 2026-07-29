@@ -13,11 +13,13 @@ from ..multigraph_operators import get_operators
 def _build_multigraph_pointwise(f, Lx, Ly, max_p=2, max_n=3, Lz=None):
     """Build the equivariant library matrix for a scalar field f.
 
-    Supports 2-D (Nx, Ny) and 3-D (Nx, Ny, Nz) fields.
+    Supports any ndim for max_p<=2 (isotropic domain beyond ndim=3, i.e.
+    only Lx is consulted -- see multigraph_operators.py's module docstring).
+    max_p=3 raises NotImplementedError outside ndim in (2, 3).
 
     Parameters
     ----------
-    f     : ndarray (Nx, Ny) or (Nx, Ny, Nz)
+    f     : ndarray, shape (N_1, ..., N_ndim)
     Lx, Ly, Lz : float — domain lengths (Lz required for 3-D)
     max_p : int
     max_n : int
@@ -39,11 +41,11 @@ def _build_multigraph_weak(f, Lx, Ly, max_p=2, max_n=3, m=8, p=4,
                            use_ibp=False, Lz=None):
     """Build the weak-form equivariant (multigraph) library matrix.
 
-    Supports 2-D and 3-D fields.
+    Supports any ndim for max_p<=2 (see _build_multigraph_pointwise).
 
     Parameters
     ----------
-    f : ndarray (Nx, Ny) or (Nx, Ny, Nz)
+    f : ndarray, shape (N_1, ..., N_ndim)
     Lx, Ly, Lz : float
     max_p, max_n : int
     m : int — test function half-support
@@ -75,10 +77,10 @@ def _build_multigraph_weak(f, Lx, Ly, max_p=2, max_n=3, m=8, p=4,
                 col_weak = weak_bilaplacian_ibp(inner_field, m, p, Lx, Ly, Lz)
             else:
                 col_raw = func(f, Lx, Ly, Lz)
-                col_weak = weak_convolution(col_raw, kernel, kernel, kernel if f.ndim == 3 else None)
+                col_weak = weak_convolution(col_raw, [kernel] * f.ndim)
         else:
             col_raw = func(f, Lx, Ly, Lz)
-            col_weak = weak_convolution(col_raw, kernel, kernel, kernel if f.ndim == 3 else None)
+            col_weak = weak_convolution(col_raw, [kernel] * f.ndim)
         cols.append(col_weak.ravel())
 
     descriptions = [desc for _, desc in ops]

@@ -1,3 +1,7 @@
+"""Sparse regression algorithms for PDE discovery: STRidge, SR3, MSTLS,
+RFE, and brute-force exhaustive best-subset search, plus their Train*
+wrappers used by the sweep scripts."""
+
 import numpy as np
 
 # ==================================================================================================

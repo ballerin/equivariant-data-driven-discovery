@@ -55,7 +55,7 @@ from equivariant_pde_find.evaluation import (  # noqa: E402
 from equivariant_pde_find.library.conversions import (  # noqa: E402
     _MULTIGRAPH_TO_JET_DECOMPOSITION,
 )
-from equivariant_pde_find.equation_configs import (  # noqa: E402
+from equivariant_pde_find.equations import (  # noqa: E402
     find_op, true_allen_cahn, true_swift_hohenberg, true_ks,
     true_cahn_hilliard, true_pme, mask_pme, EQUATION_META,
 )

@@ -1,7 +1,8 @@
 """
 Derivative backend selector for the different differential operators.
 
-Currently supports two backends:
+Currently supports two backends, both N-D-generic (see spectral.py and
+polynomial.py module docstrings for the isotropic-beyond-3D convention):
  - 'spectral' (FFT-based) [DEFAULT]
  - 'polynomial' (local least-squares polynomial fit).
 
@@ -10,8 +11,10 @@ Potential todos:
  - stencil-based
  - Tikhonov-regularized polynomial fit
 
-Exposes six backend-neutral functions (grad, laplacian, hessian, bilaplacian,
-trilaplacian, third_order) that dispatch to whichever backend is currently active.
+Exposes six backend-neutral named functions (grad, laplacian, hessian,
+bilaplacian, trilaplacian, third_order) plus a generic ``partial_nd`` for an
+arbitrary derivative multi-index; all dispatch to whichever backend is
+currently active.
 
 Usage
 -----
@@ -44,6 +47,7 @@ from contextlib import contextmanager
 
 from . import polynomial as _polynomial
 from . import spectral as _spectral
+from ._common import axis_lengths as _axis_lengths
 
 # Dispatch table: backend name → dict of operation → function.
 # Each entry maps the neutral operation name to the backend-specific function.
@@ -64,6 +68,12 @@ _DISPATCH = {
         "trilaplacian": _polynomial.polynomial_trilaplacian,
         "third_order": _polynomial.polynomial_third_order,
     },
+}
+
+# Neutral multi-index primitive per backend: fn(f, Ls, multi_index) -> ndarray.
+_PARTIAL_ND_DISPATCH = {
+    "spectral": _spectral.spectral_partial_nd,
+    "polynomial": _polynomial.poly_partial_nd,
 }
 
 _active_name = "spectral"  # default
@@ -116,44 +126,65 @@ def use_backend(name: str):
 
 
 def grad(f, Lx, Ly, Lz=None, prefilter_sigma=None):
-    """Gradient via the active backend.
+    """Gradient via the active backend, for any ndim.
 
-    2-D: returns (f_x, f_y).  3-D: returns (f_x, f_y, f_z).
-    3-D is only supported with the 'spectral' backend.
+    Returns a tuple of f.ndim components (f_x, f_y, ...).
     """
     return _DISPATCH[_active_name]["grad"](f, Lx, Ly, Lz, prefilter_sigma)
 
 
-def laplacian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
-    """Laplacian via the active backend.
+# Public re-export of the single canonical implementation (derivatives/
+# _common.py), which both backends also use.
+axis_lengths = _axis_lengths
 
-    2-D: Δf = f_xx + f_yy.  3-D: Δf = f_xx + f_yy + f_zz.
+
+def partial_nd(f, Ls, multi_index):
+    """Compute ∂^multi_index f via the active backend, for any ndim.
+
+    Parameters
+    ----------
+    f : ndarray, shape (N_1, ..., N_ndim)
+    Ls : sequence of float, length f.ndim — per-axis domain length
+    multi_index : sequence of int, length f.ndim
+
+    Returns
+    -------
+    ndarray, shape f.shape
     """
+    return _PARTIAL_ND_DISPATCH[_active_name](f, Ls, multi_index)
+
+
+def laplacian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
+    """Laplacian via the active backend, for any ndim: Δf = Σ_axis f_{axis,axis}."""
     return _DISPATCH[_active_name]["laplacian"](f, Lx, Ly, Lz, prefilter_sigma)
 
 
 def hessian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
-    """Hessian via the active backend.
+    """Unique Hessian entries via the active backend, for any ndim.
 
-    2-D: returns (f_xx, f_xy, f_yy).  3-D: returns 6 components.
+    2-D: returns (f_xx, f_xy, f_yy).  3-D: returns 6 components.  N-D:
+    returns the C(ndim+1, 2) unique components; see spectral.py's module
+    docstring for the canonical ordering.
     """
     return _DISPATCH[_active_name]["hessian"](f, Lx, Ly, Lz, prefilter_sigma)
 
 
 def bilaplacian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
-    """Bilaplacian Δ²f via the active backend."""
+    """Bilaplacian Δ²f via the active backend, for any ndim."""
     return _DISPATCH[_active_name]["bilaplacian"](f, Lx, Ly, Lz, prefilter_sigma)
 
 
 def trilaplacian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
-    """Trilaplacian Δ³f via the active backend."""
+    """Trilaplacian Δ³f via the active backend, for any ndim."""
     return _DISPATCH[_active_name]["trilaplacian"](f, Lx, Ly, Lz, prefilter_sigma)
 
 
 def third_order(f, Lx, Ly, Lz=None, prefilter_sigma=None):
-    """Third-order partial derivatives via the active backend.
+    """Unique third-order partial derivatives via the active backend, for any ndim.
 
     2-D: returns (f_xxx, f_xxy, f_xyy, f_yyy).  3-D: returns 10 components.
+    N-D: returns the C(ndim+2, 3) unique components; see spectral.py's
+    module docstring for the canonical ordering.
     """
     return _DISPATCH[_active_name]["third_order"](f, Lx, Ly, Lz, prefilter_sigma)
 

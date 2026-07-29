@@ -46,7 +46,7 @@ from equivariant_pde_find.evaluation import (  # noqa: E402
 from equivariant_pde_find.library.conversions import (  # noqa: E402
     map_multigraph_to_jet, map_mod_multigraph_to_jet,
 )
-from equivariant_pde_find.equation_configs import (  # noqa: E402
+from equivariant_pde_find.equations import (  # noqa: E402
     true_allen_cahn, true_swift_hohenberg, true_ks,
     true_cahn_hilliard, true_pme, mask_pme, EQUATION_META,
     true_allen_cahn_mod_multigraph, true_swift_hohenberg_mod_multigraph,

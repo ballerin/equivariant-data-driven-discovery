@@ -1,3 +1,5 @@
+"""Extract pointwise (f, f_t) regression samples from simulation snapshots."""
+
 import numpy as np
 
 

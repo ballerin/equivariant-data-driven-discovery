@@ -35,7 +35,7 @@ from equivariant_pde_find import derivatives
 from equivariant_pde_find.library import build_multigraph_library, build_polyjet_library
 from equivariant_pde_find.library.conversions import _MULTIGRAPH_TO_JET_DECOMPOSITION
 from equivariant_pde_find.evaluation import build_eval_theta_jet, evaluate_unified
-from equivariant_pde_find.equation_configs import true_allen_cahn
+from equivariant_pde_find.equations import true_allen_cahn
 from equivariant_pde_find.regression import TrainSTRidge
 from equivariant_pde_find.simulations import make_regression_data
 

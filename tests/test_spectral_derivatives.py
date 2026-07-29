@@ -140,11 +140,15 @@ def test_complex_input_imag_discarded():
     np.testing.assert_allclose(fy_c, fy_real, rtol=1e-12, atol=1e-12)
 
 
-def test_input_shape_error():
-    """Passing a 1-D array should raise a ValueError due to shape unpacking."""
-    arr = np.arange(16)
-    with pytest.raises(ValueError):
-        sd.spectral_grad(arr, 2 * math.pi, 2 * math.pi)
+def test_1d_input_is_valid_ndim_1():
+    """A 1-D array is valid input (ndim=1) since the N-D generalization —
+    spectral_grad returns a 1-tuple, exact for a single cosine mode."""
+    N, L, m = 16, 2 * math.pi, 3
+    x = np.linspace(0, L, N, endpoint=False)
+    k = 2.0 * math.pi * m / L
+    f = np.cos(k * x)
+    (fx,) = sd.spectral_grad(f, L, L)
+    np.testing.assert_allclose(fx, -k * np.sin(k * x), rtol=1e-12, atol=1e-12)
 
 
 # ---------------------------------------------------------------------------
@@ -538,16 +542,153 @@ class TestSpectralDerivatives3D:
         lap_h = sd.spectral_laplacian(h, Lx, Ly, Lz)
         np.testing.assert_allclose(lap_h, a * lap_f + b * lap_g, rtol=1e-12, atol=1e-12)
 
-    def test_1d_input_raises_3d(self):
-        """A 1-D array should raise ValueError (too few dims for ndim==2 or 3)."""
-        arr = np.arange(16)
-        with pytest.raises(ValueError):
-            sd.spectral_grad(arr, 2 * math.pi, 2 * math.pi)
+    def test_4d_input_is_valid(self):
+        """A 4-D array is valid input too (isotropic domain beyond ndim=3) —
+        exact for a single cosine mode, matching the 2-D/3-D exactness tests."""
+        N, L, ndim = 8, 2 * math.pi, 4  # N=8 -> Nyquist=4; keep ks well below it
+        ks = np.array([2, 1, 3, 1])
+        x = np.linspace(0, L, N, endpoint=False)
+        grids = np.meshgrid(*([x] * ndim), indexing="ij")
+        kvec = 2.0 * math.pi / L * ks
+        theta = sum(k * g for k, g in zip(kvec, grids))
+        f = np.cos(theta)
 
-    def test_polynomial_backend_raises_on_3d(self):
-        """Polynomial backend raises NotImplementedError for 3-D input."""
+        grad = sd.spectral_grad(f, L, L)
+        assert len(grad) == ndim
+        for i in range(ndim):
+            np.testing.assert_allclose(
+                grad[i], -kvec[i] * np.sin(theta), rtol=1e-10, atol=1e-10
+            )
+
+        lap = sd.spectral_laplacian(f, L, L)
+        np.testing.assert_allclose(
+            lap, -np.sum(kvec**2) * f, rtol=1e-10, atol=1e-10
+        )
+
+    def test_polynomial_backend_supports_3d(self):
+        """Polynomial backend now supports 3-D input (N-D generalization) —
+        gradient of a single low-frequency cosine mode is approximately
+        correct (polynomial fitting has O(dx^(deg+1-order)) bias, unlike
+        the exact spectral backend)."""
         from equivariant_pde_find import derivatives
-        f = np.random.default_rng(0).standard_normal((8, 8, 8))
+        N, L, m = 24, 2 * math.pi, 2
+        x = np.linspace(0, L, N, endpoint=False)
+        X, Y, Z = np.meshgrid(x, x, x, indexing="ij")
+        k = 2.0 * math.pi * m / L
+        f = np.cos(k * X)
         with derivatives.use_backend("polynomial"):
-            with pytest.raises(NotImplementedError):
-                derivatives.grad(f, 2 * math.pi, 2 * math.pi, 2 * math.pi)
+            fx, fy, fz = derivatives.grad(f, L, L, L)
+        np.testing.assert_allclose(fx, -k * np.sin(k * X), rtol=1e-2, atol=1e-2)
+        np.testing.assert_allclose(fy, 0.0, atol=1e-2)
+        np.testing.assert_allclose(fz, 0.0, atol=1e-2)
+
+
+# ---------------------------------------------------------------------------
+# Spectral-method conventions (Trefethen, "Spectral Methods in MATLAB", ch. 3)
+#
+# These pin two textbook properties that the N-D generalization relies on but
+# that nothing previously asserted:
+#
+#   1. Nyquist handling.  For even N the mode k = N/2 is shared between +N/2
+#      and -N/2 and must be zeroed for odd-order derivatives, kept for even
+#      ones.  spectral.py achieves this implicitly (an odd-order multiplier
+#      makes the real Nyquist coefficient purely imaginary, which the closing
+#      np.real() discards) rather than with an explicit mask -- so a refactor
+#      of that np.real could silently change the answer without these tests.
+#
+#   2. Exactness on trigonometric polynomials.  Pseudospectral
+#      differentiation is machine-precision exact for band-limited periodic
+#      data; this is the property that makes every analytic N-D test in this
+#      suite meaningful.
+# ---------------------------------------------------------------------------
+
+
+class TestNyquistConvention:
+    def _nyquist_field(self, ndim, N, L, axis=0):
+        """cos(k_Nyquist · x_axis): the alternating +1/-1 mode."""
+        x = np.linspace(0.0, L, N, endpoint=False)
+        grids = np.meshgrid(*([x] * ndim), indexing="ij")
+        k_nyq = (N // 2) * 2.0 * math.pi / L
+        return np.cos(k_nyq * grids[axis]), k_nyq
+
+    @pytest.mark.parametrize("ndim", [1, 2, 4])
+    @pytest.mark.parametrize("order", [1, 3])
+    def test_odd_order_derivative_of_nyquist_mode_is_zero(self, ndim, order):
+        N, L = 16, 2 * math.pi
+        f, _ = self._nyquist_field(ndim, N, L)
+        multi_index = tuple(order if a == 0 else 0 for a in range(ndim))
+        d = sd.spectral_partial_nd(f, (L,) * ndim, multi_index)
+        np.testing.assert_allclose(d, 0.0, atol=1e-10)
+
+    @pytest.mark.parametrize("ndim", [1, 2, 4])
+    @pytest.mark.parametrize("order", [2, 4])
+    def test_even_order_derivative_of_nyquist_mode_is_retained(self, ndim, order):
+        N, L = 16, 2 * math.pi
+        f, k_nyq = self._nyquist_field(ndim, N, L)
+        multi_index = tuple(order if a == 0 else 0 for a in range(ndim))
+        d = sd.spectral_partial_nd(f, (L,) * ndim, multi_index)
+        expected = ((-1) ** (order // 2)) * k_nyq**order * f
+        np.testing.assert_allclose(d, expected, rtol=1e-10, atol=1e-8)
+
+    def test_nyquist_field_is_not_trivially_zero(self):
+        """Guard: the tests above would pass vacuously on a zero field."""
+        f, k_nyq = self._nyquist_field(2, 16, 2 * math.pi)
+        assert np.allclose(np.abs(f), 1.0)
+        assert k_nyq > 0
+
+
+class TestPseudospectralExactnessND:
+    """Machine-precision exactness on trigonometric polynomials at ndim=4."""
+
+    def _trig_poly(self, grids, modes):
+        """Σ_terms a · cos(m·x + φ) — band-limited, hence spectrally exact."""
+        out = np.zeros_like(grids[0])
+        for amp, ms, phase in modes:
+            out = out + amp * np.cos(sum(m * g for m, g in zip(ms, grids)) + phase)
+        return out
+
+    def _analytic_partial(self, grids, modes, multi_index):
+        """Exact ∂^α of the same trigonometric polynomial."""
+        order = sum(multi_index)
+        out = np.zeros_like(grids[0])
+        for amp, ms, phase in modes:
+            factor = 1.0
+            for axis, a in enumerate(multi_index):
+                factor *= ms[axis] ** a
+            arg = sum(m * g for m, g in zip(ms, grids)) + phase
+            # d^order/dt^order cos(t) cycles cos, -sin, -cos, sin
+            wave = [np.cos(arg), -np.sin(arg), -np.cos(arg), np.sin(arg)][order % 4]
+            out = out + amp * factor * wave
+        return out
+
+    @pytest.mark.parametrize("multi_index", [
+        (1, 0, 0, 0), (0, 2, 0, 0), (1, 1, 0, 0),
+        (2, 0, 1, 0), (2, 0, 0, 2), (1, 1, 1, 1),
+    ])
+    def test_exact_on_trig_polynomial_ndim4(self, multi_index):
+        ndim, N, L = 4, 12, 2 * math.pi
+        x = np.linspace(0.0, L, N, endpoint=False)
+        grids = np.meshgrid(*([x] * ndim), indexing="ij")
+        modes = [
+            (1.0, (1, 2, 1, 0), 0.0),
+            (0.5, (2, 0, 1, 3), 0.7),
+            (-0.3, (0, 1, 2, 1), 1.9),
+        ]
+        f = self._trig_poly(grids, modes)
+        got = sd.spectral_partial_nd(f, (L,) * ndim, multi_index)
+        expected = self._analytic_partial(grids, modes, multi_index)
+        scale = max(np.max(np.abs(expected)), 1.0)
+        np.testing.assert_allclose(got, expected, atol=1e-10 * scale, rtol=0)
+
+    def test_batch_matches_individual_calls_ndim4(self):
+        """spectral_partials_nd_batch shares one FFT across many multi-indices
+        -- it must agree exactly with computing them one at a time."""
+        ndim, N, L = 4, 10, 2 * math.pi
+        rng = np.random.default_rng(0)
+        f = rng.standard_normal((N,) * ndim)
+        indices = [(1, 0, 0, 0), (0, 0, 2, 0), (1, 1, 0, 0), (0, 0, 0, 0), (2, 0, 0, 2)]
+        batch = sd.spectral_partials_nd_batch(f, (L,) * ndim, indices)
+        for mi in indices:
+            np.testing.assert_allclose(
+                batch[mi], sd.spectral_partial_nd(f, (L,) * ndim, mi), rtol=1e-12
+            )

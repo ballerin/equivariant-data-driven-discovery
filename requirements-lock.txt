@@ -1,0 +1,19 @@
+# Exact dependency versions this codebase has been tested against.
+#
+# This is informational only -- the authoritative dependency spec is
+# pyproject.toml (loose lower bounds). Use this file if you want to
+# reproduce the exact environment used during development, e.g.:
+#
+#     pip install -e ".[test,notebooks]"
+#     pip install -r requirements-lock.txt
+#
+# Regenerate with: pip install -e ".[test,notebooks]" && pip freeze
+# (run from a clean virtual environment).
+
+numpy==2.0.2
+scipy==1.10.1
+pytest==7.4.0
+
+# matplotlib is only used in notebooks/ (never imported by src/ or tests/).
+# Not captured here because it wasn't installed in the environment this
+# file was generated from; any recent 3.x release should work.

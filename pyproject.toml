@@ -8,7 +8,7 @@ version = "0.1.0"
 authors = [{ name = "Ballerin & Grong" }]
 description = "Equivariant PDE discovery with O(2)-equivariant multigraph operators"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
     "numpy>=1.20",
@@ -17,6 +17,9 @@ dependencies = [
 [project.optional-dependencies]
 test = [
     "pytest>=7.0",
+    # Test-only: independent CAS oracle for the jet decompositions
+    # (tests/test_jet_algebra_cas.py).  Nothing under src/ imports sympy.
+    "sympy>=1.9",
 ]
 notebooks = [
     "matplotlib",
@@ -36,7 +39,7 @@ pythonpath = ["scripts"]
 
 [tool.black]
 line-length = 100
-target-version = ["py39"]
+target-version = ["py310"]
 
 [tool.isort]
 profile = "black"

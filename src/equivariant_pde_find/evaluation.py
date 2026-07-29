@@ -42,7 +42,6 @@ from .library.conversions import (
     map_mod_multigraph_to_jet,
     map_standard_to_jet,
     map_wsindy_to_jet,
-    _MULTIGRAPH_TO_JET_DECOMPOSITION,
 )
 from .simulations import make_regression_data
 
@@ -150,19 +149,28 @@ def build_eval_theta_jet(snapshots, times, Lx, Ly,
 # ---------------------------------------------------------------------------
 
 def evaluate_unified(w, library, desc_lib, desc_jet, Theta_jet, Ft,
-                     true_jet, M_ws_to_jet=None):
+                     true_jet, M_ws_to_jet=None, ndim=2):
     """Evaluate a recovery from any library against the polynomial-jet truth.
 
     Maps the recovered coefficients to the jet basis, then computes
     fp, fn, E in the common jet space.
+
+    Parameters
+    ----------
+    ndim : int
+        Spatial dimension of the data `w` was recovered from (default 2,
+        matching the paper's 2-D domain).  Only consulted for the
+        multigraph/mod_multigraph jet decomposition, which depends on ndim;
+        `M_ws_to_jet` (WSINDy) must itself already be built for the correct
+        ndim via ``build_wsindy_to_jet_map(..., ndim=ndim)``.
     """
     if library in ("multigraph",):
-        w_jet = map_multigraph_to_jet(w, desc_lib, desc_jet)
+        w_jet = map_multigraph_to_jet(w, desc_lib, desc_jet, ndim=ndim)
     elif library == "mod_multigraph":
-        w_jet = map_mod_multigraph_to_jet(w, desc_lib, desc_jet)
+        w_jet = map_mod_multigraph_to_jet(w, desc_lib, desc_jet, ndim=ndim)
     elif library == "pdefind":
         w_jet = map_standard_to_jet(w, desc_lib, desc_jet)
-    elif library in ("wsindy", "mwsindy") and M_ws_to_jet is not None:
+    elif library == "wsindy" and M_ws_to_jet is not None:
         w_jet = map_wsindy_to_jet(w, M_ws_to_jet)
     elif library == "polyjet":
         w_jet = w
@@ -171,59 +179,6 @@ def evaluate_unified(w, library, desc_lib, desc_jet, Theta_jet, Ft,
         return evaluate_from_theta(w, true_jet, Theta_jet, Ft)
 
     return evaluate_from_theta(w_jet, true_jet, Theta_jet, Ft)
-
-
-def evaluate_mwsindy(w_ws, desc_ws, desc_mg, desc_jet, M_ws_to_jet,
-                     Theta_jet, Ft, true_jet, G_mg, b_weak):
-    """TODO? Perhaps deprecated idea.
-
-    The idea was to combine WINSDy and multigraphs library to exploit
-    better conditioning but also equivariance.
-
-    So far not great results.
-    """
-    from .library import build_multigraph_library
-
-    # ── Step 1: Map WSINDy → jet ────────────────────────────────────────
-    w_jet = map_wsindy_to_jet(w_ws, M_ws_to_jet)
-    nz_jet = np.abs(w_jet) > 1e-10
-
-    # ── Step 2: Identify active multigraph operators ────────────────────
-    # An operator is active iff ALL its jet components survive thresholding
-    active_mg = []
-    for j_mg, mg_name in enumerate(desc_mg):
-        if mg_name not in _MULTIGRAPH_TO_JET_DECOMPOSITION:
-            continue
-        # Check all jet components
-        all_active = True
-        for jet_name, _mult in _MULTIGRAPH_TO_JET_DECOMPOSITION[mg_name]:
-            j_jet = desc_jet.index(jet_name)
-            if not nz_jet[j_jet]:
-                all_active = False
-                break
-        if all_active:
-            active_mg.append(j_mg)
-
-    if not active_mg:
-        # No multigraph operator fully recovered → hard failure.
-        # The data does not support an O(2)-equivariant PDE.
-        return dict(
-            fp=0, fn=int(np.sum(np.abs(true_jet) > 1e-10)),
-            exact_recovery=0, n_active=0, E=1.0,
-            max_coeff_err=float(np.max(np.abs(true_jet[np.abs(true_jet) > 1e-10]))),
-            n_samples=Theta_jet.shape[0],
-        )
-
-    # ── Step 3: Fine-tune on multigraph submatrix ───────────────────────
-    G_sub = G_mg[:, active_mg]
-    w_mg_sub, _, _, _ = np.linalg.lstsq(G_sub, b_weak, rcond=None)
-    w_mg = np.zeros(len(desc_mg))
-    for i, idx in enumerate(active_mg):
-        w_mg[idx] = w_mg_sub[i]
-
-    # ── Step 4: Map multigraph → jet and evaluate ────────────────────────
-    w_jet_refined = map_multigraph_to_jet(w_mg, desc_mg, desc_jet)
-    return evaluate_from_theta(w_jet_refined, true_jet, Theta_jet, Ft)
 
 
 def evaluate_from_theta(w, true_eq, Theta, Ft):

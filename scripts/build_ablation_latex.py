@@ -26,7 +26,7 @@ CODE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 SRC_DIR = os.path.join(CODE_DIR, "src")
 sys.path.insert(0, SRC_DIR)
 
-from equivariant_pde_find.equation_configs import normalize_eq_name  # noqa: E402
+from equivariant_pde_find.equations import normalize_eq_name  # noqa: E402
 from equivariant_pde_find.summary_metadata import EQUATION_META, get_meta  # noqa: E402
 from equivariant_pde_find.markdown_tables import build_ablation_latex  # noqa: E402
 
@@ -38,7 +38,6 @@ _LIB_NAME_NORMALIZE = {
     "pdefind": "standard",
     "polyjet": "polynomial_jet",
     "wsindy": "wsindy",
-    "mwsindy": "mwsindy",
 }
 
 

@@ -17,7 +17,7 @@ from equivariant_pde_find.library.conversions import (
     multigraph_to_mod_multigraph_matrix,
     convert_coefficients,
 )
-from equivariant_pde_find.equation_configs import (
+from equivariant_pde_find.equations import (
     true_allen_cahn,
     true_swift_hohenberg,
     true_ks,

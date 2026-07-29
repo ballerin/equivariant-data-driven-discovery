@@ -190,19 +190,41 @@ class TestKuramotoSivashinsky:
         assert len(times) == snaps.shape[0]
         assert np.all(np.isfinite(snaps))
 
-    def test_mean_conserved(self):
-        """KS with periodic BC conserves the spatial mean (∫f dx = const)."""
+    def test_mean_is_not_conserved(self):
+        """The spatial mean is NOT conserved for this 2-D (gradient-squared)
+        KS form, unlike the classical 1-D convective form f_t = -f f_x - ...
+        where -f f_x = -1/2 (f^2)_x is a total derivative and integrates to
+        zero exactly. Here, averaging f_t = -1/2|grad f|^2 - Delta f - Delta^2 f
+        over the periodic domain kills the Delta/Delta^2 terms (pure
+        derivatives integrate to zero) but NOT the -1/2|grad f|^2 term, since
+        |grad f|^2 >= 0 always (zero only for constant f). So
+            d(mean f)/dt = -1/2 * mean(|grad f|^2) <= 0
+        i.e. the mean should decrease monotonically (up to numerical noise),
+        never conserved. Verified analytically and numerically (see the
+        KS integrator audit in test_ks_integrator.py)."""
         N, L = 32, 4 * np.pi
-        snaps, _ = kuramoto_sivashinsky(
-            N=N, L=L, T_end=0.5, dt=0.02, save_every=5, seed=42,
+        snaps, times = kuramoto_sivashinsky(
+            N=N, L=L, T_end=5.0, dt=0.02, save_every=5, seed=42,
         )
-        means = [np.mean(s) for s in snaps]
-        # Mean should be conserved up to numerical drift (spectral solver
-        # preserves the k=0 mode exactly; drift is from floating-point).
-        rel_drift = abs(max(means) - min(means)) / max(abs(np.mean(snaps[0])), 1e-10)
-        assert rel_drift < 0.05, (
-            f"Mean drift: {rel_drift:.2e}"
+        means = np.array([np.mean(s) for s in snaps])
+
+        # Should decrease (allow tiny numerical noise, not growth).
+        assert means[-1] < means[0] - 1e-6, (
+            f"mean should decrease: {means[0]:.6f} -> {means[-1]:.6f}"
         )
+        assert np.all(np.diff(means) < 1e-8), "mean should be non-increasing"
+
+        # Quantitatively match the analytic rate d(mean)/dt = -1/2 mean(|grad f|^2)
+        # via a central finite difference at an interior snapshot.
+        k = np.fft.fftfreq(N) * N * (2 * np.pi / L)
+        KX, KY = np.meshgrid(k, k, indexing="ij")
+        i = len(snaps) // 2
+        fhat = np.fft.fft2(snaps[i])
+        fx = np.real(np.fft.ifft2(1j * KX * fhat))
+        fy = np.real(np.fft.ifft2(1j * KY * fhat))
+        predicted_rate = -0.5 * np.mean(fx**2 + fy**2)
+        observed_rate = (means[i + 1] - means[i - 1]) / (times[i + 1] - times[i - 1])
+        assert observed_rate == pytest.approx(predicted_rate, rel=0.05)
 
     def test_bounded_solution(self):
         N, L = 32, 4 * np.pi

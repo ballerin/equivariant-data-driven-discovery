@@ -1,11 +1,16 @@
-"""Quick test: exhaustive best-subset on Cahn-Hilliard, equivariant only."""
+"""Quick demo: exhaustive best-subset on Cahn-Hilliard, equivariant only.
+
+Standalone script, not a pytest test (despite the historical filename this
+replaces) -- requires locally-generated data files in data/ and is not
+collected by the test suite.
+"""
 import numpy as np
 import sys, os, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from equivariant_pde_find.library import build_multigraph_library
 from equivariant_pde_find.regression import exhaustive_best_subset
-from equivariant_pde_find.equation_configs import true_cahn_hilliard
+from equivariant_pde_find.equations import true_cahn_hilliard
 from equivariant_pde_find.simulations import make_regression_data
 from equivariant_pde_find.derivatives import set_backend
 

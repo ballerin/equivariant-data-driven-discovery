@@ -50,7 +50,7 @@ from equivariant_pde_find import derivatives  # noqa: E402
 from equivariant_pde_find.library import build_multigraph_library, build_pdefind_library  # noqa: E402
 from equivariant_pde_find.regression import TrainSTRidge, TrainSR3  # noqa: E402
 from equivariant_pde_find.simulations import kuramoto_sivashinsky, make_regression_data  # noqa: E402
-from equivariant_pde_find.equation_configs import true_ks  # noqa: E402
+from equivariant_pde_find.equations import true_ks  # noqa: E402
 
 RESULTS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "results"))
 os.makedirs(RESULTS_DIR, exist_ok=True)
@@ -124,7 +124,7 @@ KS_REGIMES = [
     ),
 ]
 
-# Ground truth: KS = -Δf - Δ²f - ½‖∇f‖² (imported from equation_configs)
+# Ground truth: KS = -Δf - Δ²f - ½‖∇f‖² (imported from equations)
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────

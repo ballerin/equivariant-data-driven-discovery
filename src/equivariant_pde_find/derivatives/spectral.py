@@ -1,21 +1,31 @@
 """
-Spectral derivative utilities for scalar fields on periodic 2-D domains.
+Spectral derivative utilities for scalar fields on periodic N-D domains.
 
-All functions operate on an (Nx, Ny) ndarray representing a field sampled
-on a uniform grid over the periodic rectangle [0, Lx) × [0, Ly).
-Derivatives are computed via the 2-D FFT and are **exact** for any field that
-is a trigonometric polynomial (i.e. band-limited to the Nyquist frequency).
+All functions operate on an ndarray of shape ``(N_1, ..., N_ndim)`` — the
+grid need not be square/cubic and the domain need not be isotropic for
+``ndim <= 3`` (matching the historical 2-D/3-D behaviour, which supports
+independent ``Lx``, ``Ly``, ``Lz`` and independent ``Nx``, ``Ny``, ``Nz``).
+For ``ndim > 3`` the domain is assumed **isotropic** (a single length ``Lx``
+reused for every axis) since every simulator/equation in this codebase that
+goes beyond 3-D (``allen_cahn_nd``, ``cahn_hilliard_nd``, ...) only ever
+produces isotropic hypercube domains — there is no anisotropic N-D use case
+to support, and requiring one would need a signature change (a list of N
+lengths) with no current caller.
+
+Derivatives are computed via the N-D FFT and are **exact** for any field
+that is a trigonometric polynomial (i.e. band-limited to the Nyquist
+frequency).
 
 Method
 ------
 Differentiation in Fourier space exploits the derivative property for which
 derivatives correspond to multiplication by powers of i·k:
 
-    ∂^a_x ∂^b_y f  ↔  (i k_x)^a (i k_y)^b  f̂(k_x, k_y)
+    ∂^α f  ↔  ∏_axis (i k_axis)^{α_axis}  f̂(k)
 
-where f̂ = FFT2(f) and k_x, k_y are the 2-D wavenumber grids.  The result is
-obtained by a single forward FFT, multiplication by the appropriate polynomial
-in i·k_x and i·k_y, and one inverse FFT.
+where f̂ = FFTN(f) and k_axis are the per-axis wavenumber grids.  The result
+is obtained by a single forward FFT, multiplication by the appropriate
+polynomial in i·k, and one inverse FFT.
 
 Wavenumber convention
 ---------------------
@@ -25,6 +35,26 @@ For an N-point grid on a domain of length L the wavenumbers are
 
 which matches NumPy's fftfreq ordering (zero frequency first, then positive,
 then negative).
+
+For even ``N`` the Nyquist mode ``k = -N/2`` is ambiguous: it is shared
+between +N/2 and -N/2, so the standard prescription (Trefethen, *Spectral
+Methods in MATLAB*, ch. 3) is to zero it for odd-order derivatives and keep
+it for even-order ones.  That is exactly what happens here, without an
+explicit mask: for a real field the Nyquist Fourier coefficient is real, an
+odd-order multiplier ``(i k)^odd`` makes its contribution purely imaginary,
+and the closing ``np.real(...)`` discards it — while an even-order
+multiplier stays real and is retained with the correct ``(-k²)^{order/2}``
+factor.  ``tests/test_spectral_derivatives.py`` pins this behaviour so a
+future refactor of the ``np.real`` call cannot silently change it.
+
+Canonical component ordering (hessian, third_order)
+-----------------------------------------------------
+``spectral_hessian``/``spectral_third_order`` return only the *unique*
+mixed-partial components (partial derivatives commute), ordered by
+``itertools.combinations_with_replacement(range(ndim), order)`` — i.e.
+non-decreasing axis-index tuples in lexicographic order.  This exactly
+reproduces the historical 2-D ``(fxx, fxy, fyy)`` and 3-D
+``(fxx, fxy, fxz, fyy, fyz, fzz)`` orderings for any ndim.
 
 Accuracy and limitations
 ------------------------
@@ -37,19 +67,15 @@ Accuracy and limitations
 - For noisy data the spectral amplification factor |k|^order grows rapidly
   with derivative order, strongly amplifying high-frequency noise.  In that
   regime consider switching to other methods of differentiation.
-
-Derivative order → Fourier multiplier
---------------------------------------
-  Order 1  (grad)         : multiplier  i·k          (complex, real part taken)
-  Order 2  (Hessian, Δ)   : multiplier  -k²          (real)
-  Order 3  (3rd partials) : multiplier  -i·k³        (complex, real part taken)
-  Order 4  (Δ²)           : multiplier  +k⁴          (real)
-  Order 6  (Δ³)           : multiplier  -k⁶          (real)
+- ``prefilter_sigma`` is only supported for 2-D fields (as before).
 """
+
+import itertools
 
 import numpy as np
 
 from ..utils import _apply_prefilter
+from ._common import axis_lengths
 
 
 def _wavenumbers(N, L):
@@ -61,196 +87,201 @@ def _wavenumbers(N, L):
     return 2.0 * np.pi / L * np.fft.fftfreq(N) * N
 
 
+def _check_prefilter_2d_only(f, prefilter_sigma):
+    if prefilter_sigma is not None and f.ndim != 2:
+        raise NotImplementedError("prefilter_sigma is only supported for 2-D fields")
+
+
+# Canonical per-axis domain lengths; see derivatives/_common.py.  Imported
+# rather than reimplemented so this backend, the polynomial backend and the
+# public derivatives.axis_lengths cannot drift apart.
+_axis_lengths = axis_lengths
+
+
+# ---------------------------------------------------------------------------
+# Core N-D primitives
+# ---------------------------------------------------------------------------
+
+
+def spectral_partial_nd(f, Ls, multi_index):
+    """Compute ∂^α f via a single N-D FFT, for an arbitrary multi-index α.
+
+    Parameters
+    ----------
+    f : ndarray, shape (N_1, ..., N_ndim)
+    Ls : sequence of float, length f.ndim — per-axis domain length
+    multi_index : sequence of int, length f.ndim
+        α_axis = derivative order along that axis.
+
+    Returns
+    -------
+    ndarray, shape f.shape
+    """
+    return spectral_partials_nd_batch(f, Ls, [multi_index])[tuple(multi_index)]
+
+
+def spectral_partials_nd_batch(f, Ls, multi_indices):
+    """Compute several ∂^α f at once, sharing a single forward FFT of f.
+
+    Parameters
+    ----------
+    f : ndarray, shape (N_1, ..., N_ndim)
+    Ls : sequence of float, length f.ndim — per-axis domain length
+    multi_indices : iterable of tuples, each of length f.ndim
+
+    Returns
+    -------
+    dict {multi_index: ndarray}
+    """
+    ndim = f.ndim
+    if len(Ls) != ndim:
+        raise ValueError(f"Ls has length {len(Ls)}, expected {ndim} (f.ndim)")
+    k_axes = [_wavenumbers(f.shape[axis], Ls[axis]) for axis in range(ndim)]
+    grids = None
+    fh = np.fft.fftn(f)
+    out = {}
+    for multi_index in multi_indices:
+        multi_index = tuple(multi_index)
+        if len(multi_index) != ndim:
+            raise ValueError(
+                f"multi_index has length {len(multi_index)}, expected {ndim} (f.ndim)"
+            )
+        if multi_index in out:
+            continue
+        if not any(multi_index):
+            out[multi_index] = f.copy()
+            continue
+        if grids is None:
+            grids = np.meshgrid(*k_axes, indexing="ij")
+        multiplier = np.ones(f.shape, dtype=complex)
+        for axis, a in enumerate(multi_index):
+            if a:
+                multiplier = multiplier * (1j * grids[axis]) ** a
+        out[multi_index] = np.real(np.fft.ifftn(multiplier * fh))
+    return out
+
+
+def _unit_multi_index(ndim, axis_tuple):
+    """Convert a tuple of (possibly repeated) axis indices to a multi-index.
+
+    E.g. ndim=3, axis_tuple=(0, 0, 2) -> (2, 0, 1)  (order 2 in axis 0, order 1 in axis 2).
+    """
+    mi = [0] * ndim
+    for a in axis_tuple:
+        mi[a] += 1
+    return tuple(mi)
+
+
+# ---------------------------------------------------------------------------
+# Named N-D-generic operators (backward-compatible (Lx, Ly, Lz) signature)
+# ---------------------------------------------------------------------------
+
+
 def spectral_grad(f, Lx, Ly, Lz=None, prefilter_sigma=None):
     """
-    Gradient via FFT.
+    Gradient via FFT, for any ndim.
 
-    2-D: returns (f_x, f_y).  3-D: returns (f_x, f_y, f_z).
-    Fourier multiplier: (i·k_x, i·k_y [, i·k_z]).
+    Returns a tuple of f.ndim components (f_x, f_y, ...), Fourier multiplier
+    i·k_axis per component.
     """
+    _check_prefilter_2d_only(f, prefilter_sigma)
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
-    if f.ndim == 3:
-        if prefilter_sigma is not None:
-            raise NotImplementedError("prefilter_sigma not supported for 3-D fields")
-        Nx, Ny, Nz = f.shape
-        kx = _wavenumbers(Nx, Lx)
-        ky = _wavenumbers(Ny, Ly)
-        kz = _wavenumbers(Nz, Lz)
-        KX, KY, KZ = np.meshgrid(kx, ky, kz, indexing="ij")
-        fh = np.fft.fftn(f)
-        return (
-            np.real(np.fft.ifftn(1j * KX * fh)),
-            np.real(np.fft.ifftn(1j * KY * fh)),
-            np.real(np.fft.ifftn(1j * KZ * fh)),
-        )
-    # 2-D path (original)
-    Nx, Ny = f.shape
-    kx = _wavenumbers(Nx, Lx)
-    ky = _wavenumbers(Ny, Ly)
-    KX, KY = np.meshgrid(kx, ky, indexing="ij")
-    fh = np.fft.fft2(f)
-    fx = np.real(np.fft.ifft2(1j * KX * fh))
-    fy = np.real(np.fft.ifft2(1j * KY * fh))
-    return fx, fy
+    ndim = f.ndim
+    Ls = _axis_lengths(f, Lx, Ly, Lz)
+    unit_indices = [
+        tuple(1 if a == axis else 0 for a in range(ndim)) for axis in range(ndim)
+    ]
+    d = spectral_partials_nd_batch(f, Ls, unit_indices)
+    return tuple(d[mi] for mi in unit_indices)
 
 
 def spectral_laplacian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
     """
-    Laplacian via FFT.
+    Laplacian via FFT, for any ndim: Δf = Σ_axis f_{axis,axis}.
 
-    2-D: Δf = f_xx + f_yy.  3-D: Δf = f_xx + f_yy + f_zz.
-    Fourier multiplier: −(k_x² + k_y² [+ k_z²]) = −|k|².
+    Fourier multiplier: −Σ_axis k_axis² = −|k|².
     """
+    _check_prefilter_2d_only(f, prefilter_sigma)
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
-    if f.ndim == 3:
-        if prefilter_sigma is not None:
-            raise NotImplementedError("prefilter_sigma not supported for 3-D fields")
-        Nx, Ny, Nz = f.shape
-        kx = _wavenumbers(Nx, Lx)
-        ky = _wavenumbers(Ny, Ly)
-        kz = _wavenumbers(Nz, Lz)
-        KX, KY, KZ = np.meshgrid(kx, ky, kz, indexing="ij")
-        K2 = KX**2 + KY**2 + KZ**2
-        return np.real(np.fft.ifftn(-K2 * np.fft.fftn(f)))
-    Nx, Ny = f.shape
-    kx = _wavenumbers(Nx, Lx)
-    ky = _wavenumbers(Ny, Ly)
-    KX, KY = np.meshgrid(kx, ky, indexing="ij")
-    K2 = KX**2 + KY**2
-    return np.real(np.fft.ifft2(-K2 * np.fft.fft2(f)))
+    ndim = f.ndim
+    Ls = _axis_lengths(f, Lx, Ly, Lz)
+    k_axes = [_wavenumbers(f.shape[axis], Ls[axis]) for axis in range(ndim)]
+    grids = np.meshgrid(*k_axes, indexing="ij")
+    K2 = sum(g**2 for g in grids)
+    return np.real(np.fft.ifftn(-K2 * np.fft.fftn(f)))
 
 
 def spectral_hessian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
     """
-    Hessian entries via FFT.
+    Unique Hessian entries via FFT, for any ndim.
 
     2-D: returns (f_xx, f_xy, f_yy).
-    3-D: returns (f_xx, f_xy, f_xz, f_yy, f_yz, f_zz) — 6 unique components.
+    3-D: returns (f_xx, f_xy, f_xz, f_yy, f_yz, f_zz).
+    N-D: returns the C(ndim+1, 2) unique components ordered by
+    ``itertools.combinations_with_replacement(range(ndim), 2)`` — a strict
+    generalization of the 2-D/3-D orderings above.
 
     Fourier multipliers: −k_i·k_j for i ≤ j.
     """
+    _check_prefilter_2d_only(f, prefilter_sigma)
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
-    if f.ndim == 3:
-        if prefilter_sigma is not None:
-            raise NotImplementedError("prefilter_sigma not supported for 3-D fields")
-        Nx, Ny, Nz = f.shape
-        kx = _wavenumbers(Nx, Lx)
-        ky = _wavenumbers(Ny, Ly)
-        kz = _wavenumbers(Nz, Lz)
-        KX, KY, KZ = np.meshgrid(kx, ky, kz, indexing="ij")
-        fh = np.fft.fftn(f)
-        return (
-            np.real(np.fft.ifftn(-(KX**2) * fh)),
-            np.real(np.fft.ifftn(-KX * KY * fh)),
-            np.real(np.fft.ifftn(-KX * KZ * fh)),
-            np.real(np.fft.ifftn(-(KY**2) * fh)),
-            np.real(np.fft.ifftn(-KY * KZ * fh)),
-            np.real(np.fft.ifftn(-(KZ**2) * fh)),
-        )
-    Nx, Ny = f.shape
-    kx = _wavenumbers(Nx, Lx)
-    ky = _wavenumbers(Ny, Ly)
-    KX, KY = np.meshgrid(kx, ky, indexing="ij")
-    fh = np.fft.fft2(f)
-    fxx = np.real(np.fft.ifft2(-(KX**2) * fh))
-    fxy = np.real(np.fft.ifft2(-KX * KY * fh))
-    fyy = np.real(np.fft.ifft2(-(KY**2) * fh))
-    return fxx, fxy, fyy
+    ndim = f.ndim
+    Ls = _axis_lengths(f, Lx, Ly, Lz)
+    pairs = list(itertools.combinations_with_replacement(range(ndim), 2))
+    mis = [_unit_multi_index(ndim, pair) for pair in pairs]
+    d = spectral_partials_nd_batch(f, Ls, mis)
+    return tuple(d[mi] for mi in mis)
 
 
 def spectral_bilaplacian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
     """
-    Bilaplacian via FFT.
+    Bilaplacian Δ²f via FFT, for any ndim.
 
-    2-D: Δ²f = f_xxxx + 2f_xxyy + f_yyyy.
-    3-D: Δ²f = f_xxxx + f_yyyy + f_zzzz + 2f_xxyy + 2f_xxzz + 2f_yyzz.
-    Fourier multiplier: (k_x² + k_y² [+ k_z²])² = |k|⁴.
+    Fourier multiplier: (Σ_axis k_axis²)² = |k|⁴.
     """
+    _check_prefilter_2d_only(f, prefilter_sigma)
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
-    if f.ndim == 3:
-        if prefilter_sigma is not None:
-            raise NotImplementedError("prefilter_sigma not supported for 3-D fields")
-        Nx, Ny, Nz = f.shape
-        kx = _wavenumbers(Nx, Lx)
-        ky = _wavenumbers(Ny, Ly)
-        kz = _wavenumbers(Nz, Lz)
-        KX, KY, KZ = np.meshgrid(kx, ky, kz, indexing="ij")
-        K2 = KX**2 + KY**2 + KZ**2
-        return np.real(np.fft.ifftn(K2**2 * np.fft.fftn(f)))
-    Nx, Ny = f.shape
-    kx = _wavenumbers(Nx, Lx)
-    ky = _wavenumbers(Ny, Ly)
-    KX, KY = np.meshgrid(kx, ky, indexing="ij")
-    K2 = KX**2 + KY**2
-    return np.real(np.fft.ifft2(K2**2 * np.fft.fft2(f)))
+    ndim = f.ndim
+    Ls = _axis_lengths(f, Lx, Ly, Lz)
+    k_axes = [_wavenumbers(f.shape[axis], Ls[axis]) for axis in range(ndim)]
+    grids = np.meshgrid(*k_axes, indexing="ij")
+    K2 = sum(g**2 for g in grids)
+    return np.real(np.fft.ifftn(K2**2 * np.fft.fftn(f)))
 
 
 def spectral_trilaplacian(f, Lx, Ly, Lz=None, prefilter_sigma=None):
     """
-    Trilaplacian Δ³f via FFT.
+    Trilaplacian Δ³f via FFT, for any ndim.
 
-    Fourier multiplier: −(k_x² + k_y² [+ k_z²])³ = −|k|⁶.
+    Fourier multiplier: −(Σ_axis k_axis²)³ = −|k|⁶.
     """
+    _check_prefilter_2d_only(f, prefilter_sigma)
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
-    if f.ndim == 3:
-        if prefilter_sigma is not None:
-            raise NotImplementedError("prefilter_sigma not supported for 3-D fields")
-        Nx, Ny, Nz = f.shape
-        kx = _wavenumbers(Nx, Lx)
-        ky = _wavenumbers(Ny, Ly)
-        kz = _wavenumbers(Nz, Lz)
-        KX, KY, KZ = np.meshgrid(kx, ky, kz, indexing="ij")
-        K2 = KX**2 + KY**2 + KZ**2
-        return np.real(np.fft.ifftn(-(K2**3) * np.fft.fftn(f)))
-    Nx, Ny = f.shape
-    kx = _wavenumbers(Nx, Lx)
-    ky = _wavenumbers(Ny, Ly)
-    KX, KY = np.meshgrid(kx, ky, indexing="ij")
-    K2 = KX**2 + KY**2
-    return np.real(np.fft.ifft2(-(K2**3) * np.fft.fft2(f)))
+    ndim = f.ndim
+    Ls = _axis_lengths(f, Lx, Ly, Lz)
+    k_axes = [_wavenumbers(f.shape[axis], Ls[axis]) for axis in range(ndim)]
+    grids = np.meshgrid(*k_axes, indexing="ij")
+    K2 = sum(g**2 for g in grids)
+    return np.real(np.fft.ifftn(-(K2**3) * np.fft.fftn(f)))
 
 
 def spectral_third_order(f, Lx, Ly, Lz=None, prefilter_sigma=None):
     """
-    Third-order partial derivatives via FFT.
+    Unique third-order partial derivatives via FFT, for any ndim.
 
     2-D: returns (f_xxx, f_xxy, f_xyy, f_yyy) — 4 components.
     3-D: returns 10 components (all cubic monomials):
          f_xxx, f_xxy, f_xxz, f_xyy, f_xyz, f_xzz, f_yyy, f_yyz, f_yzz, f_zzz.
+    N-D: the C(ndim+2, 3) unique components ordered by
+    ``itertools.combinations_with_replacement(range(ndim), 3)``.
 
-    Fourier multiplier for ∂^a_x ∂^b_y ∂^c_z with a+b+c=3:
-        (i·k_x)^a (i·k_y)^b (i·k_z)^c = i³ · k_x^a k_y^b k_z^c = −i · k_x^a k_y^b k_z^c.
+    Fourier multiplier for ∂^α with |α|=3: ∏(i·k_axis)^{α_axis} = −i·∏k_axis^{α_axis}.
     """
+    _check_prefilter_2d_only(f, prefilter_sigma)
     f = _apply_prefilter(f, Lx, Ly, prefilter_sigma)
-    if f.ndim == 3:
-        if prefilter_sigma is not None:
-            raise NotImplementedError("prefilter_sigma not supported for 3-D fields")
-        Nx, Ny, Nz = f.shape
-        kx = _wavenumbers(Nx, Lx)
-        ky = _wavenumbers(Ny, Ly)
-        kz = _wavenumbers(Nz, Lz)
-        KX, KY, KZ = np.meshgrid(kx, ky, kz, indexing="ij")
-        fh = np.fft.fftn(f)
-        return (
-            np.real(np.fft.ifftn(-1j * KX**3 * fh)),               # f_xxx
-            np.real(np.fft.ifftn(-1j * KX**2 * KY * fh)),           # f_xxy
-            np.real(np.fft.ifftn(-1j * KX**2 * KZ * fh)),           # f_xxz
-            np.real(np.fft.ifftn(-1j * KX * KY**2 * fh)),           # f_xyy
-            np.real(np.fft.ifftn(-1j * KX * KY * KZ * fh)),         # f_xyz
-            np.real(np.fft.ifftn(-1j * KX * KZ**2 * fh)),           # f_xzz
-            np.real(np.fft.ifftn(-1j * KY**3 * fh)),                # f_yyy
-            np.real(np.fft.ifftn(-1j * KY**2 * KZ * fh)),           # f_yyz
-            np.real(np.fft.ifftn(-1j * KY * KZ**2 * fh)),           # f_yzz
-            np.real(np.fft.ifftn(-1j * KZ**3 * fh)),                # f_zzz
-        )
-    # 2-D path (original)
-    Nx, Ny = f.shape
-    kx = _wavenumbers(Nx, Lx)
-    ky = _wavenumbers(Ny, Ly)
-    KX, KY = np.meshgrid(kx, ky, indexing="ij")
-    fh = np.fft.fft2(f)
-    fxxx = np.real(np.fft.ifft2(-1j * KX**3 * fh))
-    fxxy = np.real(np.fft.ifft2(-1j * KX**2 * KY * fh))
-    fxyy = np.real(np.fft.ifft2(-1j * KX * KY**2 * fh))
-    fyyy = np.real(np.fft.ifft2(-1j * KY**3 * fh))
-    return fxxx, fxxy, fxyy, fyyy
+    ndim = f.ndim
+    Ls = _axis_lengths(f, Lx, Ly, Lz)
+    triples = list(itertools.combinations_with_replacement(range(ndim), 3))
+    mis = [_unit_multi_index(ndim, t) for t in triples]
+    d = spectral_partials_nd_batch(f, Ls, mis)
+    return tuple(d[mi] for mi in mis)

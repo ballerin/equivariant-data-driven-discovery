@@ -97,32 +97,35 @@ def build_pdefind_library(f, Lx, Ly, max_order=4, max_poly=3,
 
 
 def build_wsindy_library(f, Lx, Ly, max_order=4, max_poly=3,
-                         formulation="pointwise", **weak_kwargs):
-    """Build the WSINDy library (∂^α(f^q)) for a 2-D scalar field.
+                         formulation="pointwise", Lz=None, **weak_kwargs):
+    """Build the WSINDy library (∂^α(f^q)).
 
-    For max_order=4 and max_poly=3 this gives 46 columns.
+    Supports any ndim (isotropic domain beyond ndim=3; see
+    derivatives/spectral.py's module docstring).
+
+    For max_order=4 and max_poly=3 this gives 46 columns (2-D).
 
     Parameters
     ----------
-    f         : ndarray shape (Nx, Ny) - data
-    Lx, Ly    : float - domain lengths
+    f         : ndarray, shape (N_1, ..., N_ndim) - data
+    Lx, Ly, Lz : float - domain lengths (isotropic beyond ndim=3)
     max_order : int - highest partial derivative order (default 4)
     max_poly  : int - highest monomial power q in ∂^α(f^q) (default 3)
     formulation : {"pointwise", "weak"}
 
     Returns
     -------
-    Theta        : ndarray, shape (Nx*Ny, n_cols)  [pointwise]  or
+    Theta        : ndarray, shape (f.size, n_cols)  [pointwise]  or
                    ndarray, shape (N_valid, n_cols) [weak]
     descriptions : list of n_cols strings
     """
     if formulation == "pointwise":
         from .wsindy import _build_wsindy_pointwise
-        return _build_wsindy_pointwise(f, Lx, Ly, max_order, max_poly)
+        return _build_wsindy_pointwise(f, Lx, Ly, max_order, max_poly, Lz=Lz)
     elif formulation == "weak":
         from .wsindy import _build_wsindy_weak
         return _build_wsindy_weak(f, Lx, Ly, max_order, max_poly,
-                                  **weak_kwargs)
+                                  Lz=Lz, **weak_kwargs)
     else:
         raise ValueError(
             f"Unknown formulation {formulation!r}. "
@@ -131,36 +134,38 @@ def build_wsindy_library(f, Lx, Ly, max_order=4, max_poly=3,
 
 
 def build_polyjet_library(f, Lx, Ly, max_order=4, max_degree=3,
-                          formulation="pointwise", **weak_kwargs):
+                          formulation="pointwise", Lz=None, **weak_kwargs):
     """Build the polynomial jet library: all monomials in jet variables.
 
-    The *jet variables* are all partial derivatives ∂_x^a ∂_y^b f for
-    0 ≤ a+b ≤ max_order (including f itself).  A library column is a
-    product (monomial) of these jet variables.
+    Supports any ndim (isotropic domain beyond ndim=3; see
+    derivatives/spectral.py's module docstring).  The *jet variables* are
+    all partial derivatives ∂^α f for 0 <= |α| <= max_order (including f
+    itself).  A library column is a product (monomial) of these jet
+    variables.
 
-    For max_order=4 and max_degree=3 this gives 105 columns.
+    For max_order=4 and max_degree=3 this gives 105 columns (2-D).
 
     Parameters
     ----------
-    f          : ndarray, shape (Nx, Ny) - data
-    Lx, Ly     : float - domain lengths
+    f          : ndarray, shape (N_1, ..., N_ndim) - data
+    Lx, Ly, Lz : float - domain lengths (isotropic beyond ndim=3)
     max_order  : int - maximum total differential order (default 4)
     max_degree : int - maximum total polynomial degree (default 3)
     formulation : {"pointwise", "weak"}
 
     Returns
     -------
-    Theta        : ndarray, shape (Nx*Ny, n_cols)  [pointwise]  or
+    Theta        : ndarray, shape (f.size, n_cols)  [pointwise]  or
                    ndarray, shape (N_valid, n_cols) [weak]
     descriptions : list of n_cols strings
     """
     if formulation == "pointwise":
         from .polyjet import _build_polyjet_pointwise
-        return _build_polyjet_pointwise(f, Lx, Ly, max_order, max_degree)
+        return _build_polyjet_pointwise(f, Lx, Ly, max_order, max_degree, Lz=Lz)
     elif formulation == "weak":
         from .polyjet import _build_polyjet_weak
         return _build_polyjet_weak(f, Lx, Ly, max_order,
-                                   max_degree, **weak_kwargs)
+                                   max_degree, Lz=Lz, **weak_kwargs)
     else:
         raise ValueError(
             f"Unknown formulation {formulation!r}. "

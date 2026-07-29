@@ -3,12 +3,18 @@ Pointwise polynomial-jet library construction.
 
 Internal module — use ``library.build_polyjet_library()`` (the public
 facade) instead of calling ``_build_polyjet_pointwise`` directly.
+
+N-D generalization: both the pointwise and weak-form builders work for any
+ndim, spectral or polynomial backend (isotropic domain beyond ndim=3; see
+derivatives/spectral.py's module docstring).  Axis names beyond z use
+jet_algebra.AXIS_LABELS (w, v, u, t, s), so this supports up to ndim=8.
 """
 
 import numpy as np
 
 from .. import derivatives as _derivatives
-from ..derivatives.polynomial import poly_partial
+from ..jet_algebra import AXIS_LABELS
+from ._nd_common import enumerate_multi_indices, compute_derivs_nd
 
 
 # Unicode superscript digits for polynomial exponents in descriptions.
@@ -20,98 +26,82 @@ def _sup(n: int) -> str:
     return _SUP.get(n, f"^{n}")
 
 
-def _wavenumbers_2d(Nx, Ny, Lx, Ly):
-    """Return 2-D wavenumber grids (KX, KY) for an (Nx, Ny) FFT grid."""
-    kx = 2.0 * np.pi / Lx * np.fft.fftfreq(Nx) * Nx
-    ky = 2.0 * np.pi / Ly * np.fft.fftfreq(Ny) * Ny
-    return np.meshgrid(kx, ky, indexing="ij")
+def _jet_var_name(multi_index):
+    """'f_xxy' style name for a jet variable, 'f' for the zero multi-index."""
+    if not any(multi_index):
+        return "f"
+    if len(multi_index) > len(AXIS_LABELS):
+        raise ValueError(f"ndim={len(multi_index)} exceeds available axis labels")
+    parts = "".join(AXIS_LABELS[axis] * a for axis, a in enumerate(multi_index) if a)
+    return "f_" + parts
 
 
-def _build_polyjet_pointwise(f, Lx, Ly, max_order=4, max_degree=3):
-    """Build the polynomial jet library: all monomials in jet variables.
+def _build_jet_vars(ndim, max_order):
+    """[(multi_index, order, name), ...] for all jet variables up to max_order."""
+    return [
+        (mi, sum(mi), _jet_var_name(mi))
+        for mi in enumerate_multi_indices(ndim, max_order)
+    ]
 
-    The *jet variables* are all partial derivatives ∂_x^a ∂_y^b f for
-    0 ≤ a+b ≤ max_order (including f itself).  A library column is a
+
+def _describe_exponents(exponents, jet_names):
+    """Render a monomial (dict of multi_index -> exponent) as e.g. 'f_x²·f_xx'."""
+    parts = []
+    for mi, exp in sorted(exponents.items(), key=lambda kv: (sum(kv[0]), kv[0])):
+        if exp == 0:
+            continue
+        name = jet_names[mi]
+        parts.append(name if exp == 1 else f"{name}{_sup(exp)}")
+    return "1" if not parts else "·".join(parts)
+
+
+def _build_polyjet_pointwise(f, Lx, Ly, max_order=4, max_degree=3, Lz=None):
+    """Build the polynomial jet library: all monomials in jet variables, for
+    any ndim.
+
+    The *jet variables* are all partial derivatives ∂^α f for
+    0 <= |α| <= max_order (including f itself).  A library column is a
     product (monomial) of these jet variables:
 
-        ∏_{a,b} (∂_x^a ∂_y^b f)^{e_{a,b}}
+        ∏_α (∂^α f)^{e_α}
 
     subject to:
-      - total degree:  Σ e_{a,b} ≤ max_degree
-      - total differential order:  Σ e_{a,b} · (a+b) ≤ max_order
+      - total degree:  Σ e_α <= max_degree
+      - total differential order:  Σ e_α · |α| <= max_order
 
-    For max_order=4 and max_degree=3 this gives 105 columns.
+    For max_order=4 and max_degree=3 this gives 105 columns (2-D).
 
     Parameters
     ----------
-    f          : ndarray, shape (Nx, Ny) - data
-    Lx, Ly     : float - domain lengths
+    f          : ndarray, shape (N_1, ..., N_ndim) - data
+    Lx, Ly, Lz : float - domain lengths (isotropic beyond ndim=3)
     max_order  : int - maximum total differential order
     max_degree : int - maximum total polynomial degree
 
     Returns
     -------
-    Theta        : ndarray, shape (Nx*Ny, n_cols)
+    Theta        : ndarray, shape (f.size, n_cols)
     descriptions : list of n_cols strings
     """
     method = _derivatives.get_backend()
-    Nx, Ny = f.shape
+    ndim = f.ndim
+    Ls = _derivatives.axis_lengths(f, Lx, Ly, Lz)
 
-    # --- 1. Enumerate jet variables and compute all needed derivatives ---
-    jet_vars = []  # list of ((a, b), order=a+b, name)
-    for total in range(max_order + 1):
-        for a in range(total + 1):
-            b = total - a
-            name = (("x" * a) + ("y" * b)) if total > 0 else ""
-            name = f"f_{name}" if total > 0 else "f"
-            jet_vars.append(((a, b), total, name))
+    jet_vars = _build_jet_vars(ndim, max_order)
+    multi_indices = [mi for mi, _order, _name in jet_vars]
+    jet_names = {mi: name for mi, _order, name in jet_vars}
+    jet_fields = compute_derivs_nd(f, Ls, multi_indices, method, zero_value="f")
 
-    # Compute each jet variable once
-    if method == "spectral":
-        KX, KY = _wavenumbers_2d(Nx, Ny, Lx, Ly)
-        fh = np.fft.fft2(f)
-
-    jet_fields = {}   # (a,b) → ndarray
-    jet_names = {}    # (a,b) → str
-    for (a, b), order, name in jet_vars:
-        jet_names[(a, b)] = name
-        if a + b == 0:
-            jet_fields[(a, b)] = f.copy()
-        elif method == "spectral":
-            d_hat = (1j * KX) ** a * (1j * KY) ** b * fh
-            jet_fields[(a, b)] = np.real(np.fft.ifft2(d_hat))
-        else:
-            jet_fields[(a, b)] = poly_partial(f, Lx, Ly, a, b)
-
-    # --- 2. Enumerate all monomials ---
     monomials = enumerate_jet_monomials(jet_vars, max_order, max_degree)
 
-    # --- 3. Build each column ---
     cols, descs = [], []
     for exponents, deg, order in monomials:
-        # Build the field: start with ones, multiply by each jet variable
-        # raised to its exponent
         col = np.ones_like(f)
-        for (a, b), exp in exponents.items():
+        for mi, exp in exponents.items():
             if exp > 0:
-                col = col * (jet_fields[(a, b)] ** exp)
+                col = col * (jet_fields[mi] ** exp)
         cols.append(col.ravel())
-
-        # Build description string
-        parts = []
-        # Sort by derivative order for readability
-        for (a, b), exp in sorted(exponents.items(), key=lambda kv: (kv[0][0] + kv[0][1], kv[0][0])):
-            if exp == 0:
-                continue
-            var_name = jet_names[(a, b)]
-            if exp == 1:
-                parts.append(var_name)
-            else:
-                parts.append(f"{var_name}{_sup(exp)}")
-        if not parts:
-            descs.append("1")
-        else:
-            descs.append("·".join(parts))
+        descs.append(_describe_exponents(exponents, jet_names))
 
     return np.column_stack(cols), descs
 
@@ -121,7 +111,9 @@ def enumerate_jet_monomials(jet_vars, max_order, max_degree):
 
     Parameters
     ----------
-    jet_vars : list of ((a, b), order, name)
+    jet_vars : list of (multi_index, order, name)
+        multi_index is any hashable value (historically a 2-D (a, b) tuple;
+        now an ndim-tuple) -- used only as an opaque dict key here.
     max_order : int
     max_degree : int
 
@@ -135,12 +127,10 @@ def enumerate_jet_monomials(jet_vars, max_order, max_degree):
 
     def _recurse(idx, exponents, cur_deg, cur_order):
         if idx == n_vars:
-            # Include the constant (all exponents zero) and all others
             results.append((dict(exponents), cur_deg, cur_order))
             return
 
-        (a, b), order, _name = jet_vars[idx]
-        # Maximum exponent for this variable given remaining budget
+        multi_index, order, _name = jet_vars[idx]
         max_by_deg = max_degree - cur_deg
         max_by_order = (
             (max_order - cur_order) // order if order > 0 else max_by_deg
@@ -148,28 +138,28 @@ def enumerate_jet_monomials(jet_vars, max_order, max_degree):
         max_exp = min(max_by_deg, max_by_order)
 
         for e in range(max_exp + 1):
-            exponents[(a, b)] = e
+            exponents[multi_index] = e
             _recurse(idx + 1, exponents, cur_deg + e, cur_order + e * order)
 
     _recurse(0, {}, 0, 0)
 
-    # Sort by (total_order, total_degree)
     results.sort(key=lambda x: (x[2], x[1]))
     return results
 
 
 def _build_polyjet_weak(f, Lx, Ly, max_order=4, max_degree=3,
-                        m=8, p=4, use_ibp=False):
-    """Build the weak-form polynomial jet library.
+                        m=8, p=4, use_ibp=False, Lz=None):
+    """Build the weak-form polynomial jet library, for any ndim.
 
     Computes each jet monomial pointwise and convolves with ψ.  When
     ``use_ibp=True``, IBP is applied to single-derivative terms of the
-    form ∂_x^a ∂_y^b f (i.e., degree-1 monomials with order > 0).
+    form ∂^α f (i.e., degree-1 monomials with order > 0), moving the full
+    multi-index derivative onto the test function.
 
     Parameters
     ----------
-    f : ndarray of shape (Nx, Ny)
-    Lx, Ly : float
+    f : ndarray, shape (N_1, ..., N_ndim)
+    Lx, Ly, Lz : float — domain lengths (isotropic beyond ndim=3)
     max_order  : int — maximum total differential order (default 4)
     max_degree : int — maximum total polynomial degree (default 3)
     m, p : int — test function parameters
@@ -180,90 +170,48 @@ def _build_polyjet_weak(f, Lx, Ly, max_order=4, max_degree=3,
     Theta_weak : ndarray of shape (N_valid, K)
     descriptions : list of K str
     """
-    from .weak_form import (
-        _cached_kernel_1d, _test_function_deriv_1d, weak_convolution,
-    )
+    from .weak_form import _cached_kernel_1d, _test_function_deriv_1d, weak_convolution
 
-    Nx, Ny = f.shape
+    method = _derivatives.get_backend()
+    ndim = f.ndim
+    Ls = _derivatives.axis_lengths(f, Lx, Ly, Lz)
     kernel = _cached_kernel_1d(m, p)
 
-    # Enumerate jet variables
-    jet_vars = []  # ((a,b), order, name)
-    for total in range(max_order + 1):
-        for a in range(total + 1):
-            b = total - a
-            name = (("x" * a) + ("y" * b)) if total > 0 else ""
-            name = f"f_{name}" if total > 0 else "f"
-            jet_vars.append(((a, b), total, name))
+    jet_vars = _build_jet_vars(ndim, max_order)
+    multi_indices = [mi for mi, _order, _name in jet_vars]
+    jet_names = {mi: name for mi, _order, name in jet_vars}
+    jet_fields = compute_derivs_nd(f, Ls, multi_indices, method, zero_value="f")
 
-    # Compute jet fields pointwise
-    method = _derivatives.get_backend()
-
-    jet_fields = {}
-    jet_names = {}
-    if method == "spectral":
-        kx = 2.0 * np.pi / Lx * np.fft.fftfreq(Nx) * Nx
-        ky = 2.0 * np.pi / Ly * np.fft.fftfreq(Ny) * Ny
-        KX, KY = np.meshgrid(kx, ky, indexing="ij")
-        fh = np.fft.fft2(f)
-
-    for (a, b), order, name in jet_vars:
-        jet_names[(a, b)] = name
-        if a + b == 0:
-            jet_fields[(a, b)] = f.copy()
-        elif method == "spectral":
-            d_hat = (1j * KX) ** a * (1j * KY) ** b * fh
-            jet_fields[(a, b)] = np.real(np.fft.ifft2(d_hat))
-        else:
-            jet_fields[(a, b)] = poly_partial(f, Lx, Ly, a, b)
-
-    # Enumerate monomials
     monomials = enumerate_jet_monomials(jet_vars, max_order, max_degree)
 
-    # Build weak columns
     cols, descs = [], []
     for exponents, deg, order in monomials:
-        # Check if this is a single-derivative term (IBP candidate)
         non_one_terms = [(k, v) for k, v in exponents.items() if v > 0]
         is_single_deriv = (
             use_ibp
             and len(non_one_terms) == 1
-            and non_one_terms[0][0][0] + non_one_terms[0][0][1] > 0
+            and sum(non_one_terms[0][0]) > 0
             and non_one_terms[0][1] == 1
         )
 
         if is_single_deriv:
-            (a, b), _exp = non_one_terms[0]
-            # IBP: ∫ ψ · ∂_x^a ∂_y^b f = (-1)^{a+b} ∫ ∂_x^a ∂_y^b ψ · f
-            # The (-1)^{a+b} sign is handled implicitly by np.convolve.
-            kx_ibp = _test_function_deriv_1d(m, p, a)
-            ky_ibp = _test_function_deriv_1d(m, p, b)
-            dx_a = (Lx / Nx) ** a
-            dy_b = (Ly / Ny) ** b
-            kx_scaled = kx_ibp / dx_a
-            ky_scaled = ky_ibp / dy_b
-            col_weak = weak_convolution(f, kx_scaled, ky_scaled)
+            mi, _exp = non_one_terms[0]
+            kernel_list = []
+            for axis, a in enumerate(mi):
+                if a == 0:
+                    kernel_list.append(kernel)
+                else:
+                    dx_a = (Ls[axis] / f.shape[axis]) ** a
+                    kernel_list.append(_test_function_deriv_1d(m, p, a) / dx_a)
+            col_weak = weak_convolution(f, kernel_list)
         else:
-            # Build pointwise monomial
             col_raw = np.ones_like(f)
-            for (a, b), exp in exponents.items():
+            for mi, exp in exponents.items():
                 if exp > 0:
-                    col_raw = col_raw * (jet_fields[(a, b)] ** exp)
-            col_weak = weak_convolution(col_raw, kernel, kernel)
+                    col_raw = col_raw * (jet_fields[mi] ** exp)
+            col_weak = weak_convolution(col_raw, [kernel] * ndim)
 
         cols.append(col_weak.ravel())
-
-        # Build description
-        parts = []
-        for (a, b), exp in sorted(exponents.items(),
-                                   key=lambda kv: (kv[0][0] + kv[0][1], kv[0][0])):
-            if exp == 0:
-                continue
-            var_name = jet_names[(a, b)]
-            if exp == 1:
-                parts.append(var_name)
-            else:
-                parts.append(f"{var_name}{_sup(exp)}")
-        descs.append("1" if not parts else "·".join(parts))
+        descs.append(_describe_exponents(exponents, jet_names))
 
     return np.column_stack(cols), descs

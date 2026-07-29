@@ -1,3 +1,5 @@
+"""Allen-Cahn equation simulator (spectral IMEX), 2-D and n-D variants."""
+
 import numpy as np
 
 from ._imex import _run
@@ -79,8 +81,12 @@ def allen_cahn(
     return snapshots, times
 
 
-def allen_cahn_3d(
-    N=48,
+_MAX_NDIM = 8
+
+
+def allen_cahn_nd(
+    ndim=2,
+    N=None,
     L=2 * np.pi,
     T_end=8.0,
     eps=0.15,
@@ -91,50 +97,38 @@ def allen_cahn_3d(
     obs_noise=0.0,
     dyn_noise=0.0,
 ):
-    """
-    Simulate the Allen-Cahn equation on [0, L]^3 via spectral IMEX.
+    """Simulate the Allen-Cahn equation on [0, L]^ndim via spectral IMEX.
 
     PDE:
         f_t = eps^2 * Delta f + f - f^3
 
     Parameters
     ----------
-    N : int
-        Grid points per direction (power of 2 recommended).
+    ndim : int
+        Number of spatial dimensions (1 <= ndim <= 8).
+    N : int or None
+        Grid points per direction.  Default: 64 for ndim=2, 48 for ndim>=3.
     L : float
-        Domain side length (periodic cube, [0, L]^3).
-    T_end : float
-        End time.
-    eps : float
-        Interface width parameter.
-    dt : float
-        Time step.
-    save_every : int
-        Save a snapshot every this many steps.
-    f0 : ndarray of shape (N, N, N) or None
-        Initial condition. If None, a small-amplitude random field is used.
-    seed : int
-        RNG seed.
-    obs_noise : float
-        Observation noise level as fraction of clean_snapshots.std().
-    dyn_noise : float
-        Per-step Wiener increment std. 0 = deterministic.
-
-    Returns
-    -------
-    snapshots : ndarray of shape (n_saved, N, N, N)
-    times : ndarray of shape (n_saved,)
+        Domain side length.
+    T_end, eps, dt, save_every, f0, seed, obs_noise, dyn_noise :
+        Same as ``allen_cahn``.
     """
+    if not 1 <= ndim <= _MAX_NDIM:
+        raise ValueError(f"ndim must be 1-{_MAX_NDIM}, got {ndim}")
+
+    if N is None:
+        N = 64 if ndim == 2 else 48
+
     rng = np.random.default_rng(seed)
 
     k = np.fft.fftfreq(N) * N * (2 * np.pi / L)
-    KX, KY, KZ = np.meshgrid(k, k, k, indexing="ij")
-    K2 = KX**2 + KY**2 + KZ**2
+    K_grids = np.meshgrid(*([k] * ndim), indexing="ij")
+    K2 = sum(Ki**2 for Ki in K_grids)
 
     denom = 1.0 + eps**2 * K2 * dt
 
     if f0 is None:
-        f0 = 0.05 * rng.standard_normal((N, N, N))
+        f0 = 0.05 * rng.standard_normal((N,) * ndim)
 
     def nonlin(f):
         return f - f**3

@@ -167,96 +167,81 @@ def _ibp_bilaplacian_kernels(m, p):
 
 
 def weak_laplacian_ibp(f, m, p, Lx, Ly, Lz=None):
-    """Compute ∫ ψ · Δf ≈ ∫ Δψ · f via integration by parts.
+    """Compute ∫ ψ · Δf ≈ ∫ Δψ · f via integration by parts, for any ndim.
 
     No derivatives of *f* are computed — the differential operator is
     moved entirely onto the analytically-known test function.
 
-    Supports 2-D and 3-D fields.
+    Δψ = Σ_axis φ″(axis)/dx_axis² · ∏_{other axes} φ(other), so each axis
+    contributes one term with that axis's kernel swapped from φ to φ″.
 
     Parameters
     ----------
-    f : ndarray (Nx, Ny) or (Nx, Ny, Nz)
+    f : ndarray, shape (N_1, ..., N_ndim)
     m, p : int — test function parameters
-    Lx, Ly, Lz : float — domain lengths (Lz required for 3-D)
+    Lx, Ly, Lz : float — domain lengths (isotropic beyond ndim=3; see
+        derivatives.axis_lengths)
 
     Returns
     -------
-    ndarray of shape (Nx−2m, Ny−2m) or (Nx−2m, Ny−2m, Nz−2m)
+    ndarray, shape (N_1 - 2m, ..., N_ndim - 2m)
     """
+    from .. import derivatives
+
     kxx_grid, k0 = _ibp_laplacian_kernels(m, p)
-    if f.ndim == 3:
-        Nx, Ny, Nz = f.shape
-        dx2 = (Lx / Nx) ** 2
-        dy2 = (Ly / Ny) ** 2
-        dz2 = (Lz / Nz) ** 2
-        kxx = kxx_grid / dx2
-        kyy = kxx_grid / dy2
-        kzz = kxx_grid / dz2
-        return (weak_convolution(f, kxx, k0, k0)
-                + weak_convolution(f, k0, kyy, k0)
-                + weak_convolution(f, k0, k0, kzz))
-    Nx, Ny = f.shape
-    dx2 = (Lx / Nx) ** 2
-    dy2 = (Ly / Ny) ** 2
-    kxx = kxx_grid / dx2
-    kyy = kxx_grid / dy2
-    return weak_convolution(f, kxx, k0) + weak_convolution(f, k0, kyy)
+    ndim = f.ndim
+    Ls = derivatives.axis_lengths(f, Lx, Ly, Lz)
+    dx2s = [(Ls[axis] / f.shape[axis]) ** 2 for axis in range(ndim)]
+
+    total = None
+    for axis in range(ndim):
+        kernel_list = [k0] * ndim
+        kernel_list[axis] = kxx_grid / dx2s[axis]
+        term = weak_convolution(f, kernel_list)
+        total = term if total is None else total + term
+    return total
 
 
 def weak_bilaplacian_ibp(f, m, p, Lx, Ly, Lz=None):
-    """Compute ∫ ψ · Δ²f ≈ ∫ Δ²ψ · f via integration by parts.
+    """Compute ∫ ψ · Δ²f ≈ ∫ Δ²ψ · f via integration by parts, for any ndim.
 
     No derivatives of *f* are computed.
 
-    Supports 2-D and 3-D fields.
-    For 3-D: Δ²ψ has 6 terms (3 pure 4th derivatives + 3 mixed).
+    Δ²ψ = Σ_axis φ⁗(axis)/dx_axis⁴ · ∏_{other}φ(other)
+          + 2 Σ_{i<j} φ″(i)φ″(j)/(dx_i²dx_j²) · ∏_{other}φ(other)
+    i.e. ndim pure 4th-derivative terms plus C(ndim,2) mixed terms with
+    coefficient 2 (2-D: 2 pure + 1 mixed; 3-D: 3 pure + 3 mixed).
 
     Parameters
     ----------
-    f : ndarray (Nx, Ny) or (Nx, Ny, Nz)
+    f : ndarray, shape (N_1, ..., N_ndim)
     m, p : int — test function parameters
-    Lx, Ly, Lz : float — domain lengths
+    Lx, Ly, Lz : float — domain lengths (isotropic beyond ndim=3)
 
     Returns
     -------
-    ndarray, shape (Nx−2m, Ny−2m) or (Nx−2m, Ny−2m, Nz−2m)
+    ndarray, shape (N_1 - 2m, ..., N_ndim - 2m)
     """
+    from .. import derivatives
+
     kxxxx_grid, kxx_grid, k0 = _ibp_bilaplacian_kernels(m, p)
-    if f.ndim == 3:
-        Nx, Ny, Nz = f.shape
-        dx2 = (Lx / Nx) ** 2
-        dy2 = (Ly / Ny) ** 2
-        dz2 = (Lz / Nz) ** 2
-        kxxxx = kxxxx_grid / (dx2 ** 2)
-        kxx = kxx_grid / dx2
-        kyyyy = kxxxx_grid / (dy2 ** 2)
-        kyy = kxx_grid / dy2
-        kzzzz = kxxxx_grid / (dz2 ** 2)
-        kzz = kxx_grid / dz2
-        # Δ²ψ = φ⁗(x)φ(y)φ(z)/dx⁴ + φ(x)φ⁗(y)φ(z)/dy⁴ + φ(x)φ(y)φ⁗(z)/dz⁴
-        #       + 2φ″(x)φ″(y)φ(z)/(dx²dy²) + 2φ″(x)φ(y)φ″(z)/(dx²dz²)
-        #       + 2φ(x)φ″(y)φ″(z)/(dy²dz²)
-        return (
-            weak_convolution(f, kxxxx, k0, k0)
-            + weak_convolution(f, k0, kyyyy, k0)
-            + weak_convolution(f, k0, k0, kzzzz)
-            + 2.0 * weak_convolution(f, kxx, kyy, k0)
-            + 2.0 * weak_convolution(f, kxx, k0, kzz)
-            + 2.0 * weak_convolution(f, k0, kyy, kzz)
-        )
-    Nx, Ny = f.shape
-    dx2 = (Lx / Nx) ** 2
-    dy2 = (Ly / Ny) ** 2
-    kxxxx = kxxxx_grid / (dx2 ** 2)
-    kxx   = kxx_grid   / dx2
-    kyyyy = kxxxx_grid / (dy2 ** 2)
-    kyy   = kxx_grid   / dy2
-    return (
-        weak_convolution(f, kxxxx, k0)
-        + 2.0 * weak_convolution(f, kxx, kyy)
-        + weak_convolution(f, k0, kyyyy)
-    )
+    ndim = f.ndim
+    Ls = derivatives.axis_lengths(f, Lx, Ly, Lz)
+    dx2s = [(Ls[axis] / f.shape[axis]) ** 2 for axis in range(ndim)]
+
+    total = None
+    for i in range(ndim):
+        kernel_list = [k0] * ndim
+        kernel_list[i] = kxxxx_grid / (dx2s[i] ** 2)
+        term = weak_convolution(f, kernel_list)
+        total = term if total is None else total + term
+    for i in range(ndim):
+        for j in range(i + 1, ndim):
+            kernel_list = [k0] * ndim
+            kernel_list[i] = kxx_grid / dx2s[i]
+            kernel_list[j] = kxx_grid / dx2s[j]
+            total = total + 2.0 * weak_convolution(f, kernel_list)
+    return total
 
 
 # ---------------------------------------------------------------------------
@@ -264,56 +249,45 @@ def weak_bilaplacian_ibp(f, m, p, Lx, Ly, Lz=None):
 # ---------------------------------------------------------------------------
 
 
-def weak_convolution(f, kernel_x, kernel_y, kernel_z=None):
-    """Compute the weak form of field `f` by separable 1-D convolution.
+def weak_convolution(f, *kernels):
+    """Compute the weak form of field `f` by separable 1-D convolution, for
+    any ndim.
 
-    Supports 2-D (two kernels) and 3-D (three kernels).
+    Two calling conventions are supported:
+
+        weak_convolution(f, kernel_0, kernel_1, ...)   # positional, historical
+        weak_convolution(f, [kernel_0, kernel_1, ...])  # single list, N-D
+
+    ``None`` entries are dropped (matches the historical
+    ``weak_convolution(f, kx, ky, None)`` 2-D calling pattern from callers
+    that always pass a 3rd, possibly-None argument).
 
     Parameters
     ----------
-    f : ndarray (Nx, Ny) or (Nx, Ny, Nz)
-    kernel_x, kernel_y : ndarray (2*mx+1,), (2*my+1,)
-    kernel_z : ndarray (2*mz+1,) or None — required for 3-D
+    f : ndarray, shape (N_1, ..., N_ndim)
+    kernels : one 1-D ndarray per axis (or a single list of them)
 
     Returns
     -------
-    ndarray, shape (Nx-2mx, Ny-2my) or (Nx-2mx, Ny-2my, Nz-2mz)
+    ndarray, shape (N_1 - 2*m_1, ..., N_ndim - 2*m_ndim)
     """
-    kx = kernel_x.ravel()
-    ky = kernel_y.ravel()
-    mx, my = len(kx) // 2, len(ky) // 2
+    if len(kernels) == 1 and isinstance(kernels[0], (list, tuple)):
+        kernel_list = list(kernels[0])
+    else:
+        kernel_list = list(kernels)
+    kernel_list = [k for k in kernel_list if k is not None]
+    if len(kernel_list) != f.ndim:
+        raise ValueError(
+            f"weak_convolution: got {len(kernel_list)} kernels for a "
+            f"{f.ndim}-D field; need exactly f.ndim kernels."
+        )
 
-    if f.ndim == 3:
-        if kernel_z is None:
-            raise ValueError("kernel_z is required for 3-D fields")
-        kz = kernel_z.ravel()
-        mz = len(kz) // 2
-        Nx, Ny, Nz = f.shape
-        # Step 1: convolve along axis=0
-        temp0 = np.empty((Nx - 2*mx, Ny, Nz), dtype=np.float64)
-        for j in range(Ny):
-            for k in range(Nz):
-                temp0[:, j, k] = np.convolve(f[:, j, k], kx, mode="valid")
-        # Step 2: convolve along axis=1
-        temp1 = np.empty((Nx - 2*mx, Ny - 2*my, Nz), dtype=np.float64)
-        for i in range(temp0.shape[0]):
-            for k in range(Nz):
-                temp1[i, :, k] = np.convolve(temp0[i, :, k], ky, mode="valid")
-        # Step 3: convolve along axis=2
-        result = np.empty((Nx - 2*mx, Ny - 2*my, Nz - 2*mz), dtype=np.float64)
-        for i in range(temp1.shape[0]):
-            for j in range(temp1.shape[1]):
-                result[i, j, :] = np.convolve(temp1[i, j, :], kz, mode="valid")
-        return result
-
-    # 2-D path (original)
-    Nx, Ny = f.shape
-    temp = np.empty((Nx - 2*mx, Ny), dtype=np.float64)
-    for j in range(Ny):
-        temp[:, j] = np.convolve(f[:, j], kx, mode="valid")
-    result = np.empty((Nx - 2*mx, Ny - 2*my), dtype=np.float64)
-    for i in range(temp.shape[0]):
-        result[i, :] = np.convolve(temp[i, :], ky, mode="valid")
+    result = f
+    for axis, kernel in enumerate(kernel_list):
+        kernel = np.ravel(kernel)
+        result = np.apply_along_axis(
+            lambda v, _k=kernel: np.convolve(v, _k, mode="valid"), axis, result
+        )
     return result
 
 
@@ -367,30 +341,45 @@ def _is_laplacian_of(desc):
     return None
 
 
-def build_weak_rhs(ft, kernel_x=None, kernel_y=None, kernel_z=None, m=8, p=4):
-    """Build the weak-form RHS vector b = ψ ∗ f_t.
-
-    Supports 2-D and 3-D fields.
+def build_weak_rhs(ft, kernel_x=None, kernel_y=None, kernel_z=None, m=8, p=4,
+                   kernels=None):
+    """Build the weak-form RHS vector b = ψ ∗ f_t, for any ndim.
 
     Parameters
     ----------
-    ft : ndarray (Nx, Ny) or (Nx, Ny, Nz) — time derivative of f.
+    ft : ndarray, shape (N_1, ..., N_ndim) — time derivative of f.
     kernel_x, kernel_y, kernel_z : ndarray or None
-        If None, build from (m, p).
+        Per-axis overrides for axes 0, 1, 2 (historical 2-D/3-D calling
+        convention).  Any axis without an explicit override (including all
+        axes beyond the third, for ndim>3) is built from (m, p).
+    kernels : list of ndarray or None
+        If given, used directly as the full per-axis kernel list (must have
+        length ft.ndim); takes precedence over kernel_x/kernel_y/kernel_z.
     m, p : int
-        Used only if kernels are None.
+        Used to build the default kernel for axes without an explicit
+        override.
 
     Returns
     -------
     b : ndarray of shape (N_valid,)
     """
-    if kernel_x is None:
-        kernel_x = _cached_kernel_1d(m, p)
-    if kernel_y is None:
-        kernel_y = _cached_kernel_1d(m, p)
-    if ft.ndim == 3 and kernel_z is None:
-        kernel_z = _cached_kernel_1d(m, p)
-    return weak_convolution(ft, kernel_x, kernel_y, kernel_z).ravel()
+    if kernels is not None:
+        kernel_list = list(kernels)
+        if len(kernel_list) != ft.ndim:
+            raise ValueError(
+                f"build_weak_rhs: kernels has length {len(kernel_list)}, "
+                f"expected {ft.ndim} (ft.ndim)"
+            )
+        return weak_convolution(ft, kernel_list).ravel()
+
+    overrides = [kernel_x, kernel_y, kernel_z]
+    default = _cached_kernel_1d(m, p)
+    kernel_list = [
+        overrides[axis] if axis < len(overrides) and overrides[axis] is not None
+        else default
+        for axis in range(ft.ndim)
+    ]
+    return weak_convolution(ft, kernel_list).ravel()
 
 
 # ---------------------------------------------------------------------------

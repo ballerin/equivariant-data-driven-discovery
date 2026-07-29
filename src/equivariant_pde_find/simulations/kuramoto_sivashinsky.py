@@ -1,3 +1,8 @@
+"""Kuramoto-Sivashinsky equation simulator (2-D only; see the ``ndim``
+parameter's docstring for why the higher-dimensional generalization done
+for the other equations does not extend here without further validation).
+"""
+
 import numpy as np
 
 from ._imex import _run
@@ -16,6 +21,7 @@ def kuramoto_sivashinsky(
     dyn_noise=0.0,
     scheme="etdrk4",
     dealias=True,
+    ndim=2,
 ):
     """Simulate the 2D Kuramoto–Sivashinsky equation via pseudo-spectral methods.
 
@@ -54,12 +60,26 @@ def kuramoto_sivashinsky(
         Apply the 2/3-rule dealiasing mask before computing the nonlinear
         term.  Strongly recommended (default True); avoids quadratic
         aliasing that contaminates the regression library.
+    ndim : int
+        Number of spatial dimensions.  Only ``ndim=2`` is currently
+        supported: the ETDRK4 coefficients and time-stepping loop here
+        are hardcoded around ``fft2``/``ifft2`` and have not been
+        verified for other dimensions (the exponential-integrator
+        stability analysis is more delicate than the plain IMEX schemes
+        used elsewhere).  Any other value raises ``ValueError``.
 
     Returns
     -------
     snapshots : ndarray of shape (n_saved, N, N)
     times : ndarray of shape (n_saved,)
     """
+    if ndim != 2:
+        raise ValueError(
+            f"kuramoto_sivashinsky only supports ndim=2 (got ndim={ndim}); "
+            "the ETDRK4/IMEX integrators here are hardcoded for 2-D FFTs "
+            "and have not been verified for other dimensions."
+        )
+
     rng = np.random.default_rng(seed)
 
     k = np.fft.fftfreq(N) * N * (2 * np.pi / L)

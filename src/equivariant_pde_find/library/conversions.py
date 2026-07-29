@@ -19,13 +19,21 @@ keep it this way to keep the code more explicit and to add an equivalence
 test to check that the two procedures give the same result.
 """
 
+from functools import lru_cache
+
 import numpy as np
-from collections import defaultdict
 
 from ..multigraph_operators import (
     get_mod_multigraph_operators,
     get_operators,
+    _sym_Delta,
+    _sym_grad_sq,
+    _sym_bilap,
+    _sym_grad_Delta_grad,
+    _sym_hess_norm_sq,
+    _sym_hess_grad_grad,
 )
+from ..jet_algebra import JetExpr, AXIS_LABELS, expr_to_dict
 
 
 # =====================================================================================
@@ -173,219 +181,165 @@ def convert_coefficients(w, from_basis, to_basis, max_p=2, max_n=3):
 # =====================================================================================
 
 # -----------------------------------------------------------------------
-# Multigraph → Jet decomposition dictionaries
+# Multigraph → Jet decomposition, for any ndim
 # -----------------------------------------------------------------------
-# The multigraph and modified-multigraph bases share 14 operators with
-# identical jet expansions.  Each basis adds 6 specific operators.
-# -----------------------------------------------------------------------
-
-_COMMON_JET = {
-    "1":                [("1", 1.0)],
-    "f":                [("f", 1.0)],
-    "f²":               [("f²", 1.0)],
-    "f³":               [("f³", 1.0)],
-    "Δf":               [("f_xx", 1.0), ("f_yy", 1.0)],
-    "‖∇f‖²":           [("f_x²", 1.0), ("f_y²", 1.0)],
-    "f·‖∇f‖²":         [("f·f_x²", 1.0), ("f·f_y²", 1.0)],
-    "Δ²f":              [("f_xxxx", 1.0), ("f_xxyy", 2.0), ("f_yyyy", 1.0)],
-    "Δf·Δf":            [("f_xx²", 1.0), ("f_yy·f_xx", 2.0), ("f_yy²", 1.0)],
-    "‖∇²f‖²":          [("f_xx²", 1.0), ("f_xy²", 2.0), ("f_yy²", 1.0)],
-    "f·Δf·Δf":          [("f·f_xx²", 1.0), ("f·f_yy·f_xx", 2.0),
-                         ("f·f_yy²", 1.0)],
-    "f·‖∇²f‖²":        [("f·f_xx²", 1.0), ("f·f_xy²", 2.0),
-                         ("f·f_yy²", 1.0)],
-    "∇²f(∇f,∇f)":      [("f_x²·f_xx", 1.0), ("f_y·f_x·f_xy", 2.0),
-                         ("f_y²·f_yy", 1.0)],
-    "‖∇f‖²·Δf":        [("f_x²·f_xx", 1.0), ("f_x²·f_yy", 1.0),
-                         ("f_y²·f_xx", 1.0), ("f_y²·f_yy", 1.0)],
-}
-
-_MULTIGRAPH_SPECIFIC = {
-    "f·Δf":             [("f·f_xx", 1.0), ("f·f_yy", 1.0)],
-    "f²·Δf":            [("f²·f_xx", 1.0), ("f²·f_yy", 1.0)],
-    "f·Δ²f":            [("f·f_xxxx", 1.0), ("f·f_xxyy", 2.0),
-                         ("f·f_yyyy", 1.0)],
-    "⟨∇Δf,∇f⟩":        [("f_x·f_xxx", 1.0), ("f_x·f_xyy", 1.0),
-                         ("f_y·f_xxy", 1.0), ("f_y·f_yyy", 1.0)],
-    "f²·Δ²f":           [("f²·f_xxxx", 1.0), ("f²·f_xxyy", 2.0),
-                         ("f²·f_yyyy", 1.0)],
-    "f·⟨∇Δf,∇f⟩":      [("f·f_x·f_xxx", 1.0), ("f·f_x·f_xyy", 1.0),
-                         ("f·f_y·f_xxy", 1.0), ("f·f_y·f_yyy", 1.0)],
-}
-
-_MOD_MULTIGRAPH_SPECIFIC = {
-    # Δf² = 2f·Δf + 2‖∇f‖²
-    "Δf²":              [("f·f_xx", 2.0), ("f·f_yy", 2.0),
-                         ("f_x²", 2.0), ("f_y²", 2.0)],
-
-    # Δf³ = 3f²·Δf + 6f·‖∇f‖²
-    "Δf³":              [("f²·f_xx", 3.0), ("f²·f_yy", 3.0),
-                         ("f·f_x²", 6.0), ("f·f_y²", 6.0)],
-
-    # Δ‖∇f‖² = 2⟨∇Δf,∇f⟩ + 2‖∇²f‖²
-    "Δ‖∇f‖²":          [("f_x·f_xxx", 2.0), ("f_x·f_xyy", 2.0),
-                         ("f_y·f_xxy", 2.0), ("f_y·f_yyy", 2.0),
-                         ("f_xx²", 2.0), ("f_xy²", 4.0), ("f_yy²", 2.0)],
-
-    # Δ(f·‖∇f‖²) = 2f·⟨∇Δf,∇f⟩ + 2f·‖∇²f‖² + ‖∇f‖²·Δf + 4∇²f(∇f,∇f)
-    "Δ(f·‖∇f‖²)":      [("f·f_x·f_xxx", 2.0), ("f·f_x·f_xyy", 2.0),
-                         ("f·f_y·f_xxy", 2.0), ("f·f_y·f_yyy", 2.0),
-                         ("f·f_xx²", 2.0), ("f·f_xy²", 4.0), ("f·f_yy²", 2.0),
-                         ("f_x²·f_xx", 5.0), ("f_x²·f_yy", 1.0),
-                         ("f_y²·f_xx", 1.0), ("f_y²·f_yy", 5.0),
-                         ("f_y·f_x·f_xy", 8.0)],
-
-    # Δ²f² = 2f·Δ²f + 8⟨∇Δf,∇f⟩ + 4‖∇²f‖² + 2(Δf)²
-    "Δ²f²":             [("f·f_xxxx", 2.0), ("f·f_xxyy", 4.0),
-                         ("f·f_yyyy", 2.0),
-                         ("f_x·f_xxx", 8.0), ("f_x·f_xyy", 8.0),
-                         ("f_y·f_xxy", 8.0), ("f_y·f_yyy", 8.0),
-                         ("f_xx²", 6.0), ("f_xy²", 8.0), ("f_yy²", 6.0),
-                         ("f_yy·f_xx", 4.0)],
-
-    # Δ²f³ = 3f²·Δ²f + 24f·⟨∇Δf,∇f⟩ + 12f·‖∇²f‖² + 6f·(Δf)²
-    #        + 24∇²f(∇f,∇f) + 12‖∇f‖²·Δf
-    "Δ²f³":             [("f²·f_xxxx", 3.0), ("f²·f_xxyy", 6.0),
-                         ("f²·f_yyyy", 3.0),
-                         ("f·f_x·f_xxx", 24.0), ("f·f_x·f_xyy", 24.0),
-                         ("f·f_y·f_xxy", 24.0), ("f·f_y·f_yyy", 24.0),
-                         ("f·f_xx²", 18.0), ("f·f_xy²", 24.0),
-                         ("f·f_yy²", 18.0), ("f·f_yy·f_xx", 12.0),
-                         ("f_x²·f_xx", 36.0), ("f_y·f_x·f_xy", 48.0),
-                         ("f_y²·f_yy", 36.0),
-                         ("f_x²·f_yy", 12.0), ("f_y²·f_xx", 12.0)],
-}
-
-_MULTIGRAPH_TO_JET_DECOMPOSITION = {**_COMMON_JET, **_MULTIGRAPH_SPECIFIC}
-_MOD_MULTIGRAPH_TO_JET_DECOMPOSITION = {**_COMMON_JET, **_MOD_MULTIGRAPH_SPECIFIC}
-
-
-# -----------------------------------------------------------------------
-# WSINDy → Jet: Leibniz-rule expansion
+# Every entry is defined via the SAME symbolic jet_algebra formulas used by
+# multigraph_operators.py's numeric evaluators (imported above), so the
+# numeric operator and its jet decomposition are derived from one source
+# and can never silently disagree, at any ndim.  At ndim=2 these reproduce
+# the historical hand-written decomposition dicts exactly (see
+# tests/test_conversions_nd.py for the regression check).
 # -----------------------------------------------------------------------
 
-def _apply_deriv_x(terms):
-    """Apply ∂_x to a dict of {tuple: (count, coeff)}."""
-    result = defaultdict(float)
-    for key, (count, coeff) in terms.items():
-        key_list = list(key)
-        for i, (a, b) in enumerate(key_list):
-            new_key = list(key_list)
-            new_key[i] = (a + 1, b)
-            new_key.sort()
-            result[tuple(new_key)] += coeff
-    return {k: (len(k), v) for k, v in result.items()}
+
+@lru_cache(maxsize=None)
+def _multigraph_to_jet_decomposition(ndim):
+    """{operator_desc: [(jet_desc, coeff), ...]} for the original
+    multigraph basis, at the given ndim."""
+    F = JetExpr.var(ndim)
+    Delta = _sym_Delta(ndim)
+    grad_sq = _sym_grad_sq(ndim)
+    bilap = _sym_bilap(ndim)
+    grad_Delta_grad = _sym_grad_Delta_grad(ndim)
+    hess_norm_sq = _sym_hess_norm_sq(ndim)
+    hess_grad_grad = _sym_hess_grad_grad(ndim)
+
+    exprs = {
+        "1": JetExpr.constant(ndim, 1.0),
+        "f": F,
+        "f²": F * F,
+        "f³": F * F * F,
+        "Δf": Delta,
+        "‖∇f‖²": grad_sq,
+        "f·‖∇f‖²": F * grad_sq,
+        "Δ²f": bilap,
+        "Δf·Δf": Delta * Delta,
+        "‖∇²f‖²": hess_norm_sq,
+        "f·Δf·Δf": F * Delta * Delta,
+        "f·‖∇²f‖²": F * hess_norm_sq,
+        "∇²f(∇f,∇f)": hess_grad_grad,
+        "‖∇f‖²·Δf": grad_sq * Delta,
+        # multigraph-specific
+        "f·Δf": F * Delta,
+        "f²·Δf": F * F * Delta,
+        "f·Δ²f": F * bilap,
+        "⟨∇Δf,∇f⟩": grad_Delta_grad,
+        "f²·Δ²f": F * F * bilap,
+        "f·⟨∇Δf,∇f⟩": F * grad_Delta_grad,
+    }
+    return {desc: list(expr_to_dict(e).items()) for desc, e in exprs.items()}
 
 
-def _apply_deriv_y(terms):
-    """Apply ∂_y."""
-    result = defaultdict(float)
-    for key, (count, coeff) in terms.items():
-        key_list = list(key)
-        for i, (a, b) in enumerate(key_list):
-            new_key = list(key_list)
-            new_key[i] = (a, b + 1)
-            new_key.sort()
-            result[tuple(new_key)] += coeff
-    return {k: (len(k), v) for k, v in result.items()}
+@lru_cache(maxsize=None)
+def _mod_multigraph_to_jet_decomposition(ndim):
+    """{operator_desc: [(jet_desc, coeff), ...]} for the modified
+    (IBP-friendly) multigraph basis, at the given ndim."""
+    from ..multigraph_operators import (
+        _sym_Delta_f2, _sym_Delta_f3, _sym_Delta_grad_sq,
+        _sym_Delta_f_grad_sq, _sym_Delta2_f2, _sym_Delta2_f3,
+    )
+
+    F = JetExpr.var(ndim)
+    grad_sq = _sym_grad_sq(ndim)
+    hess_norm_sq = _sym_hess_norm_sq(ndim)
+    hess_grad_grad = _sym_hess_grad_grad(ndim)
+
+    exprs = {
+        "1": JetExpr.constant(ndim, 1.0),
+        "f": F,
+        "f²": F * F,
+        "f³": F * F * F,
+        "Δf": _sym_Delta(ndim),
+        "‖∇f‖²": grad_sq,
+        "f·‖∇f‖²": F * grad_sq,
+        "Δ²f": _sym_bilap(ndim),
+        "Δf·Δf": _sym_Delta(ndim) * _sym_Delta(ndim),
+        "‖∇²f‖²": hess_norm_sq,
+        "f·Δf·Δf": F * _sym_Delta(ndim) * _sym_Delta(ndim),
+        "f·‖∇²f‖²": F * hess_norm_sq,
+        "∇²f(∇f,∇f)": hess_grad_grad,
+        "‖∇f‖²·Δf": grad_sq * _sym_Delta(ndim),
+        # modified-basis-specific replacements
+        "Δf²": _sym_Delta_f2(ndim),
+        "Δf³": _sym_Delta_f3(ndim),
+        "Δ‖∇f‖²": _sym_Delta_grad_sq(ndim),
+        "Δ(f·‖∇f‖²)": _sym_Delta_f_grad_sq(ndim),
+        "Δ²f²": _sym_Delta2_f2(ndim),
+        "Δ²f³": _sym_Delta2_f3(ndim),
+    }
+    return {desc: list(expr_to_dict(e).items()) for desc, e in exprs.items()}
 
 
-def _expand_fq_deriv(a, b, q):
-    """Expand ∂_x^a ∂_y^b (f^q) to jet monomials.
+# Backward-compatible module-level dicts (ndim=2), for existing callers that
+# import these names directly as plain dicts (evaluation.py, scripts, tests).
+_MULTIGRAPH_TO_JET_DECOMPOSITION = _multigraph_to_jet_decomposition(2)
+_MOD_MULTIGRAPH_TO_JET_DECOMPOSITION = _mod_multigraph_to_jet_decomposition(2)
 
-    Returns dict {((a₁,b₁), ..., (a_q,b_q)): coefficient}
-    where each (a_i,b_i) is a derivative multi-index for one copy of f.
+
+# -----------------------------------------------------------------------
+# WSINDy → Jet: via jet_algebra symbolic differentiation (any ndim)
+# -----------------------------------------------------------------------
+# Each WSINDy column is exactly ∂^multi_index(f^q); jet_algebra's .deriv()
+# already implements the full Leibniz product rule symbolically, so we
+# reuse it here instead of the hand-rolled combinatorial expansion the
+# 2-D-only version used to need.
+# -----------------------------------------------------------------------
+
+_SUP_REV = {"²": 2, "³": 3, "⁴": 4, "⁵": 5, "⁶": 6, "⁷": 7, "⁸": 8, "⁹": 9}
+
+
+def _axis_str_to_multi_index(axis_str, ndim):
+    mi = [0] * ndim
+    for ch in axis_str:
+        mi[AXIS_LABELS.index(ch)] += 1
+    return tuple(mi)
+
+
+def _parse_wsindy_desc(desc, ndim):
+    """Parse a WSINDy column description into (multi_index, q).
+
+    '1' -> (zeros, 0);  'f' -> (zeros, 1);  'f²' -> (zeros, 2)
+    'f_{xx}' -> (multi_index, 1);  '(f²)_{xy}' -> (multi_index, 2)
     """
-    key = tuple((0, 0) for _ in range(q))
-    terms = {key: (q, 1.0)}
-
-    for _ in range(a):
-        terms = _apply_deriv_x(terms)
-    for _ in range(b):
-        terms = _apply_deriv_y(terms)
-
-    return terms
-
-
-def _terms_to_jet_dict(terms, jet_names):
-    """Convert expansion terms to a dict of {jet_description: coefficient}."""
-    result = defaultdict(float)
-    for key, (_count, coeff) in terms.items():
-        exponents = defaultdict(int)
-        for a, b in key:
-            if a == 0 and b == 0:
-                exponents[(0, 0)] += 1
-            else:
-                exponents[(a, b)] += 1
-        parts = []
-        for (a, b), exp in sorted(exponents.items(),
-                                  key=lambda kv: (kv[0][0] + kv[0][1], kv[0][0])):
-            if exp == 0:
-                continue
-            vname = jet_names.get((a, b), "")
-            if not vname:
-                if a == 0 and b == 0:
-                    vname = "f"
-                else:
-                    vname = "f_" + "x" * a + "y" * b
-            if exp == 1:
-                parts.append(vname)
-            else:
-                sup_map = {2: "²", 3: "³", 4: "⁴", 5: "⁵",
-                           6: "⁶", 7: "⁷", 8: "⁸", 9: "⁹"}
-                parts.append(f"{vname}{sup_map.get(exp, f'^{exp}')}")
-        desc = "·".join(parts) if parts else "1"
-        result[desc] += coeff
-    return dict(result)
+    zero_mi = (0,) * ndim
+    if desc == "1":
+        return zero_mi, 0
+    if desc.startswith("(f"):
+        close_paren = desc.index(")")
+        q = _SUP_REV.get(desc[2:close_paren], 2)
+        brace_start = desc.index("{", close_paren)
+        axis_str = desc[brace_start + 1: -1] if desc.endswith("}") else desc[brace_start + 1:]
+        return _axis_str_to_multi_index(axis_str, ndim), q
+    if desc.startswith("f_{"):
+        axis_str = desc[3:-1] if desc.endswith("}") else desc[3:]
+        return _axis_str_to_multi_index(axis_str, ndim), 1
+    if desc.startswith("f"):
+        q = _SUP_REV.get(desc[1:], 1) if desc != "f" else 1
+        return zero_mi, q
+    raise ValueError(f"Cannot parse WSINDy description: {desc!r}")
 
 
-def build_wsindy_to_jet_map(desc_ws, desc_jet):
-    """Build a matrix M such that w_jet = M @ w_wsindy.
+def build_wsindy_to_jet_map(desc_ws, desc_jet, ndim=2):
+    """Build a matrix M such that w_jet = M @ w_wsindy, for any ndim
+    (default 2, matching the paper's 2-D domain).
 
-    Each WSINDy column ∂_x^a ∂_y^b (f^q) is analytically expanded to
-    jet monomials using the general Leibniz rule.
+    Each WSINDy column ∂^α(f^q) is analytically expanded to jet monomials
+    via jet_algebra's symbolic differentiation (full Leibniz product rule).
     """
-    jet_names = {}
-    for total in range(5):  # max_order=4
-        for a in range(total + 1):
-            b = total - a
-            if a == 0 and b == 0:
-                jet_names[(a, b)] = "f"
-            else:
-                jet_names[(a, b)] = "f_" + "x" * a + "y" * b
-
     M = np.zeros((len(desc_jet), len(desc_ws)))
     for j, desc in enumerate(desc_ws):
-        if desc == "1":
-            M[desc_jet.index("1"), j] = 1.0
-            continue
-        sup_map_rev = {"²": 2, "³": 3, "⁴": 4, "⁵": 5,
-                       "⁶": 6, "⁷": 7, "⁸": 8, "⁹": 9}
-        if desc.startswith("(f"):
-            q_str = ""
-            idx = 2
-            while idx < len(desc) and desc[idx] in sup_map_rev:
-                q_str += desc[idx]
-                idx += 1
-            q = sup_map_rev.get(q_str, 2) if q_str else 2
-            rest = desc[desc.index(")_{") + 3: -1] if desc.endswith("}") \
-                else desc[desc.index(")_{") + 3:]
-            a = rest.count("x")
-            b = rest.count("y")
-        elif desc.startswith("f_{"):
-            q = 1
-            rest = desc[3:-1] if desc.endswith("}") else desc[3:]
-            a = rest.count("x")
-            b = rest.count("y")
-        elif desc in ("f", "f²", "f³"):
-            M[desc_jet.index(desc), j] = 1.0
-            continue
-        else:
+        multi_index, q = _parse_wsindy_desc(desc, ndim)
+        if q == 0:
+            if "1" in desc_jet:
+                M[desc_jet.index("1"), j] = 1.0
             continue
 
-        terms = _expand_fq_deriv(a, b, q)
-        jet_dict = _terms_to_jet_dict(terms, jet_names)
-        for jet_desc, coeff in jet_dict.items():
+        expr = JetExpr.var(ndim) ** q
+        for axis, a in enumerate(multi_index):
+            for _ in range(a):
+                expr = expr.deriv(axis)
+
+        for jet_desc, coeff in expr_to_dict(expr).items():
             try:
                 i = desc_jet.index(jet_desc)
             except ValueError:
@@ -421,39 +375,43 @@ def map_standard_to_jet(w_std, desc_std, desc_jet):
     return w_jet
 
 
-def map_multigraph_to_jet(w_eq, desc_eq, desc_jet):
+def map_multigraph_to_jet(w_eq, desc_eq, desc_jet, ndim=2):
     """Map multigraph coefficients to jet coefficients using the
-    analytical decomposition.
+    analytical decomposition, at the given ndim (default 2, matching the
+    paper's 2-D domain).
 
     Raises KeyError if an operator name is not in the decomposition."""
+    decomposition = _multigraph_to_jet_decomposition(ndim)
     w_jet = np.zeros(len(desc_jet))
     for j, (name, coeff) in enumerate(zip(desc_eq, w_eq)):
         if abs(coeff) < 1e-14:
             continue
-        if name not in _MULTIGRAPH_TO_JET_DECOMPOSITION:
+        if name not in decomposition:
             raise KeyError(
                 f"Multigraph operator {name!r} has no jet decomposition. "
-                f"Available: {list(_MULTIGRAPH_TO_JET_DECOMPOSITION)}"
+                f"Available: {list(decomposition)}"
             )
-        for jet_name, mult in _MULTIGRAPH_TO_JET_DECOMPOSITION[name]:
+        for jet_name, mult in decomposition[name]:
             w_jet[desc_jet.index(jet_name)] += coeff * mult
     return w_jet
 
 
-def map_mod_multigraph_to_jet(w_mod, desc_mod, desc_jet):
+def map_mod_multigraph_to_jet(w_mod, desc_mod, desc_jet, ndim=2):
     """Map modified multigraph coefficients to jet coefficients using the
-    analytical decomposition.
+    analytical decomposition, at the given ndim (default 2, matching the
+    paper's 2-D domain).
 
     Raises KeyError if an operator name is not in the decomposition."""
+    decomposition = _mod_multigraph_to_jet_decomposition(ndim)
     w_jet = np.zeros(len(desc_jet))
     for j, (name, coeff) in enumerate(zip(desc_mod, w_mod)):
         if abs(coeff) < 1e-14:
             continue
-        if name not in _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION:
+        if name not in decomposition:
             raise KeyError(
                 f"Mod. multigraph operator {name!r} has no jet decomposition. "
-                f"Available: {list(_MOD_MULTIGRAPH_TO_JET_DECOMPOSITION)}"
+                f"Available: {list(decomposition)}"
             )
-        for jet_name, mult in _MOD_MULTIGRAPH_TO_JET_DECOMPOSITION[name]:
+        for jet_name, mult in decomposition[name]:
             w_jet[desc_jet.index(jet_name)] += coeff * mult
     return w_jet

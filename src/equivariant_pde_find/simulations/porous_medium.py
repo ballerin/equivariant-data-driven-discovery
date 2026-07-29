@@ -1,3 +1,6 @@
+"""Porous medium equation simulator (explicit Euler + spectral derivatives),
+2-D and n-D variants."""
+
 import numpy as np
 
 
@@ -73,7 +76,86 @@ def porous_medium(
         f = np.clip(f + dt * rhs, 0.0, None)
         if step % save_every == 0:
             snapshots_list.append(f.copy())
-            times_list.append(step * dt)
+            times_list.append((step + 1) * dt)
+
+    snapshots = np.array(snapshots_list)
+    times = np.array(times_list)
+
+    if obs_noise > 0.0:
+        sigma_n = obs_noise * snapshots.std()
+        snapshots = np.clip(snapshots + sigma_n * rng.standard_normal(snapshots.shape), 0.0, None)
+
+    return snapshots, times
+
+
+_MAX_NDIM = 8
+
+
+def porous_medium_nd(
+    ndim=2,
+    N=None,
+    L=6 * np.pi,
+    T_end=2.0,
+    dt=0.002,
+    save_every=25,
+    f0=None,
+    seed=42,
+    obs_noise=0.0,
+):
+    """
+    Simulate the porous medium equation (m=2) on [0, L]^ndim via explicit
+    Euler + spectral derivatives.
+
+    PDE:
+        f_t = div(f^2 grad f) = f^2 Delta f + 2 f |grad f|^2
+
+    Scheme:
+        f^{n+1} = clip(f^n + dt * (f^2 * Delta f + 2 f |grad f|^2), 0)
+
+    Parameters
+    ----------
+    ndim : int
+        Number of spatial dimensions (1 <= ndim <= 8).
+    N : int or None
+        Grid points per direction.  Default: 64 for ndim=2, 48 for ndim>=3.
+    L, T_end, dt, save_every, f0, seed, obs_noise :
+        Same as ``porous_medium``.
+    """
+    if not 1 <= ndim <= _MAX_NDIM:
+        raise ValueError(f"ndim must be 1-{_MAX_NDIM}, got {ndim}")
+
+    if N is None:
+        N = 64 if ndim == 2 else 48
+
+    rng = np.random.default_rng(seed)
+
+    x = np.linspace(0, L, N, endpoint=False)
+    k = np.fft.fftfreq(N) * N * (2 * np.pi / L)
+    K_grids = np.meshgrid(*([k] * ndim), indexing="ij")
+    K2 = sum(Ki**2 for Ki in K_grids)
+
+    if f0 is None:
+        X_grids = np.meshgrid(*([x] * ndim), indexing="ij")
+        centre, sigma = L / 2, L / 8
+        r2 = sum((Xi - centre) ** 2 for Xi in X_grids)
+        f0 = np.exp(-r2 / (2 * sigma**2))
+        f0 /= f0.max()
+
+    f = f0.copy()
+    snapshots_list, times_list = [], []
+    n_steps = int(round(T_end / dt)) + 1
+
+    for step in range(n_steps):
+        fhat = np.fft.fftn(f)
+        Df = np.real(np.fft.ifftn(-K2 * fhat))
+        grad_sq = sum(
+            np.real(np.fft.ifftn(1j * Ki * fhat)) ** 2 for Ki in K_grids
+        )
+        rhs = f**2 * Df + 2.0 * f * grad_sq
+        f = np.clip(f + dt * rhs, 0.0, None)
+        if step % save_every == 0:
+            snapshots_list.append(f.copy())
+            times_list.append((step + 1) * dt)
 
     snapshots = np.array(snapshots_list)
     times = np.array(times_list)

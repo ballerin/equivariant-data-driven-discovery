@@ -16,7 +16,6 @@ LIB_NAMES = {
     "standard": "PDE-FIND",
     "polynomial_jet": "PolyJet",
     "wsindy": "WSINDy",
-    "mwsindy": "MWSINDy",
 }
 
 METHOD_MAP = {

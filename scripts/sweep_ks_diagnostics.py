@@ -33,7 +33,7 @@ from equivariant_pde_find.evaluation import (  # noqa: E402
 from equivariant_pde_find.library.conversions import (  # noqa: E402
     map_multigraph_to_jet, map_mod_multigraph_to_jet,
 )
-from equivariant_pde_find.equation_configs import (  # noqa: E402
+from equivariant_pde_find.equations import (  # noqa: E402
     true_ks, normalize_eq_name,
 )
 from equivariant_pde_find.library import (  # noqa: E402
@@ -131,7 +131,7 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, m, use_ibp):
 
 
 def _map_eq_key(eq_name):
-    """Map dataset eq_name to equation_configs key."""
+    """Map dataset eq_name to equations key."""
     eq_name = normalize_eq_name(eq_name)
     mapping = {
         "ks_cell": "ks_cell", "ks_wchaos": "ks_wchaos", "ks_chaos": "ks_chaos",

@@ -40,12 +40,12 @@ from equivariant_pde_find.evaluation import (  # noqa: E402
 from equivariant_pde_find.library.conversions import (  # noqa: E402
     map_multigraph_to_jet, map_mod_multigraph_to_jet,
 )
-from equivariant_pde_find.equation_configs import (  # noqa: E402
+from equivariant_pde_find.equations import (  # noqa: E402
     true_allen_cahn, true_swift_hohenberg, true_ks,
     true_cahn_hilliard, true_pme, mask_pme, EQUATION_META,
     true_allen_cahn_mod_multigraph, true_swift_hohenberg_mod_multigraph,
     true_ks_mod_multigraph, true_cahn_hilliard_mod_multigraph,
-    true_pme_mod_multigraph, normalize_eq_name,
+    true_pme_mod_multigraph, normalize_eq_name, CH_EPSILON,
 )
 from equivariant_pde_find.library import (  # noqa: E402
     build_polyjet_library, build_multigraph_library,
@@ -176,8 +176,6 @@ def main():
     parser.add_argument("--backends", nargs="+", default=BACKENDS, choices=BACKENDS)
     parser.add_argument("--weak-m", nargs="+", type=int, default=WEAK_M)
     parser.add_argument("--name", default="", help="Tag appended to output filename.")
-    parser.add_argument("--ch-epsilons", nargs="+", type=float, default=[0.2],
-                        help="Cahn-Hilliard epsilon values.")
     args = parser.parse_args()
 
     # Discover datasets
@@ -211,7 +209,7 @@ def main():
         "equation", "noise", "method", "library", "backend",
         "weak_m", "lam", "d_tol",
         "n_active", "fp", "fn", "exact_recovery", "E", "cond_theta",
-        "ch_eps", "time_ms",
+        "time_ms",
     ]
 
     with open(out_path, "w", newline="") as f:
@@ -233,12 +231,11 @@ def main():
             true_fn, skip_frac, mask_fn = _get_meta(eq_name)
 
             is_ch = eq_name == "ch"
-            eps_list = args.ch_epsilons if is_ch else [None]
+            eps_list = [CH_EPSILON] if is_ch else [None]
 
             for ch_eps in eps_list:
                 noise_label = obs_noise
-                print(f"  eq={eq_name}  noise={noise_label:.4f}"
-                      + (f"  ch_eps={ch_eps}" if ch_eps else ""), flush=True)
+                print(f"  eq={eq_name}  noise={noise_label:.4f}", flush=True)
 
                 # Prepare regression data
                 f_snaps_raw, ft_snaps_raw, idx_sets_raw, _ = make_regression_data(
@@ -354,7 +351,6 @@ def main():
                             exact_recovery=eval_result.get("exact_recovery", 0),
                             E=eval_result.get("E_coeff", eval_result.get("E", float("nan"))),
                             cond_theta=cond_val,
-                            ch_eps=(ch_eps if ch_eps else ""),
                             time_ms=f"{dt_ms:.1f}",
                         )
                         writer.writerow(row)

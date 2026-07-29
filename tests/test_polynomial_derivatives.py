@@ -124,11 +124,16 @@ def test_poly_partial_matches_specialised_call():
     np.testing.assert_allclose(fx_p, fx_generic, rtol=1e-3, atol=1e-6)
 
 
-def test_shape_error_on_wrong_input():
-    """Passing a 1-D array to 2-D routines should raise ValueError."""
-    u = np.arange(16)
-    with pytest.raises(ValueError):
-        pd.polynomial_grad(u, 2 * math.pi, 2 * math.pi)
+def test_1d_input_is_valid_ndim_1():
+    """A 1-D array is valid input (ndim=1) since the N-D generalization —
+    polynomial_grad returns a 1-tuple, close to the analytic derivative
+    for a single low-frequency cosine mode."""
+    N, L, m = 64, 2 * math.pi, 3
+    x = np.linspace(0, L, N, endpoint=False)
+    k = 2.0 * math.pi * m / L
+    f = np.cos(k * x)
+    (fx,) = pd.polynomial_grad(f, L, L)
+    np.testing.assert_allclose(fx, -k * np.sin(k * x), rtol=1e-3, atol=1e-3)
 
 
 def test_poly_partial_respects_stencil_override():
@@ -447,3 +452,172 @@ def test_spectral_polynomial_backends_agree_low_frequency():
     bilap_s = sd.spectral_bilaplacian(f, Lx, Ly)
     bilap_p = pd.polynomial_bilaplacian(f, Lx, Ly)
     np.testing.assert_allclose(bilap_p, bilap_s, rtol=1e-3, atol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# N-D generalization
+# ---------------------------------------------------------------------------
+
+
+class TestPolynomialND:
+    """poly_partial_nd / _poly_kernel_nd / _apply_nd for ndim > 2.
+
+    Uses small explicit (deg, r) overrides passed directly to poly_partial_nd
+    (not the global set_default_stencil, to avoid cross-test state leakage)
+    -- the (2r+1)^ndim stencil cost grows quickly with ndim, so a smaller
+    stencil keeps these tests fast; see module docstring for the accuracy
+    trade-off this implies.
+    """
+
+    def test_single_axis_mode_ndim_invariant_accuracy(self):
+        """A field varying along only one axis should be fit with accuracy
+        independent of total ndim (the other axes are locally constant, so
+        the fit degenerates to an effective 1-D problem)."""
+        N, L, deg, r = 12, 2 * math.pi, 5, 3
+        k = 2.0 * math.pi / L
+        errs = []
+        for ndim in (2, 3, 4):
+            x = np.linspace(0, L, N, endpoint=False)
+            grids = np.meshgrid(*([x] * ndim), indexing="ij")
+            f = np.cos(k * grids[0])
+            multi_index = (1,) + (0,) * (ndim - 1)
+            d = pd.poly_partial_nd(f, (L,) * ndim, multi_index, deg=deg, r=r)
+            expected = -k * np.sin(k * grids[0])
+            errs.append(np.max(np.abs(d - expected)))
+        np.testing.assert_allclose(errs, errs[0], rtol=1e-8)
+
+    def test_grad_laplacian_hessian_ndim_4(self):
+        """grad/laplacian/hessian agree with the analytic single-mode
+        solution at ndim=4 (small stencil, loose tolerance -- see the
+        curse-of-dimensionality note in the module docstring)."""
+        N, L, deg, r = 16, 2 * math.pi, 5, 3
+        ndim = 4
+        ks = np.array([1, 1, 0, 1])
+        x = np.linspace(0, L, N, endpoint=False)
+        grids = np.meshgrid(*([x] * ndim), indexing="ij")
+        kvec = 2.0 * math.pi / L * ks
+        theta = sum(k * g for k, g in zip(kvec, grids))
+        f = np.cos(theta)
+        Ls = (L,) * ndim
+
+        for axis in range(ndim):
+            mi = tuple(1 if a == axis else 0 for a in range(ndim))
+            d = pd.poly_partial_nd(f, Ls, mi, deg=deg, r=r)
+            expected = -kvec[axis] * np.sin(theta)
+            np.testing.assert_allclose(d, expected, atol=0.15)
+
+        lap = sum(
+            pd.poly_partial_nd(
+                f, Ls, tuple(2 if a == axis else 0 for a in range(ndim)),
+                deg=deg, r=r,
+            )
+            for axis in range(ndim)
+        )
+        np.testing.assert_allclose(lap, -np.sum(kvec**2) * f, atol=0.5)
+
+    def test_poly_partial_1d_matches_poly_partial_nd(self):
+        """poly_partial_1d (specialized 1-D convenience wrapper) matches
+        the general ndim=1 path exactly (it delegates to it)."""
+        N, L = 64, 2 * math.pi
+        x = np.linspace(0, L, N, endpoint=False)
+        u = np.cos(3 * x)
+        d1 = pd.poly_partial_1d(u, L, 1)
+        d2 = pd.poly_partial_nd(u, (L,), (1,))
+        np.testing.assert_allclose(d1, d2)
+
+
+class TestPolynomialConvergenceOrderND:
+    """The polynomial backend fits a local degree-``deg`` polynomial over a
+    radius-``r`` stencil, so a derivative of order ``k`` has formal accuracy
+    ``O(h^(deg-k+1))``.  Nothing previously checked that the N-D
+    generalization preserves that order -- the existing N-D tests only
+    compare against the spectral backend within a loose tolerance, which a
+    silently degraded stencil could still satisfy.
+
+    With the default ``deg=9, r=5`` for first derivatives, the expected rate
+    is ~9; the assertion below uses a conservative floor so it tests the
+    order without being brittle about the exact constant.
+    """
+
+    @staticmethod
+    def _smooth_field(grids):
+        return (np.cos(grids[0]) * np.cos(grids[1] + 0.3)
+                * np.cos(grids[2] + 0.7))
+
+    @staticmethod
+    def _exact_dx(grids):
+        return (-np.sin(grids[0]) * np.cos(grids[1] + 0.3)
+                * np.cos(grids[2] + 0.7))
+
+    def test_first_derivative_convergence_rate_ndim3(self):
+        L = 2 * math.pi
+        errors, hs = [], []
+        for N in (16, 32, 64):
+            x = np.linspace(0.0, L, N, endpoint=False)
+            grids = np.meshgrid(*([x] * 3), indexing="ij")
+            f = self._smooth_field(grids)
+            got = pd.poly_partial_nd(f, (L,) * 3, (1, 0, 0))
+            errors.append(float(np.max(np.abs(got - self._exact_dx(grids)))))
+            hs.append(L / N)
+
+        assert errors[1] < errors[0] and errors[2] < errors[1], (
+            f"error did not decrease under refinement: {errors}"
+        )
+        rates = [
+            math.log(errors[i] / errors[i + 1]) / math.log(hs[i] / hs[i + 1])
+            for i in range(len(errors) - 1)
+        ]
+        assert min(rates) > 7.0, (
+            f"observed convergence rates {rates} below the expected ~9 "
+            f"for the default deg=9 stencil"
+        )
+
+    @pytest.mark.slow
+    def test_accuracy_is_dimension_independent_for_a_1d_varying_field(self):
+        """A field varying along one axis only must be differentiated with
+        the *same* accuracy regardless of how many other axes exist -- the
+        stencil is separable, so extra constant directions must not degrade
+        it.  A failure here would mean the N-D stencil assembly leaks other
+        axes into the fit.
+
+        (The absolute error is not the claim -- it depends on h -- so the
+        three dimensions are compared against each other rather than against
+        a fixed threshold.)
+        """
+        # N stays small: the stencil costs O(N^ndim · (2r+1)^ndim), so ndim=4
+        # is the practical ceiling for this backend (noted in the README).
+        N, L = 12, 2 * math.pi
+        errors = {}
+        for ndim in (2, 3, 4):
+            x = np.linspace(0.0, L, N, endpoint=False)
+            grids = np.meshgrid(*([x] * ndim), indexing="ij")
+            f = np.cos(grids[0])
+            exact = -np.sin(grids[0])
+            multi_index = tuple(1 if a == 0 else 0 for a in range(ndim))
+            got = pd.poly_partial_nd(f, (L,) * ndim, multi_index)
+            errors[ndim] = float(np.max(np.abs(got - exact)))
+
+        assert errors[2] > 0, "test field is differentiated exactly; check is vacuous"
+        for ndim in (3, 4):
+            np.testing.assert_allclose(
+                errors[ndim], errors[2], rtol=1e-5,
+                err_msg=(
+                    f"accuracy degraded from ndim=2 ({errors[2]:.4e}) to "
+                    f"ndim={ndim} ({errors[ndim]:.4e}) on a field that varies "
+                    f"along one axis only"
+                ),
+            )
+
+    def test_second_derivative_convergence_rate_ndim3(self):
+        L = 2 * math.pi
+        errors, hs = [], []
+        for N in (16, 32):
+            x = np.linspace(0.0, L, N, endpoint=False)
+            grids = np.meshgrid(*([x] * 3), indexing="ij")
+            f = self._smooth_field(grids)
+            exact = -self._smooth_field(grids)  # ∂xx cos(x)·… = −(…)
+            got = pd.poly_partial_nd(f, (L,) * 3, (2, 0, 0))
+            errors.append(float(np.max(np.abs(got - exact))))
+            hs.append(L / N)
+        rate = math.log(errors[0] / errors[1]) / math.log(hs[0] / hs[1])
+        assert rate > 6.0, f"second-derivative rate {rate:.2f} below expectation"
