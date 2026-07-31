@@ -32,6 +32,7 @@ import argparse
 import csv
 import datetime
 import itertools
+import re
 import os
 import platform
 import subprocess
@@ -89,7 +90,17 @@ BRUTE_L0_PENALTIES = [1e-4, 1e-2, 1.0]  # mild, moderate, strong sparsity
 BRUTE_MAX_K = 8  # cap for libraries > 20 cols; None for <= 20
 BACKENDS = ["spectral", "polynomial"]
 WEAK_M = [4, 8, 12]
-WEAK_P = 6
+# Test-function degree is NOT a free constant: Messenger & Bortz (2021),
+# Algorithm 1, fix it from the support m and a decay tolerance, and the
+# MATLAB reference does the same in phi_int_weights.m.  It is derived per m
+# by weak_form.select_test_function_degree(m, WEAK_MAX_DERIV).
+#
+# This used to be `WEAK_P = 6` for every m, which left phi^(4) large at the
+# edge of the support and put a 3 % (m=12) to 84 % (m=8) systematic error
+# into the fourth-order weak-IBP columns -- the leading terms of CH, SH and
+# KS.  See audit/FINDINGS.md F-01.
+WEAK_MAX_DERIV = 4      # highest derivative order moved onto the test function
+WEAK_P_DIRECT = 6       # direct weak form: psi is only a window, degree is free
 SAMPLE_STRIDE = 4
 
 # (CH epsilon is stored in equations.CH_EPSILON)
@@ -175,9 +186,27 @@ def build_pointwise(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend):
     return Theta, Ft, desc
 
 
+def weak_p(m, use_ibp=True):
+    """Test-function degree for support *m*.
+
+    IBP moves derivatives onto psi, so its degree must satisfy Messenger &
+    Bortz's Algorithm 1 decay condition -- otherwise psi^(4) is still large at
+    the edge of the support and the grid sum misrepresents the integral.
+
+    The *direct* weak form never differentiates psi: there are no boundary
+    terms, psi is only an averaging window, and the same window multiplies
+    both G and b.  Those rows keep the previous fixed degree, so this change
+    moves only the weak_ibp results -- the ones F-01 showed to be wrong.
+    """
+    if not use_ibp:
+        return WEAK_P_DIRECT
+    return wf.select_test_function_degree(m, WEAK_MAX_DERIV)
+
+
 def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
                  m, use_ibp):
     """Build weak-form (G, b) for a given library and backend."""
+    WEAK_P = weak_p(m, use_ibp)
     with derivatives.use_backend(backend):
         rows_G, rows_b = [], []
         for s in range(len(f_snaps)):
@@ -351,6 +380,13 @@ def main():
         f for f in os.listdir(data_dir)
         if f.endswith(".npz") and not f.startswith(".")
         and "aniso" not in f  # skip anisotropic-noise datasets by default
+        # This script is 2-D throughout (it passes no Lz, and evaluates in a
+        # 2-D jet basis).  The n-D datasets written by generate_nd_data.py are
+        # named <equation>_nd<ndim>_<label>.npz and share the 2-D equation
+        # prefix, so an unfiltered `--equations ac` would pull in
+        # allen_cahn_nd3_*.npz and fail in axis_lengths().  Use sweep_nd.py
+        # for those.
+        and not re.search(r"_nd\d+_", f)
     ])
 
     if args.equations:
@@ -382,6 +418,25 @@ def main():
     libraries = args.libraries
     backends = args.backends
     weak_m_vals = args.weak_m
+
+    # A support too small to represent phi^(WEAK_MAX_DERIV) cannot carry the
+    # IBP formulation at *any* degree -- at m=4 the fourth-order weak-IBP
+    # column is wrong by a factor 2.4e+02 at the old fixed p=6 and 3.8e+04 at
+    # the degree Algorithm 1 prescribes.  Drop those m for weak_ibp only; the
+    # direct weak form never differentiates the test function and is fine.
+    usable_ibp_m_vals = [
+        m for m in weak_m_vals
+        if wf.test_function_is_resolved(m, weak_p(m), WEAK_MAX_DERIV)
+    ]
+    dropped = [m for m in weak_m_vals if m not in usable_ibp_m_vals]
+    if dropped and "weak_ibp" in methods:
+        print(
+            f"  [weak_ibp] skipping m={dropped}: 2m+1 grid points cannot "
+            f"resolve the degree-{[weak_p(m) for m in dropped]} test function "
+            f"needed for order-{WEAK_MAX_DERIV} integration by parts "
+            f"(see audit/FINDINGS.md F-01)"
+        )
+
     post_hoc_noises = args.post_hoc_noise or [None]
     spectral_cutoffs = [args.spectral_cutoff] if args.spectral_cutoff else [None]
     mstls_alphas = args.mstls_alpha or MSTLS_ALPHAS
@@ -561,6 +616,8 @@ def main():
                     ):
                         if method == "pointwise":
                             m_vals = [None]
+                        elif method == "weak_ibp":
+                            m_vals = usable_ibp_m_vals
                         else:
                             m_vals = weak_m_vals
 
@@ -656,7 +713,7 @@ def main():
                         elif method == "weak_direct":
                             m_vals = weak_m_vals
                         else:
-                            m_vals = weak_m_vals
+                            m_vals = usable_ibp_m_vals
 
                         for m_val in m_vals:
                             actual_key = (method, library, backend, m_val)

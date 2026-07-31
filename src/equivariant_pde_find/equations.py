@@ -213,13 +213,19 @@ def true_allen_cahn_pdefind(ndim, eps=0.15):
 def true_cahn_hilliard_pdefind(ndim, eps=CH_EPSILON):
     """Ground-truth coefficients for Cahn-Hilliard in the PDE-FIND basis.
 
-    f_t = -eps^2 * Delta^2 f + Delta f - Delta(f^3)
+    f_t = -eps^2 * Delta^2 f + Delta(f^3) - Delta f
 
-    PDE-FIND expansion (partial -- f*(first_derivative)^2 terms omitted):
+    Expanding Delta(f^3) = 3 f^2 Delta f + 6 f ||grad f||^2:
+
+    PDE-FIND expansion (partial -- f*(first_derivative)^2 terms omitted,
+    since 6*f*||grad f||^2 has no f^p * d^alpha f column):
       - Pure 4th derivatives:        -eps^2     (ndim terms)
       - Mixed 4th derivatives:       -2*eps^2   (C(ndim,2) terms)
-      - Pure 2nd derivatives:        +1         (ndim terms)
-      - f^2 * pure 2nd derivatives:  -3         (ndim terms)
+      - Pure 2nd derivatives:        -1         (ndim terms)
+      - f^2 * pure 2nd derivatives:  +3         (ndim terms)
+
+    The last two groups carry the sign of ``-Delta f`` and ``+3 f^2 Delta f``
+    respectively, matching :func:`true_cahn_hilliard` in the multigraph basis.
     """
     if not 1 <= ndim <= _MAX_NDIM:
         raise ValueError(f"ndim must be 1-{_MAX_NDIM}, got {ndim}")
@@ -233,12 +239,12 @@ def true_cahn_hilliard_pdefind(ndim, eps=CH_EPSILON):
         for j in range(i + 1, ndim):
             a, b = axes[i], axes[j]
             result[f"f_{a*2}{b*2}"] = -2.0 * (eps ** 2)
-    # Pure 2nd: f_xx, f_yy, ...
+    # Pure 2nd: f_xx, f_yy, ...  (from -Delta f)
     for a in axes:
-        result[f"f_{a*2}"] = 1.0
-    # f^2 * pure 2nd: f^2.f_xx, f^2.f_yy, ...
+        result[f"f_{a*2}"] = -1.0
+    # f^2 * pure 2nd: f^2.f_xx, f^2.f_yy, ...  (from +3 f^2 Delta f)
     for a in axes:
-        result[f"f\u00b2\u00b7f_{a*2}"] = -3.0
+        result[f"f\u00b2\u00b7f_{a*2}"] = 3.0
     return result
 
 

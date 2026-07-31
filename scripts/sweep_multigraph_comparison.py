@@ -63,8 +63,31 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 LAMS = [1e-6]
 D_TOLS = [1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 5e-2, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0]
 BACKENDS = ["spectral", "polynomial"]
+from equivariant_pde_find.library.weak_form import (  # noqa: E402
+    select_test_function_degree as _wf_select_degree,
+    test_function_is_resolved as _wf_is_resolved,
+)
+
 WEAK_M = [4, 8, 12]
-WEAK_P = 6
+# Test-function degree follows Messenger & Bortz (2021), Algorithm 1, rather
+# than a fixed constant: with a fixed p the fourth-order weak-IBP columns pick
+# up a 3 % (m=12) to 84 % (m=8) systematic error.  See audit/FINDINGS.md F-01.
+# The direct weak form never differentiates psi, so it keeps the old degree.
+WEAK_MAX_DERIV = 4
+WEAK_P_DIRECT = 6
+
+
+def weak_p(m, use_ibp=True):
+    """Test-function degree for support *m* (see WEAK_MAX_DERIV above)."""
+    if not use_ibp:
+        return WEAK_P_DIRECT
+    return _wf_select_degree(m, WEAK_MAX_DERIV)
+
+
+def weak_ibp_supports(m_values):
+    """Subset of *m_values* whose grid can represent psi^(WEAK_MAX_DERIV)."""
+    return [m for m in m_values
+            if _wf_is_resolved(m, weak_p(m), WEAK_MAX_DERIV)]
 SAMPLE_STRIDE = 4
 
 # ── truth functions per library and equation ─────────────────────────────────
@@ -121,14 +144,14 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
             if library == "multigraph":
                 G, desc = build_multigraph_library(
                     f, Lx, Ly, max_p=2, max_n=3,
-                    formulation="weak", m=m, p=WEAK_P, use_ibp=use_ibp,
+                    formulation="weak", m=m, p=weak_p(m, use_ibp), use_ibp=use_ibp,
                 )
             else:  # mod_multigraph
                 G, desc = build_mod_multigraph_library(
                     f, Lx, Ly, max_p=2, max_n=3,
-                    formulation="weak", m=m, p=WEAK_P, use_ibp=use_ibp,
+                    formulation="weak", m=m, p=weak_p(m, use_ibp), use_ibp=use_ibp,
                 )
-            b_w = build_weak_rhs(ft, m=m, p=WEAK_P)
+            b_w = build_weak_rhs(ft, m=m, p=weak_p(m, use_ibp))
 
             Nx, Ny = f.shape
             Nv_x, Nv_y = Nx - 2 * m, Ny - 2 * m
@@ -279,11 +302,11 @@ def main():
                     if lib == "multigraph":
                         _, desc_lib = build_multigraph_library(
                             f_snaps[0], Lx, Ly, max_p=2, max_n=3,
-                            formulation="weak", m=4, p=WEAK_P, use_ibp=False)
+                            formulation="weak", m=4, p=weak_p(4, False), use_ibp=False)
                     else:
                         _, desc_lib = build_mod_multigraph_library(
                             f_snaps[0], Lx, Ly, max_p=2, max_n=3,
-                            formulation="weak", m=4, p=WEAK_P, use_ibp=False)
+                            formulation="weak", m=4, p=weak_p(4, False), use_ibp=False)
                     if is_ch:
                         true_w = TRUTH_FNS[lib][true_fn_key](desc_lib, eps=ch_eps)
                     elif true_fn_key == "swift_hohenberg":
@@ -302,6 +325,16 @@ def main():
                 for lib, backend, m_val, use_ibp in itertools.product(
                     libraries, args.backends, weak_m_vals, [False, True],
                 ):
+                    # A support too small to represent psi^(WEAK_MAX_DERIV)
+                    # cannot carry the IBP formulation at any degree; the
+                    # direct weak form never differentiates psi and is fine.
+                    if use_ibp and m_val not in weak_ibp_supports([m_val]):
+                        print(f"    Skipping: lib={{lib}} m={{m_val}} ibp=True "
+                              f"(2m+1 points cannot resolve a degree-"
+                              f"{{weak_p(m_val)}} test function; "
+                              f"see audit/FINDINGS.md F-01)", flush=True)
+                        continue
+
                     method_key = "weak_ibp" if use_ibp else "weak_direct"
                     actual_key = (method_key, lib, backend, m_val)
 

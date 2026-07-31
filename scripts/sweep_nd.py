@@ -49,8 +49,31 @@ RESULTS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "results"))
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 # ── hyper-parameters ────────────────────────────────────────────────────────
+from equivariant_pde_find.library.weak_form import (  # noqa: E402
+    select_test_function_degree as _wf_select_degree,
+    test_function_is_resolved as _wf_is_resolved,
+)
+
 M_VALS = [12]          # weak-form half-support
-WEAK_P = 6             # test-function polynomial degree
+# Test-function degree follows Messenger & Bortz (2021), Algorithm 1, rather
+# than a fixed constant: with a fixed p the fourth-order weak-IBP columns pick
+# up a 3 % (m=12) to 84 % (m=8) systematic error.  See audit/FINDINGS.md F-01.
+# The direct weak form never differentiates psi, so it keeps the old degree.
+WEAK_MAX_DERIV = 4
+WEAK_P_DIRECT = 6
+
+
+def weak_p(m, use_ibp=True):
+    """Test-function degree for support *m* (see WEAK_MAX_DERIV above)."""
+    if not use_ibp:
+        return WEAK_P_DIRECT
+    return _wf_select_degree(m, WEAK_MAX_DERIV)
+
+
+def weak_ibp_supports(m_values):
+    """Subset of *m_values* whose grid can represent psi^(WEAK_MAX_DERIV)."""
+    return [m for m in m_values
+            if _wf_is_resolved(m, weak_p(m), WEAK_MAX_DERIV)]
 N_PER_SNAP = 200       # spatial samples per snapshot
 SAMPLE_STRIDE = 4
 LAM = 1e-6             # STRidge ridge penalty (legacy)
@@ -307,13 +330,13 @@ def main():
                     if builder is build_pdefind_library:
                         _, desc_tmp = builder(
                             f_snaps[0], Lx, Ly, max_order=4, max_poly=3,
-                            formulation="weak", m=M_VALS[0], p=WEAK_P,
+                            formulation="weak", m=M_VALS[0], p=weak_p(M_VALS[0]),
                             use_ibp=True, Lz=Lz,
                         )
                     else:
                         _, desc_tmp = builder(
                             f_snaps[0], Lx, Ly, max_p=2, max_n=3,
-                            formulation="weak", m=M_VALS[0], p=WEAK_P,
+                            formulation="weak", m=M_VALS[0], p=weak_p(M_VALS[0]),
                             use_ibp=True, Lz=Lz,
                         )
                     true_w = truth_fn(desc_tmp)
@@ -325,7 +348,7 @@ def main():
                     t_build = time.time()
                     G, b, desc = _build_weak_nd(
                         f_snaps, ft_snaps, idx_sets, Lx, Ly, Lz,
-                        builder, m_val, WEAK_P, use_ibp=True,
+                        builder, m_val, weak_p(m_val), use_ibp=True,
                     )
                     cond_val = cond_number(G)
                     build_ms = (time.time() - t_build) * 1000

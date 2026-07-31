@@ -507,6 +507,66 @@ def _compute_p_from_m(m, alpha_bar, tau=1e-10):
     return max(alpha_bar + 1, p_min)
 
 
+def select_test_function_degree(m, max_deriv=4, tau=1e-10):
+    """Public wrapper over :func:`_compute_p_from_m`: the degree *p* that
+    Messenger & Bortz (2021), Algorithm 1, prescribe for a support of *m*
+    grid points and derivatives up to order *max_deriv*.
+
+    The MATLAB reference computes the same quantity in
+    ``WSINDy_PDE/phi_int_weights.m``::
+
+        p = ceil(max(log(tol)/log((2*m-1)/m^2), d+1));
+
+    Using a fixed *p* instead (the sweeps previously hardcoded ``p = 6``)
+    leaves φ⁗ large at the edge of the support, and the grid sum standing in
+    for ∫ψ⁗f then carries a large quadrature error — 3 % at m=12, 84 % at
+    m=8, in the ∂⁴ columns that dominate Cahn-Hilliard, Swift-Hohenberg and
+    Kuramoto-Sivashinsky.
+
+    Always check :func:`test_function_is_resolved` before using the result:
+    for small *m* the prescribed *p* is large, and the bump becomes too
+    narrow for the grid to represent at all.
+    """
+    return _compute_p_from_m(m, max_deriv, tau)
+
+
+def test_function_is_resolved(m, p, max_deriv=4):
+    """Whether a (m, p) test function can actually be represented on the grid.
+
+    φ(t) = (1 − t²)^p concentrates as p grows: its core has half-width
+    ≈ 1/√p in t, i.e. ≈ m/√p grid points.  Resolving the max_deriv-th
+    derivative needs several points across that core, so we require
+
+        m >= 2 * sqrt(p)
+
+    (about 4 points across the core).  Measured relative error of the ∂⁴
+    weak-IBP column against a refined-grid reference, at the p prescribed by
+    :func:`select_test_function_degree`:
+
+        m=4  (p=28)  3.8e+04   <- fails the criterion, unusable
+        m=6  (p=20)  9.9e-02   <- fails the criterion
+        m=8  (p=16)  4.9e-04   <- passes, marginally
+        m=12 (p=13)  5.1e-06   <- passes comfortably
+
+    A support that fails this cannot support IBP of that derivative order at
+    *any* degree: at m=4 the fixed p=6 gives 2.4e+02 and the prescribed p=28
+    gives 3.8e+04.  Nine grid points cannot carry a fourth derivative.
+
+    Parameters
+    ----------
+    m : int — test-function half-support, in grid points
+    p : int — test-function polynomial degree
+    max_deriv : int — highest derivative order moved onto the test function
+
+    Returns
+    -------
+    bool
+    """
+    if max_deriv <= 0:
+        return True
+    return m >= 2.0 * math.sqrt(p)
+
+
 def auto_test_function_params(
     U, dx, dt=1.0, max_deriv_spatial=4, max_deriv_temporal=1,
     tau=1e-10, tau_hat=2.0,

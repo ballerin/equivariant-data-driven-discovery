@@ -139,16 +139,33 @@ class TestTrueCahnHilliardPdefind:
         assert result["f_yyzz"] == pytest.approx(-0.08)
 
     def test_pure_2nd_coefficients(self):
-        """Pure 2nd derivatives have coeff +1."""
+        """Pure 2nd derivatives have coeff -1, from the -Delta f term."""
         result = true_cahn_hilliard_pdefind(2, eps=0.2)
-        assert result["f_xx"] == 1.0
-        assert result["f_yy"] == 1.0
+        assert result["f_xx"] == -1.0
+        assert result["f_yy"] == -1.0
 
     def test_f2_2nd_coefficients(self):
-        """f^2 * pure 2nd derivatives have coeff -3."""
+        """f^2 * pure 2nd derivatives have coeff +3, from +3 f^2 Delta f."""
         result = true_cahn_hilliard_pdefind(2, eps=0.2)
-        assert result["f\u00b2\u00b7f_xx"] == -3.0
-        assert result["f\u00b2\u00b7f_yy"] == -3.0
+        assert result["f\u00b2\u00b7f_xx"] == 3.0
+        assert result["f\u00b2\u00b7f_yy"] == 3.0
+
+    def test_signs_match_the_multigraph_ground_truth(self):
+        """The same equation must get the same signs in both bases.
+
+        ``true_cahn_hilliard`` (multigraph) and ``true_cahn_hilliard_pdefind``
+        describe one PDE; disagreeing signs on Delta f / f^2 Delta f is what
+        made the PDE-FIND baseline score against a wrong truth vector.
+        """
+        from equivariant_pde_find.equations import true_cahn_hilliard
+        from equivariant_pde_find.multigraph_operators import get_operators
+
+        desc_mg = [d for _fn, d in get_operators(2, 3)]
+        w_mg = true_cahn_hilliard(desc_mg, eps=0.2)
+        pdefind = true_cahn_hilliard_pdefind(2, eps=0.2)
+
+        assert np.sign(w_mg[desc_mg.index("\u0394f")]) == np.sign(pdefind["f_xx"])
+        assert np.sign(w_mg[desc_mg.index("f\u00b2\u00b7\u0394f")]) == np.sign(pdefind["f\u00b2\u00b7f_xx"])
 
     def test_term_count_formula(self):
         """General formula: 3*ndim + C(ndim,2)."""

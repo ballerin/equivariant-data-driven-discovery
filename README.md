@@ -68,6 +68,19 @@ python scripts/generate_data.py --noise 0.0 0.02
 
 Output: `.npz` files in `data/` plus a `data/manifest.csv` index.
 
+##### How the noise level is scaled
+
+A noise level is a fraction of the field's standard deviation — but *which* standard
+deviation differs by code path, so the same number does not mean the same thing everywhere:
+
+| Path | Noise standard deviation |
+|---|---|
+| `generate_data.py` (all 2-D datasets), via the simulators' `obs_noise` | fraction of the **global** std, taken over every snapshot at once |
+| `generate_nd_data.py` (all `*_nd*` datasets) | fraction of **each snapshot's own** std |
+| `sweep.py --post-hoc-noise` | fraction of **each snapshot's own** std |
+
+TODO: make this uniform
+
 #### 2. Run the main ablation sweep
 
 Full sweep (all libraries, formulations, backends, and regression algorithms).
@@ -226,7 +239,19 @@ Output: `results/sweep_nd_<YYYYMMDD>_<HHMMSS>_<name>.csv`.
 
 We compare classes of libraries with maximum order `max_p=2` and maximum polynomial degree `max_n=3` for the 2D flat settings.
 
-Notice that in general the terms in the library are not linearly independent. In particular, the equivariant library has 20 operators but only 18 are linearly independent as shown in [1].
+Notice that in general the terms in the library are not linearly independent.
+
+For the equivariant library, whether the multigraph operators are linearly independent **depends on the dimension of the underlying space** — this is one of the main points of [2], whose abstract describes the classification as revealing "non-trivial linear dependence relations between nonlinear differential operators relative to the dimension of the manifold". Concretely:
+
+- **Up to total order 4** (`max_p=2`, the setting used throughout this repository), the count is the same in every dimension $d \ge 2$ and all **20 operators are linearly independent**, in 2D as well as in higher dimensions. This is the complete, non-redundant basis of [1, Table 2]. `tests/test_multigraph_operators.py` pins the set and its ordering; `audit/repro/A3_basis_rank.py` measures the rank as 20 for $d \in \{2, 3, 4\}$, both from the symbolic jet decomposition and numerically from operator values.
+- **At total order 6** (`max_p=3`) the dimension starts to matter. Of the 11 multigraph operators with 3 edges, exactly **two become linearly dependent when $d = 2$** — they are identically zero there, and non-zero for every $d \ge 3$. This is the theorem in [2] on the operators $P^{\beta_0}, Q^{\beta_0}$, which generate the kernel of the multigraph-to-operator map restricted to 3-edge multigraphs precisely when $d = 2$:
+
+  $$P f = \|\nabla f\|^2 (\Delta f)^2 - \|\nabla f\|^2\|\nabla^2 f\|^2 + 2\|\nabla^2 f(\nabla f,\cdot)\|^2 - 2\Delta f\cdot\nabla^2 f(\nabla f,\nabla f)$$
+  $$Q f = (\Delta f)^3 - 3\Delta f\,\|\nabla^2 f\|^2 + 2\,\mathrm{tr}\,(\nabla^2 f)^3$$
+
+  ($Q$ vanishing in 2D is the Cayley–Hamilton identity for the $2\times2$ Hessian.) So a $d = 2$ order-6 basis has 9 independent operators where a $d \ge 3$ basis has 11. `multigraph_operators.py` encodes this with the `excluded_2d` flag, and `audit/repro/A2_A6_equivariance_identities.py` verifies both identities hold exactly at $d=2$ and fail at $d=3$.
+
+In short: the two dependent operators are a **$d=2$, order-6** phenomenon, and they do not touch the 20-operator order-4 library used for the results below.
 
 | Library | Form | # terms | $O(2)$-equivariant | Linear | Spanning |
 |---|---|---|---|---|---|
@@ -235,6 +260,8 @@ Notice that in general the terms in the library are not linearly independent. In
 | Polynomial jet | monomials in jet variables | 105 | ❌ | ❌ | ✅ |
 | Multigraph | multigraph operators | 20 | ✅ | ❌ | ✅ |
 | Modified Multigraph | multigraph operators | 20 | ✅ | ~ | ✅ |
+
+Here **Linear** means the library's terms are linear differential operators applied to monomials in $f$ — so integration by parts can move the derivative onto the test function in the weak formulation.
 
 ## Multigraph operator library — O(2)-equivariant
 

@@ -228,18 +228,54 @@ def test_true_allen_cahn_pdefind_3d():
 
 def test_true_cahn_hilliard_pdefind_2d():
     result = true_cahn_hilliard_pdefind(2, eps=0.2)
-    # Pure 4th
+    # Pure 4th, from -eps^2 * Delta^2 f
     assert result["f_xxxx"] == pytest.approx(-0.04)
     assert result["f_yyyy"] == pytest.approx(-0.04)
     # Mixed 4th
     assert result["f_xxyy"] == pytest.approx(-0.08)
-    # Pure 2nd
-    assert result["f_xx"] == 1.0
-    assert result["f_yy"] == 1.0
-    # f² * pure 2nd
-    assert result["f²·f_xx"] == -3.0
-    assert result["f²·f_yy"] == -3.0
+    # Pure 2nd, from -Delta f
+    assert result["f_xx"] == -1.0
+    assert result["f_yy"] == -1.0
+    # f² * pure 2nd, from +3 f^2 Delta f (half of Delta(f^3))
+    assert result["f²·f_xx"] == 3.0
+    assert result["f²·f_yy"] == 3.0
     assert len(result) == 7
+
+
+def test_true_cahn_hilliard_pdefind_matches_the_equation():
+    """Check the truth vector against Cahn-Hilliard itself, not against
+    pinned constants.
+
+    Θ·w_true must reproduce the CH right-hand side minus the single term the
+    PDE-FIND library cannot represent (6·f·‖∇f‖², a product of two first
+    derivatives).  Signs that merely *look* consistent do not survive this.
+    """
+    from equivariant_pde_find import derivatives
+    from equivariant_pde_find.library import build_pdefind_library
+
+    eps, L, N = 0.2, 2 * np.pi, 32
+    x = np.arange(N) * L / N
+    X, Y = np.meshgrid(x, x, indexing="ij")
+    f = 0.4 * np.cos(X) + 0.3 * np.sin(2 * Y) + 0.2 * np.cos(X + Y)
+
+    with derivatives.use_backend("spectral"):
+        rhs = (
+            -(eps**2) * derivatives.bilaplacian(f, L, L)
+            + derivatives.laplacian(f**3, L, L)
+            - derivatives.laplacian(f, L, L)
+        )
+        grad_sq = sum(g**2 for g in derivatives.grad(f, L, L))
+        target = (rhs - 6.0 * f * grad_sq).ravel()
+
+        Theta, desc = build_pdefind_library(f, L, L, max_order=4, max_poly=3)
+
+    truth = true_cahn_hilliard_pdefind(2, eps=eps)
+    w = np.zeros(len(desc))
+    for name, coeff in truth.items():
+        w[desc.index(name)] = coeff
+
+    rel = np.linalg.norm(Theta @ w - target) / np.linalg.norm(target)
+    assert rel < 1e-3, f"truth vector does not reproduce Cahn-Hilliard: rel={rel:.3e}"
 
 
 def test_true_allen_cahn_pdefind_raises_invalid_ndim():

@@ -65,3 +65,6 @@ Thumbs.db
 *.dylib
 *.dll
 *.exe
+
+# Local files not meant to be pushed on the repo
+LOCAL/
