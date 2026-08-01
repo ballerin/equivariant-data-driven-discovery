@@ -257,9 +257,18 @@ In short: the two dependent operators are a **$d=2$, order-6** phenomenon, and t
 |---|---|---|---|---|---|
 | PDE-FIND | $f^p \cdot \partial^a f$ | 60 | ❌ | ❌ | ❌ |
 | WSINDy | $\partial^\alpha f^\beta$ | 46 | ❌ | ✅ | ❌ |
-| Polynomial jet | monomials in jet variables | 105 | ❌ | ❌ | ✅ |
+| Polynomial jet | monomials in jet variables | 105 (capped) | ❌ | ❌ | ✅ |
 | Multigraph | multigraph operators | 20 | ✅ | ❌ | ✅ |
 | Modified Multigraph | multigraph operators | 20 | ✅ | ~ | ✅ |
+
+The polynomial-jet count of 105 is for the **capped** enumeration
+(``build_polyjet_library`` with ``max_order=4, max_degree=3``).  For
+cross-library evaluation the code uses a **dynamic** polynomial-jet library
+(``build_polyjet_from_descriptions``) that contains exactly the monomials
+needed to represent the operators in all libraries being compared, typically
+60–70 columns instead of 105.  See ``library/conversions.py``
+(``collect_needed_jet_monomials``) and ``evaluation.py``
+(``build_eval_theta_jet``).
 
 Here **Linear** means the library's terms are linear differential operators applied to monomials in $f$ — so integration by parts can move the derivative onto the test function in the weak formulation.
 
@@ -342,7 +351,9 @@ $$E = \frac{\|\Theta (\xi - \xi_{\mathrm{true}})\|_2}{\|\Theta \xi_{\mathrm{true
 
 where $\Theta$ is the library matrix, $\xi$ is the recovered coefficient vector, and $\xi_{\mathrm{true}}$ is the ground-truth coefficient vector. The denominator uses $\Theta \xi_{\mathrm{true}}$ (the true dynamics), *not* the observed $f_t$, so the metric is independent of observation noise in the time derivative.
 
-This is a good metric if the PDE to recover is representable in the library, but it can be misleading if the library is missing key operators. For this reason we convert all terms to polynomial jet form and compute fp/fn counts and $E$ in that basis, so that all libraries are compared on equal footing.
+This is a good metric if the PDE to recover is representable in the library, but it can be misleading if the library is missing key operators. For this reason we convert all terms to a **common polynomial-jet basis** and compute fp/fn counts and $E$ in that basis, so that all libraries are compared on equal footing.
+
+The jet basis is built **dynamically**: ``collect_needed_jet_monomials`` (in ``library/conversions.py``) unions the analytic jet-space decompositions of every operator in every library being compared, and ``build_polyjet_from_descriptions`` (in ``library/polyjet.py``) builds exactly those columns.  This guarantees that every library operator is representable in the evaluation space without silent truncation.  The top-level entry point is ``evaluation.build_eval_theta_jet(jet_monomials=...)``.
 
 
 # References

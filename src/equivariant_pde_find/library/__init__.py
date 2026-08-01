@@ -145,6 +145,13 @@ def build_polyjet_library(f, Lx, Ly, max_order=4, max_degree=3,
 
     For max_order=4 and max_degree=3 this gives 105 columns (2-D).
 
+    .. note::
+       This enumerates *all* monomials satisfying the degree/order caps.
+       For cross-library evaluation where only the monomials needed to
+       represent specific operators are required, use
+       :func:`build_polyjet_from_descriptions` together with
+       ``collect_needed_jet_monomials`` from ``library.conversions``.
+
     Parameters
     ----------
     f          : ndarray, shape (N_1, ..., N_ndim) - data
@@ -166,6 +173,49 @@ def build_polyjet_library(f, Lx, Ly, max_order=4, max_degree=3,
         from .polyjet import _build_polyjet_weak
         return _build_polyjet_weak(f, Lx, Ly, max_order,
                                    max_degree, Lz=Lz, **weak_kwargs)
+    else:
+        raise ValueError(
+            f"Unknown formulation {formulation!r}. "
+            f"Expected 'pointwise' or 'weak'."
+        )
+
+
+def build_polyjet_from_descriptions(f, Lx, Ly, descriptions,
+                                    formulation="pointwise", Lz=None,
+                                    **weak_kwargs):
+    """Build a polynomial-jet library from an explicit list of monomial names.
+
+    Unlike ``build_polyjet_library``, which enumerates all monomials under
+    ``max_order``/``max_degree`` caps, this builds exactly the columns named
+    in *descriptions*.  The set of monomials is typically produced by
+    ``collect_needed_jet_monomials`` from ``library.conversions``.
+
+    This is the builder used by ``evaluation.build_eval_theta_jet`` when
+    ``jet_monomials`` is provided — the recommended path for cross-library
+    evaluation.
+
+    Parameters
+    ----------
+    f : ndarray, shape (N_1, ..., N_ndim)
+    Lx, Ly, Lz : float — domain lengths
+    descriptions : list of str
+        Monomial description strings (canonical format from
+        ``_describe_exponents`` / ``describe_monomial``).
+    formulation : {"pointwise", "weak"}
+        Only ``"pointwise"`` is currently supported.
+
+    Returns
+    -------
+    Theta : ndarray, shape (f.size, len(descriptions))  [pointwise]
+    descriptions : list of str (echoed back for API consistency)
+    """
+    if formulation == "pointwise":
+        from .polyjet import _build_polyjet_from_descriptions
+        return _build_polyjet_from_descriptions(f, Lx, Ly, descriptions, Lz=Lz)
+    elif formulation == "weak":
+        raise NotImplementedError(
+            "Weak-form dynamic polyjet is not yet implemented."
+        )
     else:
         raise ValueError(
             f"Unknown formulation {formulation!r}. "

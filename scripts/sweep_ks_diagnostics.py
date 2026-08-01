@@ -32,12 +32,12 @@ from equivariant_pde_find.evaluation import (  # noqa: E402
 )
 from equivariant_pde_find.library.conversions import (  # noqa: E402
     map_multigraph_to_jet, map_mod_multigraph_to_jet,
+    collect_needed_jet_monomials,
 )
 from equivariant_pde_find.equations import (  # noqa: E402
     true_ks, normalize_eq_name,
 )
 from equivariant_pde_find.library import (  # noqa: E402
-    build_polyjet_library,
     build_multigraph_library,
     build_mod_multigraph_library,
 )
@@ -267,8 +267,15 @@ def main():
             Tj = np.vstack(rows_theta)
             Ftj = np.concatenate(rows_ft)
             eval_theta = (Tj, Ftj)
-            _, desc_jet = build_polyjet_library(
-                snapshots[0], Lx, Ly, max_order=4, max_degree=3,
+            # Dynamic jet: union of multigraph bases
+            _, desc_mg_jet = build_multigraph_library(
+                f_snaps[0], Lx, Ly, max_p=2, max_n=3,
+            )
+            _, desc_mod_jet = build_mod_multigraph_library(
+                f_snaps[0], Lx, Ly, max_p=2, max_n=3,
+            )
+            desc_jet = collect_needed_jet_monomials(
+                desc_mg=desc_mg_jet, desc_mod_mg=desc_mod_jet,
             )
 
             # Build ground truth in jet basis for each library

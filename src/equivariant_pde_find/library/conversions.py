@@ -415,3 +415,93 @@ def map_mod_multigraph_to_jet(w_mod, desc_mod, desc_jet, ndim=2):
         for jet_name, mult in decomposition[name]:
             w_jet[desc_jet.index(jet_name)] += coeff * mult
     return w_jet
+
+
+# =====================================================================================
+# Part 3: Dynamic polyjet monomial collection
+# =====================================================================================
+# Given the description lists of any subset of libraries, return the union of
+# all jet monomials that appear in their analytic decompositions.  The returned
+# list IS a valid ``desc_jet`` for use in evaluation.
+# =====================================================================================
+
+from ..jet_algebra import JetExpr, expr_to_dict, parse_jet_monomial
+
+
+def collect_needed_jet_monomials(desc_mg=None, desc_pdefind=None,
+                                 desc_ws=None, desc_mod_mg=None,
+                                 ndim=2):
+    """Return the sorted union of jet monomials needed to represent all
+    operators from the given library description lists.
+
+    Each parameter is optional; ``None`` means "no operators of this type".
+    The constant ``"1"`` is always included.
+
+    Parameters
+    ----------
+    desc_mg : list of str or None
+        Multigraph operator descriptions (from ``build_multigraph_library``).
+    desc_pdefind : list of str or None
+        PDE-FIND column descriptions (from ``build_pdefind_library``).
+        These ARE jet monomial names directly.
+    desc_ws : list of str or None
+        WSINDy column descriptions (from ``build_wsindy_library``).
+    desc_mod_mg : list of str or None
+        Modified multigraph operator descriptions.
+    ndim : int
+        Spatial dimension (default 2).
+
+    Returns
+    -------
+    list of str
+        Sorted list of unique jet monomial description strings.
+    """
+    needed = {"1"}  # always include the constant
+
+    # Multigraph decomposition
+    if desc_mg is not None:
+        decomp = _multigraph_to_jet_decomposition(ndim)
+        for name in desc_mg:
+            for jet_name, _coeff in decomp.get(name, []):
+                needed.add(jet_name)
+
+    # Modified multigraph decomposition
+    if desc_mod_mg is not None:
+        decomp = _mod_multigraph_to_jet_decomposition(ndim)
+        for name in desc_mod_mg:
+            for jet_name, _coeff in decomp.get(name, []):
+                needed.add(jet_name)
+
+    # PDE-FIND: columns ARE jet monomials
+    if desc_pdefind is not None:
+        needed.update(desc_pdefind)
+
+    # WSINDy: expand ∂^α(f^q) via symbolic Leibniz rule
+    if desc_ws is not None:
+        for desc in desc_ws:
+            mi, q = _parse_wsindy_desc(desc, ndim)
+            if q == 0:
+                continue  # constant already included
+            expr = JetExpr.var(ndim) ** q
+            for axis, a in enumerate(mi):
+                for _ in range(a):
+                    expr = expr.deriv(axis)
+            needed.update(expr_to_dict(expr).keys())
+
+    # Sort by (total differential order, total degree, description) to match
+    # the enumerate_jet_monomials convention from polyjet.py.
+    def _sort_key(name):
+        if name == "1":
+            return (0, 0, "")
+        exponents = parse_jet_monomial(name, ndim)
+        total_order = sum(exp * sum(mi) for mi, exp in exponents.items())
+        total_degree = sum(exponents.values())
+        return (total_order, total_degree, name)
+
+    return sorted(needed, key=_sort_key)
+
+
+def collect_needed_jet_monomials_from_multigraph(desc_mg, ndim=2):
+    """Convenience wrapper for the common test case: only multigraph
+    descriptions are available."""
+    return collect_needed_jet_monomials(desc_mg=desc_mg, ndim=ndim)

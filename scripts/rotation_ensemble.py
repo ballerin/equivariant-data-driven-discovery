@@ -54,6 +54,7 @@ from equivariant_pde_find.evaluation import (  # noqa: E402
 )
 from equivariant_pde_find.library.conversions import (  # noqa: E402
     _MULTIGRAPH_TO_JET_DECOMPOSITION,
+    collect_needed_jet_monomials,
 )
 from equivariant_pde_find.equations import (  # noqa: E402
     find_op, true_allen_cahn, true_swift_hohenberg, true_ks,
@@ -282,24 +283,34 @@ def main():
 
     true_fn, skip_frac, mask_fn = _get_meta(eq_name)
 
+    # Build ground truth in jet basis
+    _, desc_eq_ref = build_multigraph_library(snapshots_orig[0], Lx, Ly,
+                                                max_p=2, max_n=3)
+    true_eq = true_fn(desc_eq_ref)
+
     # ── pre-build per-backend evaluation Theta (polynomial jet) ─────────
     print("Pre-building evaluation Theta (polynomial jet, all points)...", end=" ", flush=True)
     t0 = time.time()
+    # Dynamic jet: union of all library decompositions
+    _, desc_pdefind = build_pdefind_library(
+        snapshots_orig[0], Lx, Ly, max_order=4, max_poly=3,
+    )
+    _, desc_ws = build_wsindy_library(
+        snapshots_orig[0], Lx, Ly, max_order=4, max_poly=3,
+    )
+    desc_jet = collect_needed_jet_monomials(
+        desc_mg=desc_eq_ref, desc_pdefind=desc_pdefind, desc_ws=desc_ws,
+    )
     eval_thetas = {}
     for b in args.backends:
         Tj, Ftj = build_eval_theta_jet(
             snapshots_orig, times, Lx, Ly,
             skip_fraction=skip_frac, seed=0, backend=b,
+            jet_monomials=desc_jet,
         )
         eval_thetas[b] = (Tj, Ftj)
-    from equivariant_pde_find.library import build_polyjet_library as _bpl
-    _, desc_jet = _bpl(snapshots_orig[0], Lx, Ly, max_order=4, max_degree=3)
     print(f"done ({time.time() - t0:.1f}s)")
 
-    # Build ground truth in jet basis
-    _, desc_eq_ref = build_multigraph_library(snapshots_orig[0], Lx, Ly,
-                                                max_p=2, max_n=3)
-    true_eq = true_fn(desc_eq_ref)
     true_jet = np.zeros(len(desc_jet))
     for j, (name, coeff) in enumerate(zip(desc_eq_ref, true_eq)):
         if abs(coeff) < 1e-12:

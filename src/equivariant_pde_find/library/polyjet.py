@@ -13,7 +13,7 @@ jet_algebra.AXIS_LABELS (w, v, u, t, s), so this supports up to ndim=8.
 import numpy as np
 
 from .. import derivatives as _derivatives
-from ..jet_algebra import AXIS_LABELS
+from ..jet_algebra import AXIS_LABELS, parse_jet_monomial
 from ._nd_common import enumerate_multi_indices, compute_derivs_nd
 
 
@@ -104,6 +104,69 @@ def _build_polyjet_pointwise(f, Lx, Ly, max_order=4, max_degree=3, Lz=None):
         descs.append(_describe_exponents(exponents, jet_names))
 
     return np.column_stack(cols), descs
+
+
+def _build_polyjet_from_descriptions(f, Lx, Ly, descriptions, Lz=None):
+    """Build a polynomial-jet library from an explicit list of monomial
+    description strings (rather than enumerating all monomials under caps).
+
+    This is the dynamic counterpart of ``_build_polyjet_pointwise``: instead
+    of a recursive enumeration bounded by max_order/max_degree, it builds
+    exactly the columns named in *descriptions*.  The union of all needed
+    jet variables is computed first so that ``compute_derivs_nd`` is called
+    only once.
+
+    Parameters
+    ----------
+    f : ndarray, shape (N_1, ..., N_ndim)
+    Lx, Ly, Lz : float — domain lengths
+    descriptions : list of str
+        Monomial description strings in the canonical format produced by
+        ``_describe_exponents`` / ``describe_monomial``.
+
+    Returns
+    -------
+    Theta : ndarray, shape (f.size, len(descriptions))
+    descriptions : list of str (the same list, returned for API consistency)
+    """
+    method = _derivatives.get_backend()
+    ndim = f.ndim
+    Ls = _derivatives.axis_lengths(f, Lx, Ly, Lz)
+
+    # Parse all descriptions and collect the union of needed jet variables
+    all_exponents = []
+    needed_mi = set()
+    for desc in descriptions:
+        exponents = parse_jet_monomial(desc, ndim)
+        all_exponents.append(exponents)
+        needed_mi.update(exponents.keys())
+
+    # Include (0,...,0) for "f" itself, always
+    zero_mi = (0,) * ndim
+    needed_mi.add(zero_mi)
+
+    # Build jet variable names for description formatting
+    jet_names = {}
+    jet_names[zero_mi] = "f"
+    for mi in needed_mi:
+        if mi == zero_mi:
+            continue
+        parts = "".join(AXIS_LABELS[i] * a for i, a in enumerate(mi) if a)
+        jet_names[mi] = "f_" + parts
+
+    multi_indices = list(needed_mi)
+    jet_fields = compute_derivs_nd(f, Ls, multi_indices, method, zero_value="f")
+    # f itself is available as jet_fields[zero_mi]
+
+    cols = []
+    for exponents in all_exponents:
+        col = np.ones_like(f)
+        for mi, exp in exponents.items():
+            if exp > 0:
+                col = col * (jet_fields[mi] ** exp)
+        cols.append(col.ravel())
+
+    return np.column_stack(cols), list(descriptions)
 
 
 def enumerate_jet_monomials(jet_vars, max_order, max_degree):

@@ -99,7 +99,8 @@ def build_eval_theta_multigraphs(snapshots, times, Lx, Ly,
 
 
 def build_eval_theta_jet(snapshots, times, Lx, Ly,
-                          skip_fraction=0.0, seed=0, backend=None):
+                          skip_fraction=0.0, seed=0, backend=None,
+                          jet_monomials=None):
     """Build the polynomial-jet Theta and Ft for unified evaluation.
 
     This is the **recommended** evaluation entry point for cross-library
@@ -119,6 +120,11 @@ def build_eval_theta_jet(snapshots, times, Lx, Ly,
     backend    : str/None - derivative backend ("spectral" or
                     "polynomial").  If None, fallback to the currently
                     configured backend (default: "spectral").
+    jet_monomials : list of str or None
+        If provided, build exactly these monomials via the dynamic builder
+        (``build_polyjet_from_descriptions``).  If None (default), use the
+        legacy capped builder (``build_polyjet_library`` with
+        max_order=4, max_degree=3).
 
     Returns
     -------
@@ -126,6 +132,7 @@ def build_eval_theta_jet(snapshots, times, Lx, Ly,
     Ft    : ndarray (n_total,)       - time derivative on ALL grid points
     """
     from . import derivatives as _deriv
+    from .library import build_polyjet_from_descriptions as _bpfj
 
     if backend is None:
         backend = _deriv.get_backend()
@@ -137,9 +144,12 @@ def build_eval_theta_jet(snapshots, times, Lx, Ly,
         )
         rows_theta, rows_ft = [], []
         for s in range(len(f_snaps)):
-            T, _ = build_polyjet_library(
-                f_snaps[s], Lx, Ly, max_order=4, max_degree=3,
-            )
+            if jet_monomials is not None:
+                T, _ = _bpfj(f_snaps[s], Lx, Ly, jet_monomials)
+            else:
+                T, _ = build_polyjet_library(
+                    f_snaps[s], Lx, Ly, max_order=4, max_degree=3,
+                )
             rows_theta.append(T)
             rows_ft.append(ft_snaps[s].ravel())
         return np.vstack(rows_theta), np.concatenate(rows_ft)
@@ -173,7 +183,15 @@ def evaluate_unified(w, library, desc_lib, desc_jet, Theta_jet, Ft,
     elif library == "wsindy" and M_ws_to_jet is not None:
         w_jet = map_wsindy_to_jet(w, M_ws_to_jet)
     elif library == "polyjet":
-        w_jet = w
+        # Name-based mapping: the regression polyjet may differ from the
+        # evaluation polyjet (e.g., old capped 105 cols vs new dynamic ~65).
+        # Map by column name, matching the logic of map_standard_to_jet.
+        w_jet = np.zeros(len(desc_jet))
+        for j, desc in enumerate(desc_lib):
+            if abs(w[j]) < 1e-14:
+                continue
+            if desc in desc_jet:
+                w_jet[desc_jet.index(desc)] += w[j]
     else:
         # Fallback: use library's own Theta
         return evaluate_from_theta(w, true_jet, Theta_jet, Ft)

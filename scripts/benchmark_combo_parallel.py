@@ -32,8 +32,11 @@ CODE_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "src"))
 sys.path.insert(0, CODE_DIR)
 
 from equivariant_pde_find import derivatives
-from equivariant_pde_find.library import build_multigraph_library, build_polyjet_library
-from equivariant_pde_find.library.conversions import _MULTIGRAPH_TO_JET_DECOMPOSITION
+from equivariant_pde_find.library import build_multigraph_library
+from equivariant_pde_find.library.conversions import (
+    _MULTIGRAPH_TO_JET_DECOMPOSITION,
+    collect_needed_jet_monomials_from_multigraph,
+)
 from equivariant_pde_find.evaluation import build_eval_theta_jet, evaluate_unified
 from equivariant_pde_find.equations import true_allen_cahn
 from equivariant_pde_find.regression import TrainSTRidge
@@ -75,10 +78,8 @@ def load_and_build():
     # Ground truth
     true_eq = true_allen_cahn(desc, eps=0.15)
 
-    # Jet descriptions for evaluation
-    _, desc_jet = build_polyjet_library(
-        snapshots[0], Lx, Ly, max_order=4, max_degree=3,
-    )
+    # Jet descriptions for evaluation (dynamic, from multigraph decomposition)
+    desc_jet = collect_needed_jet_monomials_from_multigraph(desc)
     true_jet = np.zeros(len(desc_jet))
     for j, (name, coeff) in enumerate(zip(desc, true_eq)):
         if abs(coeff) < 1e-12:
@@ -91,6 +92,7 @@ def load_and_build():
     # Evaluation Theta (for unified metric)
     Theta_eval, Ft_eval = build_eval_theta_jet(
         snapshots, times, Lx, Ly, skip_fraction=0.0, seed=0, backend="spectral",
+        jet_monomials=desc_jet,
     )
 
     return Theta, Ft, desc, true_eq, desc_jet, true_jet, Theta_eval, Ft_eval

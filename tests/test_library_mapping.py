@@ -31,6 +31,8 @@ from equivariant_pde_find.library.conversions import (
     map_mod_multigraph_to_jet,
     map_standard_to_jet,
     map_wsindy_to_jet,
+    collect_needed_jet_monomials,
+    collect_needed_jet_monomials_from_multigraph,
 )
 from equivariant_pde_find.jet_algebra import JetExpr, expr_to_dict
 from equivariant_pde_find.library import (
@@ -352,3 +354,134 @@ def test_allen_cahn_all_bases_agree():
     # All must agree
     np.testing.assert_allclose(w_jet_mg, w_jet_mod, atol=1e-12)
     np.testing.assert_allclose(w_jet_mg, w_jet_std, atol=1e-12)
+
+
+# ======================================================================
+# collect_needed_jet_monomials
+# ======================================================================
+
+
+class TestCollectNeededJetMonomials:
+    """Tests for collect_needed_jet_monomials."""
+
+    def test_collect_from_multigraph_only(self):
+        """With only multigraph descriptions, returns monomials for all ops."""
+        N, L = 32, 2 * math.pi
+        rng = np.random.default_rng(42)
+        f = rng.standard_normal((N, N))
+        _, desc_mg = build_multigraph_library(f, L, L, max_p=2, max_n=3)
+
+        result = collect_needed_jet_monomials(desc_mg=desc_mg)
+
+        # Must contain the constant
+        assert "1" in result
+        # Must contain basic monomials from AC/SH truth
+        assert "f" in result
+        assert "f³" in result
+        assert "f_xx" in result
+        assert "f_yy" in result
+        assert "f_xxxx" in result
+        assert "f_xxyy" in result
+        assert "f_yyyy" in result
+        # Must contain monomials from CH/PME
+        assert "f²·f_xx" in result
+        assert "f·f_x²" in result
+        # Must contain ‖∇f‖² monomials (KS)
+        assert "f_x²" in result
+        assert "f_y²" in result
+        # Must be sorted: 1 first
+        assert result[0] == "1"
+
+    def test_collect_with_none_params(self):
+        """All-None returns just ['1']."""
+        result = collect_needed_jet_monomials()
+        assert result == ["1"]
+
+    def test_collect_with_partial_params(self):
+        """Missing params are treated as no operators."""
+        N, L = 32, 2 * math.pi
+        rng = np.random.default_rng(42)
+        f = rng.standard_normal((N, N))
+        _, desc_mg = build_multigraph_library(f, L, L, max_p=2, max_n=3)
+
+        result_full = collect_needed_jet_monomials(desc_mg=desc_mg)
+        result_partial = collect_needed_jet_monomials(
+            desc_mg=desc_mg, desc_pdefind=None, desc_ws=None,
+        )
+        assert result_full == result_partial
+
+    def test_collect_includes_pdefind_cubics(self):
+        """With pdefind descriptions, f³·f_x etc. must appear (the
+        previously-silently-dropped columns)."""
+        N, L = 32, 2 * math.pi
+        rng = np.random.default_rng(42)
+        f = rng.standard_normal((N, N))
+        _, desc_mg = build_multigraph_library(f, L, L, max_p=2, max_n=3)
+        _, desc_pdefind = build_pdefind_library(f, L, L, max_order=4, max_poly=3)
+
+        result = collect_needed_jet_monomials(
+            desc_mg=desc_mg, desc_pdefind=desc_pdefind,
+        )
+
+        # f³ alone (no derivative) is in the multigraph decomposition too,
+        # but f³·f_x, f³·f_xx etc. are NOT — they only come from pdefind.
+        assert "f³·f_x" in result, "f³·f_x should be included (from pdefind)"
+        assert "f³·f_xx" in result, "f³·f_xx should be included (from pdefind)"
+        assert "f³·f_xxxx" in result, "f³·f_xxxx should be included (from pdefind)"
+
+    def test_collect_deterministic_order(self):
+        """Same inputs → same output (sorted deterministically)."""
+        N, L = 32, 2 * math.pi
+        rng = np.random.default_rng(42)
+        f = rng.standard_normal((N, N))
+        _, desc_mg = build_multigraph_library(f, L, L, max_p=2, max_n=3)
+
+        r1 = collect_needed_jet_monomials(desc_mg=desc_mg)
+        r2 = collect_needed_jet_monomials(desc_mg=desc_mg)
+        assert r1 == r2
+
+    def test_collect_from_multigraph_convenience(self):
+        """Convenience wrapper matches full call."""
+        N, L = 32, 2 * math.pi
+        rng = np.random.default_rng(42)
+        f = rng.standard_normal((N, N))
+        _, desc_mg = build_multigraph_library(f, L, L, max_p=2, max_n=3)
+
+        r_wrapper = collect_needed_jet_monomials_from_multigraph(desc_mg)
+        r_full = collect_needed_jet_monomials(desc_mg=desc_mg)
+        assert r_wrapper == r_full
+
+    def test_collect_includes_wsindy_monomials(self):
+        """With WSINDy descriptions, (f³)_{xx} expansion monomials appear."""
+        N, L = 32, 2 * math.pi
+        rng = np.random.default_rng(42)
+        f = rng.standard_normal((N, N))
+        _, desc_ws = build_wsindy_library(f, L, L, max_order=2, max_poly=3)
+
+        result = collect_needed_jet_monomials(desc_ws=desc_ws)
+
+        # ∂_xx(f³) = 6f·f_x² + 3f²·f_xx
+        assert "f·f_x²" in result
+        assert "f²·f_xx" in result
+        # ∂_yy(f³) = 6f·f_y² + 3f²·f_yy
+        assert "f·f_y²" in result
+        assert "f²·f_yy" in result
+        # Also should have f, f², f³ (pure monomials)
+        assert "f" in result
+
+    def test_desc_jet_is_valid_for_mapping(self):
+        """The returned list works as desc_jet for map_multigraph_to_jet."""
+        N, L = 32, 2 * math.pi
+        rng = np.random.default_rng(42)
+        f = rng.standard_normal((N, N))
+        _, desc_mg = build_multigraph_library(f, L, L, max_p=2, max_n=3)
+
+        desc_jet = collect_needed_jet_monomials_from_multigraph(desc_mg)
+        w_mg = true_allen_cahn(desc_mg, eps=0.15)
+        w_jet = map_multigraph_to_jet(w_mg, desc_mg, desc_jet)
+
+        # Should have correct non-zero entries
+        assert w_jet[desc_jet.index("f")] == pytest.approx(1.0)
+        assert w_jet[desc_jet.index("f³")] == pytest.approx(-1.0)
+        assert w_jet[desc_jet.index("f_xx")] == pytest.approx(0.15 ** 2)
+        assert w_jet[desc_jet.index("f_yy")] == pytest.approx(0.15 ** 2)

@@ -59,6 +59,7 @@ from equivariant_pde_find.evaluation import (  # noqa: E402
 )
 from equivariant_pde_find.library.conversions import (  # noqa: E402
     build_wsindy_to_jet_map, _MULTIGRAPH_TO_JET_DECOMPOSITION,
+    collect_needed_jet_monomials,
 )
 from equivariant_pde_find.equations import (  # noqa: E402
     find_op, true_allen_cahn, true_swift_hohenberg, true_ks,
@@ -565,10 +566,21 @@ def main():
                           f"points: {n_snaps * 200}", flush=True)
 
                     # ── Jet descriptions & ground truth (backend-independent) ─
+                    # Build pdefind descriptions upfront (backend-independent:
+                    # column names are the same regardless of spectral/polynomial)
+                    _, desc_pdefind = build_pdefind_library(
+                        snapshots_proc[0], Lx, Ly, max_order=4, max_poly=3,
+                    )
+                    # Pre-build WSINDy descriptions
                     from equivariant_pde_find.library import \
-                        build_polyjet_library as _bpl
-                    _, desc_jet = _bpl(
-                        snapshots_proc[0], Lx, Ly, max_order=4, max_degree=3,
+                        build_wsindy_library as _bpw
+                    _, desc_ws = _bpw(
+                        snapshots_proc[0], Lx, Ly, max_order=4, max_poly=3,
+                    )
+                    # Dynamic jet: union of all library decompositions
+                    desc_jet = collect_needed_jet_monomials(
+                        desc_mg=desc_eq_ref, desc_pdefind=desc_pdefind,
+                        desc_ws=desc_ws,
                     )
                     # Ground truth in jet basis (analytical — no backend)
                     true_jet = np.zeros(len(desc_jet))
@@ -580,24 +592,16 @@ def main():
                         for jet_name, mult in _MULTIGRAPH_TO_JET_DECOMPOSITION[name]:
                             true_jet[desc_jet.index(jet_name)] += coeff * mult
 
-                    # Pre-build WSINDy → jet mapping matrix (analytical)
-                    from equivariant_pde_find.library import \
-                        build_wsindy_library as _bpw
-                    _, desc_ws = _bpw(
-                        snapshots_proc[0], Lx, Ly, max_order=4, max_poly=3,
-                    )
                     M_ws_to_jet = build_wsindy_to_jet_map(desc_ws, desc_jet)
 
                     # ── Per-backend evaluation Theta ─────────────────────
-                    # Build a separate evaluation Theta for each backend so
-                    # that spectral recoveries are evaluated with exact
-                    # derivatives and polynomial recoveries with smoothed ones.
                     t_eval = time.time()
                     eval_thetas = {}
                     for b in backends:
                         Tj, Ftj = build_eval_theta_jet(
                             snapshots_proc, times, Lx, Ly,
                             skip_fraction=skip_frac, seed=0, backend=b,
+                            jet_monomials=desc_jet,
                         )
                         eval_thetas[b] = (Tj, Ftj)
                     Theta_eval, Ft_eval = eval_thetas[backends[0]]

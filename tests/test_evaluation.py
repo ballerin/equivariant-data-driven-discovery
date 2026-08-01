@@ -18,7 +18,7 @@ sys.path.insert(0, CODE_DIR)
 
 from equivariant_pde_find.evaluation import (                                        # noqa: E402
     evaluate_recovery, evaluate_from_theta, build_eval_theta_multigraphs,
-    best_of_sweep, evaluate_standard,
+    best_of_sweep, evaluate_standard, build_eval_theta_jet, evaluate_unified,
 )
 from equivariant_pde_find.library import (                                           # noqa: E402
     build_multigraph_library, build_pdefind_library,
@@ -343,3 +343,109 @@ class TestEvaluateStandard:
         w[3] = -0.5
         result = evaluate_standard(w, T_std, ft.ravel())
         assert result["n_active"] == 2
+
+
+# ======================================================================
+# Dynamic polyjet evaluation integration (M4)
+# ======================================================================
+
+
+class TestDynamicEvalTheta:
+    """Tests for build_eval_theta_jet with jet_monomials parameter."""
+
+    def test_legacy_behavior_unchanged(self, ac_data):
+        """jet_monomials=None preserves old 105-column behavior."""
+        snaps, times, true_eq, desc = ac_data
+        T, Ft = build_eval_theta_jet(snaps, times, 2 * np.pi, 2 * np.pi,
+                                      jet_monomials=None)
+        assert T.shape[1] == 105, f"Expected 105 columns, got {T.shape[1]}"
+
+    def test_dynamic_with_short_list(self, ac_data):
+        """With explicit monomial list, only those columns are built."""
+        snaps, times, true_eq, desc = ac_data
+        monomials = ["1", "f", "f_x"]
+        T, Ft = build_eval_theta_jet(snaps, times, 2 * np.pi, 2 * np.pi,
+                                      jet_monomials=monomials)
+        assert T.shape[1] == 3
+        # Check column 0 is all ones
+        assert np.allclose(T[:, 0], 1.0, atol=1e-12)
+
+    def test_dynamic_spans_same_n_samples(self, ac_data):
+        """Dynamic and legacy Thetas have the same number of rows."""
+        snaps, times, true_eq, desc = ac_data
+        monomials = ["1", "f", "f_x", "f_xx", "f³"]
+        T_legacy, _ = build_eval_theta_jet(snaps, times, 2 * np.pi, 2 * np.pi)
+        T_dynamic, _ = build_eval_theta_jet(snaps, times, 2 * np.pi, 2 * np.pi,
+                                             jet_monomials=monomials)
+        assert T_legacy.shape[0] == T_dynamic.shape[0]
+
+
+class TestEvaluateUnifiedPolyjet:
+    """Tests for evaluate_unified with library='polyjet'."""
+
+    def test_polyjet_name_mapping_old_to_new(self, ac_data):
+        """Regression in old 105-col polyjet, evaluation in dynamic subset:
+        name-based mapping produces correct fp/fn/E."""
+        snaps, times, true_eq, desc = ac_data
+
+        # Build old regression polyjet (105 cols)
+        from equivariant_pde_find.library import build_polyjet_library
+        T_reg, desc_reg = build_polyjet_library(
+            snaps[1], 2 * np.pi, 2 * np.pi, max_order=4, max_degree=3,
+        )
+
+        # Build dynamic evaluation jet (subset)
+        from equivariant_pde_find.library.conversions import (
+            collect_needed_jet_monomials_from_multigraph,
+        )
+        desc_jet = collect_needed_jet_monomials_from_multigraph(desc)
+        T_jet, _ = build_eval_theta_jet(
+            snaps, times, 2 * np.pi, 2 * np.pi, jet_monomials=desc_jet,
+        )
+
+        # Ground truth in jet
+        from equivariant_pde_find.library.conversions import map_multigraph_to_jet
+        true_jet = map_multigraph_to_jet(true_eq, desc, desc_jet)
+
+        # AC in old polyjet: coefficients for f, f³, f_xx, f_yy
+        w_reg = np.zeros(len(desc_reg))
+        eps = 0.15
+        w_reg[desc_reg.index("f")] = 1.0
+        w_reg[desc_reg.index("f³")] = -1.0
+        w_reg[desc_reg.index("f_xx")] = eps ** 2
+        w_reg[desc_reg.index("f_yy")] = eps ** 2
+
+        result = evaluate_unified(
+            w_reg, "polyjet", desc_reg, desc_jet, T_jet, T_jet @ true_jet,
+            true_jet,
+        )
+        assert result["exact_recovery"] == 1
+        assert result["fp"] == 0
+        assert result["fn"] == 0
+
+    def test_polyjet_identity_when_same_sets(self, ac_data):
+        """When regression and evaluation use the same dynamic set,
+        the name-based mapping degenerates to identity."""
+        snaps, times, true_eq, desc = ac_data
+
+        from equivariant_pde_find.library.conversions import (
+            collect_needed_jet_monomials_from_multigraph,
+        )
+        desc_jet = collect_needed_jet_monomials_from_multigraph(desc)
+        T_jet, _ = build_eval_theta_jet(
+            snaps, times, 2 * np.pi, 2 * np.pi, jet_monomials=desc_jet,
+        )
+
+        from equivariant_pde_find.library.conversions import map_multigraph_to_jet
+        true_jet = map_multigraph_to_jet(true_eq, desc, desc_jet)
+
+        # Recovered w is already in the dynamic jet
+        w = true_jet.copy()
+
+        result = evaluate_unified(
+            w, "polyjet", desc_jet, desc_jet, T_jet, T_jet @ true_jet,
+            true_jet,
+        )
+        assert result["exact_recovery"] == 1
+        assert result["fp"] == 0
+        assert result["fn"] == 0

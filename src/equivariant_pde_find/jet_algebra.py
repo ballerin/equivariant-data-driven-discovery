@@ -195,3 +195,88 @@ def expr_to_dict(expr):
     for mono, coeff in expr.monomials():
         out[describe_monomial(mono)] = coeff
     return out
+
+
+# ---------------------------------------------------------------------------
+# Reverse parser: jet monomial description string → exponent dict
+# ---------------------------------------------------------------------------
+
+_SUP_REV = {"²": 2, "³": 3, "⁴": 4, "⁵": 5, "⁶": 6, "⁷": 7, "⁸": 8, "⁹": 9}
+
+
+def parse_jet_monomial(desc, ndim):
+    """Parse a jet monomial description into an exponent dict.
+
+    Inverse of ``_describe_exponents`` (polyjet.py) / ``describe_monomial``
+    (this module)::
+
+        parse_jet_monomial("f³·f_x", 2) → {(0,0): 3, (1,0): 1}
+        parse_jet_monomial("1", 2)       → {}
+        parse_jet_monomial("f", 2)       → {(0,0): 1}
+
+    Parameters
+    ----------
+    desc : str
+        A jet monomial description in the canonical format produced by
+        ``describe_monomial`` or ``_describe_exponents``.  Examples:
+        ``"1"``, ``"f"``, ``"f_x"``, ``"f_x²"``, ``"f³·f_x"``,
+        ``"f·f_xx"``, ``"f_x²·f_xx"``.
+    ndim : int
+        Number of spatial dimensions (must be ≤ len(AXIS_LABELS)).
+
+    Returns
+    -------
+    exponents : dict
+        ``{multi_index: exponent}`` where each multi_index is an ndim-tuple
+        of nonnegative ints and exponent is a positive int.  Empty dict
+        for the constant ``"1"``.
+
+    Raises
+    ------
+    ValueError
+        If *desc* cannot be parsed.
+    """
+    if ndim > len(AXIS_LABELS):
+        raise ValueError(f"ndim {ndim} exceeds available axis labels ({len(AXIS_LABELS)})")
+    if desc == "1":
+        return {}
+    if not desc:
+        raise ValueError(f"Empty description string")
+
+    exponents = {}
+    for part in desc.split("·"):
+        part = part.strip()
+        if not part:
+            continue
+        # Extract superscript exponent, if any
+        exp = 1
+        if part[-1] in _SUP_REV:
+            exp = _SUP_REV[part[-1]]
+            part = part[:-1]
+        # Parse the factor name
+        if part == "f":
+            mi = (0,) * ndim
+        elif part.startswith("f_"):
+            mi = [0] * ndim
+            for ch in part[2:]:
+                try:
+                    axis = AXIS_LABELS.index(ch)
+                except ValueError:
+                    raise ValueError(
+                        f"Unknown axis label {ch!r} in {desc!r} "
+                        f"(ndim={ndim}, labels={AXIS_LABELS[:ndim]})"
+                    )
+                if axis >= ndim:
+                    raise ValueError(
+                        f"Axis {ch!r} is out of range for ndim={ndim}"
+                    )
+                mi[axis] += 1
+            mi = tuple(mi)
+        else:
+            raise ValueError(
+                f"Cannot parse factor {part!r} in jet monomial {desc!r}. "
+                f"Expected 'f' or 'f_<axes>' (e.g. 'f_x', 'f_xxy')."
+            )
+        exponents[mi] = exponents.get(mi, 0) + exp
+
+    return exponents

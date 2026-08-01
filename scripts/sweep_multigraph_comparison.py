@@ -39,6 +39,7 @@ from equivariant_pde_find.evaluation import (  # noqa: E402
 )
 from equivariant_pde_find.library.conversions import (  # noqa: E402
     map_multigraph_to_jet, map_mod_multigraph_to_jet,
+    collect_needed_jet_monomials,
 )
 from equivariant_pde_find.equations import (  # noqa: E402
     true_allen_cahn, true_swift_hohenberg, true_ks,
@@ -48,7 +49,7 @@ from equivariant_pde_find.equations import (  # noqa: E402
     true_pme_mod_multigraph, normalize_eq_name, CH_EPSILON,
 )
 from equivariant_pde_find.library import (  # noqa: E402
-    build_polyjet_library, build_multigraph_library,
+    build_multigraph_library,
     build_mod_multigraph_library,
 )
 from equivariant_pde_find.regression import TrainSTRidge  # noqa: E402
@@ -284,16 +285,24 @@ def main():
                     idx_sets = idx_sets_raw
 
                 # Build per-backend evaluation Theta (jet basis)
+                # Collect needed monomials from both multigraph bases
+                _, desc_mg_jet = build_multigraph_library(
+                    f_snaps[0], Lx, Ly, max_p=2, max_n=3,
+                )
+                _, desc_mod_jet = build_mod_multigraph_library(
+                    f_snaps[0], Lx, Ly, max_p=2, max_n=3,
+                )
+                desc_jet = collect_needed_jet_monomials(
+                    desc_mg=desc_mg_jet, desc_mod_mg=desc_mod_jet,
+                )
                 eval_thetas = {}
                 for b in args.backends:
                     Tj, Ftj = build_eval_theta_jet(
                         snapshots, times, Lx, Ly,
                         skip_fraction=skip_frac, seed=0, backend=b,
+                        jet_monomials=desc_jet,
                     )
                     eval_thetas[b] = (Tj, Ftj)
-                _, desc_jet = build_polyjet_library(
-                    snapshots[0], Lx, Ly, max_order=4, max_degree=3,
-                )
 
                 # Build ground truth in jet basis for each library
                 true_jet = {}
