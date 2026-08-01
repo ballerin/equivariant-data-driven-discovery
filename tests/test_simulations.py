@@ -269,11 +269,44 @@ class TestCahnHilliard:
 
 
 # ======================================================================
-# Porous Medium: f_t = ∇·(f²∇f)
+# Porous Medium: f_t = ∇·(f²∇f) = Δ(f³)/3   (m = 3 in u_t = Δ(u^m))
 # ======================================================================
 
 
 class TestPorousMedium:
+    def test_exponent_convention_is_m3(self):
+        """The simulated RHS is Δ(f³)/3, i.e. m=3 — not Δ(f²), i.e. m=2.
+
+        Pins the exponent convention in code rather than in prose: the
+        divergence-form exponent is γ = 2, so m = γ+1 = 3.
+        """
+        N, L, sigma = 64, 6 * np.pi, 6 * np.pi / 8
+        x = np.linspace(0, L, N, endpoint=False)
+        k = np.fft.fftfreq(N) * N * (2 * np.pi / L)
+        KX, KY = np.meshgrid(k, k, indexing="ij")
+        K2 = KX**2 + KY**2
+        X, Y = np.meshgrid(x, x, indexing="ij")
+        f = np.exp(-((X - L / 2) ** 2 + (Y - L / 2) ** 2) / (2 * sigma**2))
+        f /= f.max()
+
+        fh = np.fft.fft2(f)
+        lap_f = np.real(np.fft.ifft2(-K2 * fh))
+        fx = np.real(np.fft.ifft2(1j * KX * fh))
+        fy = np.real(np.fft.ifft2(1j * KY * fh))
+
+        # The RHS the simulator actually integrates.
+        rhs = f**2 * lap_f + 2.0 * f * (fx**2 + fy**2)
+        lap_f3 = np.real(np.fft.ifft2(-K2 * np.fft.fft2(f**3))) / 3.0
+        lap_f2 = np.real(np.fft.ifft2(-K2 * np.fft.fft2(f**2)))
+
+        rel_m3 = np.abs(rhs - lap_f3).max() / np.abs(lap_f3).max()
+        rel_m2 = np.abs(rhs - lap_f2).max() / np.abs(lap_f2).max()
+
+        # Matches m=3 up to aliasing of the cubic product (~2.5e-5 at N=64).
+        assert rel_m3 < 1e-3, f"RHS != Δ(f³)/3: rel err {rel_m3:.2e}"
+        # ...and is emphatically not the m=2 equation (~50% apart).
+        assert rel_m2 > 0.1, f"RHS indistinguishable from Δ(f²): {rel_m2:.2e}"
+
     def test_runs_and_produces_output(self):
         N, L = 16, 2 * np.pi
         snaps, times = porous_medium(

@@ -106,7 +106,7 @@ def true_ks(descriptions):
     """Ground-truth coefficients for the Kuramoto-Sivashinsky equation.
 
     .. math::
-        f_t = -\\Delta f - \\Delta^2 f - \\|\\nabla f\\|^2.
+        f_t = -\\Delta f - \\Delta^2 f - 1/2\\|\\nabla f\\|^2.
     """
     w = np.zeros(len(descriptions))
     w[find_op(descriptions, '‖∇f‖²')] = -0.5
@@ -132,10 +132,16 @@ def true_cahn_hilliard(descriptions, eps=CH_EPSILON):
 
 
 def true_pme(descriptions):
-    """Ground-truth coefficients for the Porous Medium Equation (m=2).
+    """Ground-truth coefficients for the Porous Medium Equation (m=3).
 
     .. math::
-        f_t = \\nabla\\cdot(f^2\\nabla f) = f^2\\Delta f + 2f\\|\\nabla f\\|^2.
+        f_t = \\nabla\\cdot(f^2\\nabla f) = f^2\\Delta f + 2f\\|\\nabla f\\|^2
+            = \\tfrac13\\Delta(f^3).
+
+    In the standard convention :math:`u_t = \\Delta(u^m)` this is m = 3; the
+    1/3 prefactor is inessential and absorbed by rescaling time.  The
+    coefficients below (1.0, 2.0) belong to the ``div(f^2 grad f)``
+    normalisation actually simulated — see ``simulations/porous_medium.py``.
     """
     w = np.zeros(len(descriptions))
     w[find_op(descriptions, 'f²·Δf')] = 1.0
@@ -180,7 +186,7 @@ def true_cahn_hilliard_mod_multigraph(descriptions, eps=CH_EPSILON):
 
 
 def true_pme_mod_multigraph(descriptions):
-    """Porous Medium Equation (m=2) in the modified multigraph basis.
+    """Porous Medium Equation (m=3) in the modified multigraph basis.
 
     Original: f²·Δf + 2·f·‖∇f‖².
     Δf³ = 3·f²·Δf + 6·f·‖∇f‖², so:

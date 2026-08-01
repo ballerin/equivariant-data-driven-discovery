@@ -1,8 +1,8 @@
-# Porous Medium equation
+# Porous Medium equation ($m = 3$)
 
 The equation under consideration is
 
-$$f_t = \nabla\cdot(f^2\nabla f) = f^2\Delta f + 2f\|\nabla f\|^2$$
+$$f_t = \nabla\cdot(f^2\nabla f) = f^2\Delta f + 2f\|\nabla f\|^2 = \tfrac13\Delta(f^3)$$
 
 which can be written in terms of $O(2)$-equivariant terms
 
@@ -20,7 +20,7 @@ or standard terms (PolyJet basis)
 | $f\cdot f_x^2$            |            | 🔴        | 🟢      | 🟢        | 🟢          |
 | $f\cdot f_y^2$            |            | 🔴        | 🟢      | 🟢        | 🟢          |
 
-PDE-FIND cannot represent $f\cdot f_x^2$ or $f\cdot f_y^2$ (products of derivatives), so its minimum fn is 2.  WSINDy represents PME exactly via the chain rule: $f_t = \frac13\partial_x^2(f^3) + \frac13\partial_y^2(f^3)$, which expands to all 4 jet terms.
+In the standard convention $u_t = \Delta(u^m)$ this is $m = 3$; the $1/3$ prefactor is inessential and absorbed by rescaling time.  The coefficients below belong to the $\nabla\cdot(f^2\nabla f)$ normalisation actually simulated.  PDE-FIND cannot represent $f\cdot f_x^2$ or $f\cdot f_y^2$ (products of derivatives), so its minimum fn is 2.  WSINDy represents PME exactly via the chain rule: $f_t = \frac13\partial_x^2(f^3) + \frac13\partial_y^2(f^3)$, which expands to all 4 jet terms.
 
 ### Legend for summary table
 

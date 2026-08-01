@@ -84,7 +84,7 @@ EQ_TRUTH = {
     "sh": r"$f_t = (r-1)f - 2\Delta f - \Delta^2 f - f^3$",
     "ch": r"$f_t = -\Delta^2 f + \Delta(f^3 - f)$",
     "pme": (
-        r"$f_t = \Delta(f^3)/3$ (mod) = "
+        r"$f_t = \Delta(f^3)/3$ (mod, $m=3$) = "
         r"$f^2\Delta f + 2f\|\nabla f\|^2$ (mg)"
     ),
     "ks_cell": r"$f_t = -\Delta f - \Delta^2 f - \|\nabla f\|^2/2$",
@@ -130,10 +130,10 @@ EQ_TERMS = {
 
 EQUATION_META = {
     "pme": {
-        "title": "Porous Medium equation",
+        "title": "Porous Medium equation ($m = 3$)",
         "latex": (
             "f_t = \\nabla\\cdot(f^2\\nabla f) = "
-            "f^2\\Delta f + 2f\\|\\nabla f\\|^2"
+            "f^2\\Delta f + 2f\\|\\nabla f\\|^2 = \\tfrac13\\Delta(f^3)"
         ),
         "equivariant_terms": [
             ("f^2\\cdot\\Delta f", "+1.0"),
@@ -146,6 +146,11 @@ EQUATION_META = {
             ("f\\cdot f_y^2", False, True, True, True),
         ],
         "notes": (
+            "In the standard convention $u_t = \\Delta(u^m)$ this is "
+            "$m = 3$; the $1/3$ prefactor is inessential and absorbed by "
+            "rescaling time.  The coefficients below belong to the "
+            "$\\nabla\\cdot(f^2\\nabla f)$ normalisation actually "
+            "simulated.  "
             "PDE-FIND cannot represent $f\\cdot f_x^2$ "
             "or $f\\cdot f_y^2$ (products of derivatives), so its "
             "minimum fn is 2.  "

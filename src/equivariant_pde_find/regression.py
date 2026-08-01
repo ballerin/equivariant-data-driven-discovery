@@ -94,7 +94,7 @@ def STRidge(X0, y, lam, maxit, tol, normalize=2, early_stop=True, unbias=True):
 
 
 def TrainSTRidge(
-    Theta, ut, lam, d_tol, maxit=25, STR_iters=10, l0_penalty=None,
+    Theta, ut, lam, d_tol, maxit=125, STR_iters=10, l0_penalty=None,
     normalize=2, split=0.8, seed=0, early_stop=True, unbias=True,
 ):
     """Train STRidge with cross-validation over the sparsity tolerance.
@@ -243,7 +243,7 @@ def SR3(X0, y, lam_l1, kappa=1.0, maxit=100, normalize=2, tol=1e-8):
 
 
 def TrainSR3(
-    Theta, ut, lam, d_tol, maxit=25, SR3_iters=100, normalize=2, split=0.8, seed=0,
+    Theta, ut, lam, d_tol, maxit=125, SR3_iters=125, normalize=2, split=0.8, seed=0,
 ):
     """Train SR3 with cross-validation over the L1 penalty.
 

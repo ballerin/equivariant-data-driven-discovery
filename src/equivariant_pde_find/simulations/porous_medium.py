@@ -15,10 +15,14 @@ def porous_medium(
     obs_noise=0.0,
 ):
     """
-    Simulate the porous medium equation (m=2) via explicit Euler + spectral derivatives.
+    Simulate the porous medium equation (m=3) via explicit Euler + spectral derivatives.
 
     PDE:
-        f_t = div(f^2 grad f) = f^2 Delta f + 2 f |grad f|^2
+        f_t = div(f^2 grad f) = f^2 Delta f + 2 f |grad f|^2 = Delta(f^3) / 3
+
+    In the standard convention u_t = Delta(u^m) this is m = 3; the 1/3
+    prefactor is inessential and absorbed by rescaling time.  (The exponent
+    2 here is the divergence-form exponent gamma = m - 1, not m.)
 
     Scheme:
         f^{n+1} = clip(f^n + dt * (f^2 * Delta f + 2 f |grad f|^2), 0)
@@ -103,11 +107,14 @@ def porous_medium_nd(
     obs_noise=0.0,
 ):
     """
-    Simulate the porous medium equation (m=2) on [0, L]^ndim via explicit
+    Simulate the porous medium equation (m=3) on [0, L]^ndim via explicit
     Euler + spectral derivatives.
 
     PDE:
-        f_t = div(f^2 grad f) = f^2 Delta f + 2 f |grad f|^2
+        f_t = div(f^2 grad f) = f^2 Delta f + 2 f |grad f|^2 = Delta(f^3) / 3
+
+    In the standard convention u_t = Delta(u^m) this is m = 3; the 1/3
+    prefactor is inessential and absorbed by rescaling time.
 
     Scheme:
         f^{n+1} = clip(f^n + dt * (f^2 * Delta f + 2 f |grad f|^2), 0)
