@@ -392,16 +392,20 @@ def main():
 
     if args.equations:
         eq_set = set(args.equations)
-        # Map short names → legacy filename prefixes for old data files
+        # Map short names → filename prefixes (both short and legacy long
+        # names; generate_data.py uses short names, old data used long names)
         _eq_to_filename = {
-            "ac": "allen_cahn", "sh": "swift_hohenberg",
-            "ch": "cahn_hilliard", "pme": "porous_medium",
-            "ks_cell": "ks_cellular", "ks_wchaos": "ks_weak_chaotic",
-            "ks_chaos": "ks_chaotic",
+            "ac": {"allen_cahn", "ac"},
+            "sh": {"swift_hohenberg", "sh"},
+            "ch": {"cahn_hilliard", "ch"},
+            "pme": {"porous_medium", "pme"},
+            "ks_cell": {"ks_cellular", "ks_cell"},
+            "ks_wchaos": {"ks_weak_chaotic", "ks_wchaos"},
+            "ks_chaos": {"ks_chaotic", "ks_chaos"},
         }
         eq_prefixes = set()
         for eq in eq_set:
-            eq_prefixes.add(_eq_to_filename.get(eq, eq))
+            eq_prefixes |= _eq_to_filename.get(eq, {eq})
         all_npz = [f for f in all_npz
                    if any(f.startswith(eq + "_") for eq in eq_prefixes)]
     if args.noise is not None:
@@ -482,6 +486,23 @@ def main():
                 profile_type, profile_direction = load_dataset(npz_path)
             eq_name = normalize_eq_name(eq_name)
             true_fn, skip_frac, mask_fn = _get_meta(eq_name)
+
+            # If noisy dataset, load clean counterpart for evaluation
+            # (Option B: evaluate against clean data so that E_coeff
+            #  is comparable across noise levels)
+            if obs_noise > 0:
+                clean_path = npz_path.replace("_noise2pct", "_clean").replace(
+                    "_noise5pct", "_clean"
+                )
+                if os.path.exists(clean_path):
+                    _clean_data = np.load(clean_path)
+                    snapshots_clean_eval = _clean_data["snapshots"]
+                    print(f"    clean eval: {os.path.basename(clean_path)}")
+                else:
+                    print(f"    WARNING: clean counterpart missing: {clean_path}")
+                    snapshots_clean_eval = None
+            else:
+                snapshots_clean_eval = None  # already clean, no separate copy
 
             # CH epsilon is fixed in equations.CH_EPSILON
             is_ch = eq_name == "ch"
@@ -596,10 +617,16 @@ def main():
 
                     # ── Per-backend evaluation Theta ─────────────────────
                     t_eval = time.time()
+                    # Evaluate against clean data when available (Option B)
+                    eval_snaps = (
+                        snapshots_clean_eval
+                        if snapshots_clean_eval is not None
+                        else snapshots_proc
+                    )
                     eval_thetas = {}
                     for b in backends:
                         Tj, Ftj = build_eval_theta_jet(
-                            snapshots_proc, times, Lx, Ly,
+                            eval_snaps, times, Lx, Ly,
                             skip_fraction=skip_frac, seed=0, backend=b,
                             jet_monomials=desc_jet,
                         )
