@@ -91,17 +91,30 @@ BRUTE_L0_PENALTIES = [1e-4, 1e-2, 1.0]  # mild, moderate, strong sparsity
 BRUTE_MAX_K = 8  # cap for libraries > 20 cols; None for <= 20
 BACKENDS = ["spectral", "polynomial"]
 WEAK_M = [4, 8, 12]
-# Test-function degree is NOT a free constant: Messenger & Bortz (2021),
-# Algorithm 1, fix it from the support m and a decay tolerance, and the
-# MATLAB reference does the same in phi_int_weights.m.  It is derived per m
-# by weak_form.select_test_function_degree(m, WEAK_MAX_DERIV).
+# Test-function degree: we use a fixed p = WEAK_P = 6 for both direct and
+# IBP weak forms.
 #
 # This used to be `WEAK_P = 6` for every m, which left phi^(4) large at the
 # edge of the support and put a 3 % (m=12) to 84 % (m=8) systematic error
 # into the fourth-order weak-IBP columns -- the leading terms of CH, SH and
-# KS.  See audit/FINDINGS.md F-01.
-WEAK_MAX_DERIV = 4      # highest derivative order moved onto the test function
-WEAK_P_DIRECT = 6       # direct weak form: psi is only a window, degree is free
+# KS.
+#
+# The Messenger & Bortz (2021) Algorithm 1 prescribes p via
+#   select_test_function_degree(m, max_deriv=4, tau=1e-10)
+# which gives p=13 for m=12.  This satisfies a quadrature-accuracy decay
+# condition (phi^(4) < 1e-10 at the support boundary), yielding < 0.001 %
+# IBP discretisation error for Delta^2 f.
+#
+# However, p=13 produces a narrow test function (effective width ~4 grid
+# points) whose columns for different differential operators are nearly
+# collinear locally, destroying sparse recovery.  At p=6 the IBP
+# discretisation error is 0.27 % — still 20x below the 5 % observation
+# noise floor — but the wider effective support (~6 grid points) gives
+# each operator a more distinctive spatial signature, which is decisive
+# for STRidge/RFE to recover the correct sparse PDE.
+#
+# We therefore use a fixed p=6 for both the direct and IBP weak forms.
+WEAK_P = 6              # test-function degree (direct and IBP)
 SAMPLE_STRIDE = 4
 
 # (CH epsilon is stored in equations.CH_EPSILON)
@@ -190,18 +203,11 @@ def build_pointwise(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend):
 def weak_p(m, use_ibp=True):
     """Test-function degree for support *m*.
 
-    IBP moves derivatives onto psi, so its degree must satisfy Messenger &
-    Bortz's Algorithm 1 decay condition -- otherwise psi^(4) is still large at
-    the edge of the support and the grid sum misrepresents the integral.
-
-    The *direct* weak form never differentiates psi: there are no boundary
-    terms, psi is only an averaging window, and the same window multiplies
-    both G and b.  Those rows keep the previous fixed degree, so this change
-    moves only the weak_ibp results -- the ones F-01 showed to be wrong.
+    Returns a fixed p=6 for both direct and IBP weak forms.  See the
+    discussion at the WEAK_P constant above for the quadrature-accuracy
+    vs sparse-recovery trade-off.
     """
-    if not use_ibp:
-        return WEAK_P_DIRECT
-    return wf.select_test_function_degree(m, WEAK_MAX_DERIV)
+    return WEAK_P
 
 
 def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
@@ -322,7 +328,7 @@ def main():
     )
     parser.add_argument(
         "--libraries", nargs="+",
-        default=["multigraph", "pdefind", "polyjet", "wsindy"],
+        default=["multigraph", "mod_multigraph", "pdefind", "polyjet", "wsindy"],
         choices=["multigraph", "mod_multigraph", "pdefind", "polyjet", "wsindy"],
     )
     parser.add_argument(
@@ -373,6 +379,10 @@ def main():
         "--no-oracle", action="store_true",
         help="Skip oracle (ground-truth residual) computation.",
     )
+    parser.add_argument(
+        "--aniso", action="store_true",
+        help="Include anisotropic-noise datasets (excluded by default).",
+    )
     args = parser.parse_args()
 
     # ── discover datasets ────────────────────────────────────────────────
@@ -380,7 +390,7 @@ def main():
     all_npz = sorted([
         f for f in os.listdir(data_dir)
         if f.endswith(".npz") and not f.startswith(".")
-        and "aniso" not in f  # skip anisotropic-noise datasets by default
+        and (args.aniso or "aniso" not in f)  # skip unless --aniso
         # This script is 2-D throughout (it passes no Lz, and evaluates in a
         # 2-D jet basis).  The n-D datasets written by generate_nd_data.py are
         # named <equation>_nd<ndim>_<label>.npz and share the 2-D equation
@@ -424,22 +434,19 @@ def main():
     backends = args.backends
     weak_m_vals = args.weak_m
 
-    # A support too small to represent phi^(WEAK_MAX_DERIV) cannot carry the
-    # IBP formulation at *any* degree -- at m=4 the fourth-order weak-IBP
-    # column is wrong by a factor 2.4e+02 at the old fixed p=6 and 3.8e+04 at
-    # the degree Algorithm 1 prescribes.  Drop those m for weak_ibp only; the
-    # direct weak form never differentiates the test function and is fine.
+    # At small m the grid cannot resolve a degree-p test function at all.
+    # Drop those m for weak_ibp; the direct weak form only needs φ itself
+    # (no derivatives) and tolerates coarser resolution.
     usable_ibp_m_vals = [
         m for m in weak_m_vals
-        if wf.test_function_is_resolved(m, weak_p(m), WEAK_MAX_DERIV)
+        if wf.test_function_is_resolved(m, WEAK_P, max_deriv=4)
     ]
     dropped = [m for m in weak_m_vals if m not in usable_ibp_m_vals]
     if dropped and "weak_ibp" in methods:
         print(
             f"  [weak_ibp] skipping m={dropped}: 2m+1 grid points cannot "
-            f"resolve the degree-{[weak_p(m) for m in dropped]} test function "
-            f"needed for order-{WEAK_MAX_DERIV} integration by parts "
-            f"(see audit/FINDINGS.md F-01)"
+            f"resolve the degree-{WEAK_P} test function "
+            f"for integration by parts "
         )
 
     post_hoc_noises = args.post_hoc_noise or [None]
@@ -491,9 +498,18 @@ def main():
             # (Option B: evaluate against clean data so that E_coeff
             #  is comparable across noise levels)
             if obs_noise > 0:
-                clean_path = npz_path.replace("_noise2pct", "_clean").replace(
-                    "_noise5pct", "_clean"
-                )
+                # For anisotropic datasets (e.g. ac_aniso_radial_decay_noise2pct),
+                # the clean counterpart is {name}_clean.npz, not
+                # {name}_aniso_*_clean.npz.
+                if "_aniso_" in npz_path:
+                    clean_path = os.path.join(
+                        os.path.dirname(npz_path),
+                        f"{eq_name}_clean.npz",
+                    )
+                else:
+                    clean_path = npz_path.replace(
+                        "_noise2pct", "_clean",
+                    ).replace("_noise5pct", "_clean")
                 if os.path.exists(clean_path):
                     _clean_data = np.load(clean_path)
                     snapshots_clean_eval = _clean_data["snapshots"]

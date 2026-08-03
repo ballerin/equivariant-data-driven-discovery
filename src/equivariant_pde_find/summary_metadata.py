@@ -231,10 +231,13 @@ EQUATION_META = {
         "standard_terms": [
             ("\\partial_{xx} f", True, True, True, True),
             ("\\partial_{yy} f", True, True, True, True),
-            ("f^2\\cdot\\partial_{xx} f", True, False, True, True),
-            ("f^2\\cdot\\partial_{yy} f", True, False, True, True),
-            ("f\\cdot f_x^2", False, False, True, True),
-            ("f\\cdot f_y^2", False, False, True, True),
+            # WSINDy cannot represent these individually, but the
+            # combination 3 f² Δf + 6 f ‖∇f‖² = Δ(f³) IS representable
+            # as ∂_xx(f³) + ∂_yy(f³).  We mark True at the equation level.
+            ("f^2\\cdot\\partial_{xx} f", True, True, True, True),
+            ("f^2\\cdot\\partial_{yy} f", True, True, True, True),
+            ("f\\cdot f_x^2", False, True, True, True),
+            ("f\\cdot f_y^2", False, True, True, True),
             ("\\partial_{xxxx} f", True, True, True, True),
             ("\\partial_{xxyy} f", True, True, True, True),
             ("\\partial_{yyyy} f", True, True, True, True),
@@ -247,6 +250,90 @@ EQUATION_META = {
             "combination $3f^2\\Delta f + 6f\\|\\nabla f\\|^2$ equals "
             "$\\Delta(f^3)$, which IS representable as "
             "$(f^3)_{xx} + (f^3)_{yy}$ in the WSINDy basis."
+        ),
+    },
+    "ks_cell": {
+        "title": "Kuramoto-Sivashinsky equation (cellular, $L=4\\pi$)",
+        "latex": (
+            "f_t = -\\Delta f - \\Delta^2 f - "
+            "\\tfrac12\\|\\nabla f\\|^2"
+        ),
+        "equivariant_terms": [
+            ("\\Delta f", "-1.0"),
+            ("\\Delta^2 f", "-1.0"),
+            ("\\|\\nabla f\\|^2", "-0.5"),
+        ],
+        "standard_terms": [
+            ("\\partial_{xx} f", True, True, True, True),
+            ("\\partial_{yy} f", True, True, True, True),
+            ("\\partial_{xxxx} f", True, True, True, True),
+            ("\\partial_{xxyy} f", True, True, True, True),
+            ("\\partial_{yyyy} f", True, True, True, True),
+            ("f_x^2", False, False, True, True),
+            ("f_y^2", False, False, True, True),
+        ],
+        "notes": (
+            "KS contains the gradient norm $\\|\\nabla f\\|^2 = f_x^2 + f_y^2$ "
+            "which neither PDE-FIND nor WSINDy can represent as a sparse "
+            "column (PDE-FIND lacks products of derivatives; in WSINDy, "
+            "$f_x^2$ is locked with $f\\cdot f_{xx}$ inside "
+            "$\\partial_{xx}(f^2)$).  Cellular regime ($L=4\\pi$)."
+        ),
+    },
+    "ks_wchaos": {
+        "title": "Kuramoto-Sivashinsky equation (weakly chaotic, $L=8\\pi$)",
+        "latex": (
+            "f_t = -\\Delta f - \\Delta^2 f - "
+            "\\tfrac12\\|\\nabla f\\|^2"
+        ),
+        "equivariant_terms": [
+            ("\\Delta f", "-1.0"),
+            ("\\Delta^2 f", "-1.0"),
+            ("\\|\\nabla f\\|^2", "-0.5"),
+        ],
+        "standard_terms": [
+            ("\\partial_{xx} f", True, True, True, True),
+            ("\\partial_{yy} f", True, True, True, True),
+            ("\\partial_{xxxx} f", True, True, True, True),
+            ("\\partial_{xxyy} f", True, True, True, True),
+            ("\\partial_{yyyy} f", True, True, True, True),
+            ("f_x^2", False, False, True, True),
+            ("f_y^2", False, False, True, True),
+        ],
+        "notes": (
+            "KS contains the gradient norm $\\|\\nabla f\\|^2 = f_x^2 + f_y^2$ "
+            "which neither PDE-FIND nor WSINDy can represent as a sparse "
+            "column (PDE-FIND lacks products of derivatives; in WSINDy, "
+            "$f_x^2$ is locked with $f\\cdot f_{xx}$ inside "
+            "$\\partial_{xx}(f^2)$).  Weakly chaotic regime ($L=8\\pi$)."
+        ),
+    },
+    "ks_chaos": {
+        "title": "Kuramoto-Sivashinsky equation (strongly chaotic, $L=16\\pi$)",
+        "latex": (
+            "f_t = -\\Delta f - \\Delta^2 f - "
+            "\\tfrac12\\|\\nabla f\\|^2"
+        ),
+        "equivariant_terms": [
+            ("\\Delta f", "-1.0"),
+            ("\\Delta^2 f", "-1.0"),
+            ("\\|\\nabla f\\|^2", "-0.5"),
+        ],
+        "standard_terms": [
+            ("\\partial_{xx} f", True, True, True, True),
+            ("\\partial_{yy} f", True, True, True, True),
+            ("\\partial_{xxxx} f", True, True, True, True),
+            ("\\partial_{xxyy} f", True, True, True, True),
+            ("\\partial_{yyyy} f", True, True, True, True),
+            ("f_x^2", False, False, True, True),
+            ("f_y^2", False, False, True, True),
+        ],
+        "notes": (
+            "KS contains the gradient norm $\\|\\nabla f\\|^2 = f_x^2 + f_y^2$ "
+            "which neither PDE-FIND nor WSINDy can represent as a sparse "
+            "column (PDE-FIND lacks products of derivatives; in WSINDy, "
+            "$f_x^2$ is locked with $f\\cdot f_{xx}$ inside "
+            "$\\partial_{xx}(f^2)$).  Chaotic regime ($L=16\\pi$)."
         ),
     },
     "ks": {

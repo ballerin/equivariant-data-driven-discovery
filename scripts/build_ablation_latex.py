@@ -62,7 +62,10 @@ def build_latex_document(csv_paths, equation=None):
                     row["E_coeff"] = row["E"]
                 all_rows.append(row)
 
-    eq_names = sorted(set(r["equation"] for r in all_rows))
+    _EQ_ORDER = ["ac", "sh", "pme", "ch",
+                  "ks_cell", "ks_wchaos", "ks_chaos"]
+    eq_names = [e for e in _EQ_ORDER
+                if e in set(r["equation"] for r in all_rows)]
     if equation:
         matches = [e for e in eq_names if e.startswith(equation)]
         if not matches:

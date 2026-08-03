@@ -582,7 +582,30 @@ def _collect_ablation_entries(rows):
         entry dicts sorted best→worst, each with keys:
         label, conf, fpf, exact, E, E_str, fp, fn, time_str, vs_str.
     """
-    from .summary_metadata import LIB_NAMES, ALGORITHM_LABELS, METHOD_MAP
+    from .summary_metadata import LIB_NAMES, ALGORITHM_LABELS, METHOD_MAP, get_meta
+
+    # Map lib_orig → bool index in standard_terms tuples
+    # (term, pde_find, wsindy, poly_jet, multigraph)
+    _LIB_REPR_INDEX = {
+        "multigraph": 4,
+        "mod_multigraph": 4,
+        "pdefind": 1,
+        "wsindy": 2,
+        "polyjet": 3,
+    }
+
+    def _is_representable(lib_orig, eq_name):
+        """Check whether a library can represent all terms of an equation."""
+        meta = get_meta(eq_name)
+        if meta is None:
+            return True  # unknown equation: assume representable
+        terms = meta.get("standard_terms", [])
+        if not terms:
+            return True
+        idx = _LIB_REPR_INDEX.get(lib_orig)
+        if idx is None:
+            return True
+        return all(t[idx] for t in terms)
 
     _LIB_NORM = {
         "multigraph": "multigraphs",
@@ -680,6 +703,10 @@ def _collect_ablation_entries(rows):
                 "fn": fn,
                 "time_s": time_s,
                 "time_str": f"{time_s:.1f}",
+                "representable": _is_representable(
+                    lib_orig, best.get("equation", ""),
+                ),
+                "equation": best.get("equation", ""),
             })
 
         if not entries:
@@ -785,14 +812,126 @@ def build_ablation_latex(rows):
             label = e["label"].replace("_", r"\_")
             conf = e["conf"].replace("_", r"\_")
 
+            # Grey out rows where the library cannot represent the equation
+            row_prefix = ""
+            if not e.get("representable", True):
+                row_prefix = r"\rowcolor{gray!25} "
+
             lines.append(
-                f"{label} & {conf} & {fpf} & {e['E_str']} "
+                f"{row_prefix}{label} & {conf} & {fpf} & {e['E_str']} "
                 f"& {e['time_str']} & {vs} \\\\"
             )
 
         lines.append(r"\bottomrule")
         lines.append(r"\end{tabular}")
         tables[noise_label] = "\n".join(lines)
+
+    return tables
+
+
+def _collect_aniso_ablation_entries(rows):
+    """Collect ranked ablation entries per noise level and profile.
+
+    Like ``_collect_ablation_entries`` but also groups by profile type
+    and direction.  Returns entries keyed by "(noise_label, profile_key)".
+    """
+    # Reuse the core collection logic from _collect_ablation_entries
+    # but segment by profile first.
+    from .summary_metadata import PROFILE_ORDER
+
+    # Group rows by (profile_type, profile_direction)
+    profiles = set()
+    for r in rows:
+        pt = r.get("profile_type", "")
+        pd = r.get("profile_direction", "")
+        if pt and pd:
+            profiles.add((pt, pd))
+
+    if not profiles:
+        # No anisotropic data found
+        return {}
+
+    result = {}
+    for pt, pd in sorted(profiles):
+        profile_rows = [
+            r for r in rows
+            if r.get("profile_type", "") == pt
+            and r.get("profile_direction", "") == pd
+        ]
+        # Use the existing isotropic collector on this subset
+        entries_by_noise = _collect_ablation_entries(profile_rows)
+        for noise_label, entries in entries_by_noise.items():
+            key = (noise_label, pt, pd)
+            # Tag each entry with profile info
+            for e in entries:
+                e["profile_type"] = pt
+                e["profile_direction"] = pd
+            result[key] = entries
+
+    return result
+
+
+def build_aniso_ablation_latex(rows):
+    """Build per-(noise, profile) ablation tables as LaTeX fragments.
+
+    Returns
+    -------
+    dict[str, str]
+        Keys are strings like ``"ac_radial_decay_2%"``, values are LaTeX
+        ``tabular`` fragments with a Profile column.
+    """
+    from .summary_metadata import PROFILE_LABELS
+
+    all_entries = _collect_aniso_ablation_entries(rows)
+    tables = {}
+
+    for (noise_label, pt, pd), entries in all_entries.items():
+        if not entries:
+            continue
+
+        profile_name = PROFILE_LABELS.get((pt, pd), f"{pt}/{pd}")
+
+        lines = []
+        lines.append(r"\begin{tabular}{lllrrrr}")
+        lines.append(r"\toprule")
+        lines.append(
+            r"Method & Best conf. & Profile & fp/fn & "
+            r"$E_\text{coeff}$ & Time (s) & vs.\ best \\"
+        )
+        lines.append(r"\midrule")
+
+        for e in entries:
+            if e["exact"]:
+                fpf = f"{e['fpf']} $\\checkmark$"
+            else:
+                fpf = f"{e['fpf']} $\\times$"
+
+            if e["vs_str"] == "\u2014":
+                vs = "---"
+            elif e["vs_str"] == "\u2717":
+                vs = "$\\times$"
+            else:
+                vs = e["vs_str"].replace("%", r"\%")
+
+            label = e["label"].replace("_", r"\_")
+            conf = e["conf"].replace("_", r"\_")
+
+            row_prefix = ""
+            if not e.get("representable", True):
+                row_prefix = r"\rowcolor{gray!25} "
+
+            lines.append(
+                f"{row_prefix}{label} & {conf} & {profile_name} & "
+                f"{fpf} & {e['E_str']} & {e['time_str']} & {vs} \\\\"
+            )
+
+        lines.append(r"\bottomrule")
+        lines.append(r"\end{tabular}")
+
+        # Build a key like "ac_radial_decay_2%"
+        eq_name = entries[0].get("equation", "unknown") if entries else "unknown"
+        key = f"{eq_name}_{pt}_{pd}_{noise_label}"
+        tables[key] = "\n".join(lines)
 
     return tables
 

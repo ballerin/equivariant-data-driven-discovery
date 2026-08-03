@@ -95,7 +95,7 @@ EQUATIONS = [
 
 ANISOTROPIC_NOISE_LEVELS = [0.02, 0.05]        # clean data is the same regardless
 ANISOTROPIC_NOISE_LABELS = {0.02: "noise2pct", 0.05: "noise5pct"}
-ANISOTROPIC_EQUATIONS = ["ac", "sh"]
+ANISOTROPIC_EQUATIONS = ["ac", "sh", "pme", "ch"]
 
 ANISOTROPIC_PROFILES = [
     dict(profile_type="gaussian_decay", direction="radial", label="radial_decay"),
@@ -169,9 +169,6 @@ def generate_anisotropic_one(eq_entry, obs_noise, profile_spec, data_dir):
         Output directory.
     """
     name = eq_entry["name"]
-    sim_fn = eq_entry["simulate_fn"]
-    kwargs = eq_entry["sim_kwargs"].copy()
-    kwargs["obs_noise"] = 0.0  # always simulate clean
 
     noise_label = ANISOTROPIC_NOISE_LABELS[obs_noise]
     label = profile_spec["label"]
@@ -184,12 +181,18 @@ def generate_anisotropic_one(eq_entry, obs_noise, profile_spec, data_dir):
 
     t0 = time.time()
 
-    # Simulate clean data
-    clean, times = sim_fn(**kwargs)
+    # Load existing clean data (re-use pre-generated clean .npz)
+    clean_path = os.path.join(data_dir, f"{name}_clean.npz")
+    if not os.path.exists(clean_path):
+        print(f"  ERROR: clean data not found at {clean_path}", flush=True)
+        return None, False
+    clean_data = np.load(clean_path)
+    clean = clean_data["snapshots"]
+    times = clean_data["times"]
+    L = float(clean_data["Lx"])
+    N = int(clean_data["N"])
 
     # Build and normalise spatial profile
-    N = clean.shape[1]
-    L = kwargs["L"]
     X, Y = make_spatial_grid(N, L, L)
     P_raw = build_noise_profile(
         X, Y,
@@ -199,7 +202,7 @@ def generate_anisotropic_one(eq_entry, obs_noise, profile_spec, data_dir):
     P = normalize_profile(P_raw)
 
     # Apply anisotropic noise
-    rng = np.random.default_rng(kwargs["seed"])
+    rng = np.random.default_rng(42)  # fixed seed for reproducibility
     snapshots = apply_anisotropic_noise(clean, obs_noise, P, rng)
 
     elapsed = time.time() - t0

@@ -1,4 +1,4 @@
-# Kuramoto-Sivashinsky equation
+# Kuramoto-Sivashinsky equation (weakly chaotic, $L=8\pi$)
 
 The equation under consideration is
 
@@ -24,7 +24,7 @@ or standard terms (PolyJet basis)
 | $f_x^2$             |            | 🔴        | 🔴      | 🟢        | 🟢          |
 | $f_y^2$             |            | 🔴        | 🔴      | 🟢        | 🟢          |
 
-KS contains the gradient norm $\|\nabla f\|^2 = f_x^2 + f_y^2$ which neither PDE-FIND nor WSINDy can represent as a sparse column (PDE-FIND lacks products of derivatives; in WSINDy, $f_x^2$ is locked with $f\cdot f_{xx}$ inside $\partial_{xx}(f^2)$).  Three KS regimes are simulated: cellular ($L=4\pi$), weak-chaotic ($L=8\pi$), chaotic ($L=16\pi$).
+KS contains the gradient norm $\|\nabla f\|^2 = f_x^2 + f_y^2$ which neither PDE-FIND nor WSINDy can represent as a sparse column (PDE-FIND lacks products of derivatives; in WSINDy, $f_x^2$ is locked with $f\cdot f_{xx}$ inside $\partial_{xx}(f^2)$).  Weakly chaotic regime ($L=8\pi$).
 
 ### Legend for summary table
 
@@ -40,26 +40,26 @@ KS contains the gradient norm $\|\nabla f\|^2 = f_x^2 + f_y^2$ which neither PDE
 | ✗ | Failed |
 
 
-| Noise | Formulation   | Backend    | Eq wins? | Multigraphs fp/fn | Mg E_coeff | Mult. best             | Mg E_data | Std best      | Std fp/fn | Std E_coeff | Std E_data | E_data floor |
-|:------|:-------------:|:----------:|:--------:|:------------------|:-----------|:-----------------------|:----------|:--------------|:----------|:------------|:-----------|-------------:|
-| Clean | pointwise     | spectral   | ⚪        | 0/0 ✓             | 0.0047     | multigraph/RFE         | 0.0176    | PolyJet/RFE   | 0/0 ✓     | 0.0047      | 0.0175     | 0.0182       |
-| Clean | pointwise     | polynomial | 🟩        | 0/0 ✓             | 0.0117     | multigraph/RFE         | 0.0325    | PolyJet/RFE   | 0/0 ✓     | 0.0128      | 0.0320     | 0.0345       |
-| Clean | weak (no IBP) | spectral   | 🟩        | 0/0 ✓             | 0.0021     | mod_multigraph/STRidge | 0.0112    | PolyJet/MSTLS | 0/0 ✓     | 0.0023      | 0.0112     | 0.0114       |
-| Clean | weak (no IBP) | polynomial | ⚪        | 0/0 ✓             | 0.0022     | multigraph/RFE         | 0.0112    | PolyJet/RFE   | 0/0 ✓     | 0.0023      | 0.0112     | 0.0114       |
-| Clean | weak (IBP)    | spectral   | 🟩        | 0/0 ✓             | 0.0279     | multigraph/MSTLS       | 0.0158    | PolyJet/MSTLS | 0/0 ✓     | 0.0280      | 0.0157     | 0.0326       |
-| Clean | weak (IBP)    | polynomial | 🟩        | 0/0 ✓             | 0.0278     | multigraph/RFE         | 0.0158    | PolyJet/MSTLS | 0/0 ✓     | 0.0279      | 0.0157     | 0.0326       |
-| 2%    | pointwise     | spectral   | —        | 18/0 ✗            | 1.0000     | —                      | 0.6378    | —             | 73/0 ✗    | 1.0000      | 0.6364     | 1381.7721    |
-| 2%    | pointwise     | polynomial | —        | 29/0 ✗            | 0.9994     | —                      | 0.6238    | —             | 97/0 ✗    | 0.9991      | 0.6182     | 29.8498      |
-| 2%    | weak (no IBP) | spectral   | —        | 6/0 ✗             | 0.9307     | —                      | 0.3476    | —             | 66/0 ✗    | 0.7213      | 0.2564     | 11.3180      |
-| 2%    | weak (no IBP) | polynomial | —        | 1/0 ✗             | 0.3372     | —                      | 0.1866    | —             | 9/0 ✗     | 0.1883      | 0.1099     | 0.8842       |
-| 2%    | weak (IBP)    | spectral   | —        | 9/0 ✗             | 0.8618     | —                      | 0.3082    | —             | 11/0 ✗    | 0.9200      | 0.3359     | 11.4293      |
-| 2%    | weak (IBP)    | polynomial | —        | 1/0 ✗             | 0.3329     | —                      | 0.1858    | —             | 9/0 ✗     | 0.1972      | 0.1098     | 0.9103       |
-| 5%    | pointwise     | spectral   | —        | 34/0 ✗            | 1.0000     | —                      | 0.8725    | —             | 86/0 ✗    | 1.0000      | 0.8714     | 2190.0271    |
-| 5%    | pointwise     | polynomial | —        | 31/0 ✗            | 0.9996     | —                      | 0.8717    | —             | 86/0 ✗    | 0.9994      | 0.8702     | 47.4252      |
-| 5%    | weak (no IBP) | spectral   | —        | 28/0 ✗            | 1.0001     | —                      | 0.5369    | —             | 42/0 ✗    | 0.9995      | 0.4133     | 69.4094      |
-| 5%    | weak (no IBP) | polynomial | —        | 5/0 ✗             | 0.9730     | —                      | 0.3915    | —             | 13/0 ✗    | 0.6399      | 0.2611     | 5.4493       |
-| 5%    | weak (IBP)    | spectral   | —        | 24/0 ✗            | 1.0001     | —                      | 0.5370    | —             | 58/0 ✗    | 1.0000      | 0.5348     | 70.0482      |
-| 5%    | weak (IBP)    | polynomial | —        | 5/0 ✗             | 0.9617     | —                      | 0.3901    | —             | 13/0 ✗    | 0.6181      | 0.2604     | 5.4753       |
+| Noise | Formulation   | Backend    | Eq wins? | Multigraphs fp/fn | Mg E_coeff | Mult. best         | Mg E_data | Std best        | Std fp/fn | Std E_coeff | Std E_data | E_data floor |
+|:------|:-------------:|:----------:|:--------:|:------------------|:-----------|:-------------------|:----------|:----------------|:----------|:------------|:-----------|-------------:|
+| Clean | pointwise     | spectral   | ⚪        | 0/0 ✓             | 0.0047     | multigraph/RFE     | 0.0176    | PolyJet/RFE     | 0/0 ✓     | 0.0047      | 0.0175     | —            |
+| Clean | pointwise     | polynomial | 🟩        | 0/0 ✓             | 0.0117     | multigraph/RFE     | 0.0325    | PolyJet/RFE     | 0/0 ✓     | 0.0128      | 0.0320     | —            |
+| Clean | weak (no IBP) | spectral   | 🟩        | 0/0 ✓             | 0.0021     | multigraph/STRidge | 0.0112    | PolyJet/STRidge | 0/0 ✓     | 0.0023      | 0.0112     | —            |
+| Clean | weak (no IBP) | polynomial | ⚪        | 0/0 ✓             | 0.0022     | multigraph/MSTLS   | 0.0112    | PolyJet/MSTLS   | 0/0 ✓     | 0.0023      | 0.0112     | —            |
+| Clean | weak (IBP)    | spectral   | ⚪        | 0/0 ✓             | 0.0029     | multigraph/STRidge | 0.0133    | PolyJet/STRidge | 0/0 ✓     | 0.0030      | 0.0133     | —            |
+| Clean | weak (IBP)    | polynomial | ⚪        | 0/0 ✓             | 0.0029     | multigraph/STRidge | 0.0133    | PolyJet/STRidge | 0/0 ✓     | 0.0029      | 0.0133     | —            |
+| 2%    | pointwise     | spectral   | —        | 18/0 ✗            | 0.4266     | —                  | 0.6378    | —               | 83/0 ✗    | 0.4249      | 0.6367     | —            |
+| 2%    | pointwise     | polynomial | —        | 28/0 ✗            | 0.3663     | —                  | 0.6210    | —               | 79/0 ✗    | 0.4291      | 0.6371     | —            |
+| 2%    | weak (no IBP) | spectral   | —        | 6/0 ✗             | 0.5485     | —                  | 0.3476    | —               | 62/0 ✗    | 0.4969      | 0.3239     | —            |
+| 2%    | weak (no IBP) | polynomial | —        | 7/0 ✗             | 0.1307     | —                  | 0.1168    | —               | 9/0 ✗     | 0.0954      | 0.1099     | —            |
+| 2%    | weak (IBP)    | spectral   | —        | 30/0 ✗            | 0.4404     | —                  | 0.3931    | —               | 11/0 ✗    | 0.5365      | 0.3255     | —            |
+| 2%    | weak (IBP)    | polynomial | —        | 9/0 ✗             | 0.3100     | —                  | 0.2168    | —               | 33/0 ✗    | 0.2693      | 0.2026     | —            |
+| 5%    | pointwise     | spectral   | —        | 28/0 ✗            | 0.4318     | —                  | 0.8725    | —               | 89/0 ✗    | 0.4310      | 0.8722     | —            |
+| 5%    | pointwise     | polynomial | —        | 33/0 ✗            | 0.4222     | —                  | 0.8717    | —               | 93/0 ✗    | 0.4194      | 0.8702     | —            |
+| 5%    | weak (no IBP) | spectral   | —        | 30/0 ✗            | 0.4313     | —                  | 0.5369    | —               | 59/0 ✗    | 0.4459      | 0.4115     | —            |
+| 5%    | weak (no IBP) | polynomial | —        | 8/0 ✗             | 0.3897     | —                  | 0.2940    | —               | 13/0 ✗    | 0.2512      | 0.2611     | —            |
+| 5%    | weak (IBP)    | spectral   | —        | 37/0 ✗            | 0.4345     | —                  | 0.4875    | —               | 78/0 ✗    | 0.4340      | 0.4833     | —            |
+| 5%    | weak (IBP)    | polynomial | —        | 37/0 ✗            | 0.3803     | —                  | 0.4640    | —               | 17/0 ✗    | 0.3406      | 0.3414     | —            |
 
 
 ## Ablation
@@ -68,258 +68,277 @@ Each row shows the best configuration for a (library, algorithm) pair, ranked fr
 
 ### Clean (0% noise)
 
-| Method                         | Best conf.                    | fp/fn | E_coeff | Time (s) | vs. best |
-|:-------------------------------|:------------------------------|:------|--------:|---------:|---------:|
-| Modified Multigraphs + STRidge | spectral, weak (no IBP), m=12 | 0/0 ✓ | 0.0021  | 0.2      | —        |
-| Multigraphs + MSTLS            | spectral, weak (no IBP), m=12 | 0/0 ✓ | 0.0022  | 0.3      | +3.6%    |
-| Modified Multigraphs + MSTLS   | spectral, weak (no IBP), m=12 | 0/0 ✓ | 0.0022  | 0.3      | +3.6%    |
-| Multigraphs + RFE              | spectral, weak (no IBP), m=12 | 0/0 ✓ | 0.0022  | 0.2      | +3.6%    |
-| Modified Multigraphs + RFE     | spectral, weak (no IBP), m=12 | 0/0 ✓ | 0.0022  | 0.2      | +3.6%    |
-| PolyJet + MSTLS                | spectral, weak (no IBP), m=12 | 0/0 ✓ | 0.0023  | 2.4      | +8.3%    |
-| PolyJet + RFE                  | spectral, weak (no IBP), m=12 | 0/0 ✓ | 0.0023  | 0.2      | +8.3%    |
-| Multigraphs + STRidge          | spectral, weak (no IBP), m=8  | 0/0 ✓ | 0.0031  | 0.2      | +43.1%   |
-| PolyJet + STRidge              | spectral, weak (no IBP), m=8  | 0/0 ✓ | 0.0032  | 0.8      | +48.6%   |
+| Method                | Best conf.                     | fp/fn  | E_coeff     | Time (s) | vs. best |
+|:----------------------|:-------------------------------|:-------|------------:|---------:|---------:|
+| Multigraphs + STRidge | spectral, weak (no IBP), m=12  | 0/0 ✓  | 0.0021      | 0.3      | —        |
+| Multigraphs + MSTLS   | spectral, weak (no IBP), m=12  | 0/0 ✓  | 0.0022      | 0.3      | +3.6%    |
+| Multigraphs + RFE     | spectral, weak (no IBP), m=12  | 0/0 ✓  | 0.0022      | 0.1      | +3.6%    |
+| PolyJet + STRidge     | spectral, weak (no IBP), m=12  | 0/0 ✓  | 0.0023      | 1.3      | +6.9%    |
+| PolyJet + MSTLS       | spectral, weak (no IBP), m=12  | 0/0 ✓  | 0.0023      | 3.7      | +8.3%    |
+| PolyJet + RFE         | spectral, weak (no IBP), m=12  | 0/0 ✓  | 0.0023      | 0.1      | +8.3%    |
+| WSINDy + STRidge      | spectral, weak (no IBP), m=8   | 76/0 ✗ | 0.4334      | 1.7      | ✗        |
+| PDE-FIND + STRidge    | polynomial, pointwise          | 24/2 ✗ | 0.4288      | 2.9      | ✗        |
+| PDE-FIND + MSTLS      | spectral, weak (IBP), m=12     | 7/5 ✗  | 0.4412      | 1.5      | ✗        |
+| PDE-FIND + RFE        | spectral, pointwise            | 1/7 ✗  | 0.4409      | 0.1      | ✗        |
+| WSINDy + RFE          | spectral, pointwise            | 1/7 ✗  | 0.4409      | 0.1      | ✗        |
+| WSINDy + MSTLS        | polynomial, weak (no IBP), m=4 | 4/7 ✗  | 444514.6420 | 2.1      | ✗        |
 
 ### 2% noise
 
-| Method                         | Best conf.                      | fp/fn  | E_coeff | Time (s) | vs. best |
-|:-------------------------------|:--------------------------------|:-------|--------:|---------:|---------:|
-| Multigraphs + MSTLS            | polynomial, weak (IBP), m=12    | 1/0 ✗  | 0.3329  | 0.3      | ✗        |
-| Modified Multigraphs + MSTLS   | polynomial, weak (IBP), m=12    | 1/0 ✗  | 0.3329  | 0.3      | ✗        |
-| PolyJet + MSTLS                | polynomial, weak (no IBP), m=12 | 9/0 ✗  | 0.1883  | 2.2      | ✗        |
-| PolyJet + STRidge              | polynomial, weak (IBP), m=12    | 16/0 ✗ | 0.2185  | 0.7      | ✗        |
-| Multigraphs + STRidge          | spectral, pointwise             | 18/0 ✗ | 1.0000  | 0.3      | ✗        |
-| Modified Multigraphs + STRidge | polynomial, weak (no IBP), m=12 | 27/0 ✗ | 0.2379  | 0.2      | ✗        |
-| Multigraphs + RFE              | polynomial, weak (no IBP), m=12 | 0/5 ✗  | 0.9984  | 0.2      | ✗        |
-| Modified Multigraphs + RFE     | polynomial, weak (no IBP), m=12 | 0/5 ✗  | 0.9984  | 0.2      | ✗        |
-| PolyJet + RFE                  | polynomial, weak (no IBP), m=8  | 0/6 ✗  | 0.9987  | 0.4      | ✗        |
+| Method                | Best conf.                      | fp/fn  | E_coeff     | Time (s) | vs. best |
+|:----------------------|:--------------------------------|:-------|------------:|---------:|---------:|
+| Multigraphs + MSTLS   | spectral, weak (no IBP), m=8    | 6/0 ✗  | 0.5485      | 0.4      | ✗        |
+| Multigraphs + STRidge | polynomial, weak (no IBP), m=12 | 7/0 ✗  | 0.1341      | 0.4      | ✗        |
+| PolyJet + MSTLS       | polynomial, weak (no IBP), m=12 | 9/0 ✗  | 0.0954      | 4.0      | ✗        |
+| PolyJet + STRidge     | polynomial, weak (no IBP), m=8  | 10/0 ✗ | 0.2682      | 2.4      | ✗        |
+| WSINDy + STRidge      | polynomial, pointwise           | 79/0 ✗ | 0.4291      | 2.9      | ✗        |
+| PDE-FIND + STRidge    | spectral, weak (no IBP), m=4    | 23/2 ✗ | 0.4283      | 2.7      | ✗        |
+| Multigraphs + RFE     | polynomial, weak (no IBP), m=12 | 0/5 ✗  | 0.5578      | 0.1      | ✗        |
+| PDE-FIND + MSTLS      | spectral, weak (no IBP), m=12   | 7/5 ✗  | 0.4447      | 1.6      | ✗        |
+| PolyJet + RFE         | polynomial, weak (no IBP), m=12 | 0/6 ✗  | 0.7043      | 0.1      | ✗        |
+| PDE-FIND + RFE        | spectral, pointwise             | 1/7 ✗  | 0.4409      | 0.1      | ✗        |
+| WSINDy + RFE          | spectral, pointwise             | 1/7 ✗  | 0.4409      | 0.1      | ✗        |
+| WSINDy + MSTLS        | polynomial, weak (no IBP), m=4  | 4/7 ✗  | 438169.9763 | 2.2      | ✗        |
 
 ### 5% noise
 
-| Method                         | Best conf.                      | fp/fn  | E_coeff | Time (s) | vs. best |
-|:-------------------------------|:--------------------------------|:-------|--------:|---------:|---------:|
-| Multigraphs + MSTLS            | polynomial, weak (IBP), m=8     | 5/0 ✗  | 0.9617  | 0.4      | ✗        |
-| Modified Multigraphs + MSTLS   | polynomial, weak (no IBP), m=12 | 10/0 ✗ | 0.8007  | 0.3      | ✗        |
-| PolyJet + MSTLS                | polynomial, weak (IBP), m=12    | 13/0 ✗ | 0.6181  | 2.3      | ✗        |
-| Multigraphs + STRidge          | spectral, weak (IBP), m=4       | 24/0 ✗ | 1.0001  | 0.3      | ✗        |
-| Modified Multigraphs + STRidge | polynomial, weak (IBP), m=12    | 30/0 ✗ | 0.9072  | 0.2      | ✗        |
-| PolyJet + STRidge              | spectral, weak (no IBP), m=8    | 42/0 ✗ | 0.9995  | 1.1      | ✗        |
-| Modified Multigraphs + RFE     | polynomial, weak (no IBP), m=12 | 0/5 ✗  | 0.9988  | 0.2      | ✗        |
-| Multigraphs + RFE              | polynomial, weak (no IBP), m=8  | 0/5 ✗  | 0.9988  | 0.2      | ✗        |
-| PolyJet + RFE                  | polynomial, weak (no IBP), m=12 | 1/7 ✗  | 0.9996  | 0.3      | ✗        |
+| Method                | Best conf.                      | fp/fn  | E_coeff     | Time (s) | vs. best |
+|:----------------------|:--------------------------------|:-------|------------:|---------:|---------:|
+| Multigraphs + MSTLS   | polynomial, weak (no IBP), m=12 | 8/0 ✗  | 0.3897      | 0.3      | ✗        |
+| PolyJet + MSTLS       | polynomial, weak (no IBP), m=12 | 13/0 ✗ | 0.2512      | 3.9      | ✗        |
+| Multigraphs + STRidge | polynomial, weak (no IBP), m=4  | 22/0 ✗ | 0.3894      | 0.9      | ✗        |
+| PolyJet + STRidge     | polynomial, weak (no IBP), m=12 | 37/0 ✗ | 0.2682      | 2.6      | ✗        |
+| WSINDy + STRidge      | polynomial, weak (no IBP), m=4  | 85/0 ✗ | 0.4292      | 2.8      | ✗        |
+| PDE-FIND + STRidge    | polynomial, weak (IBP), m=12    | 11/2 ✗ | 0.4347      | 1.0      | ✗        |
+| Multigraphs + RFE     | polynomial, weak (IBP), m=12    | 0/5 ✗  | 0.8602      | 0.1      | ✗        |
+| PDE-FIND + MSTLS      | spectral, weak (no IBP), m=4    | 1/7 ✗  | 0.4409      | 3.3      | ✗        |
+| PDE-FIND + RFE        | spectral, pointwise             | 1/7 ✗  | 0.5796      | 0.1      | ✗        |
+| WSINDy + RFE          | spectral, pointwise             | 1/7 ✗  | 0.5796      | 0.1      | ✗        |
+| PolyJet + RFE         | spectral, pointwise             | 1/7 ✗  | 0.5796      | 0.2      | ✗        |
+| WSINDy + MSTLS        | polynomial, weak (no IBP), m=4  | 4/7 ✗  | 408758.5378 | 2.1      | ✗        |
 
 ## Pointwise formulation
 
 ### Spectral derivatives
 
-| Library          | Noise | Algorithm | d_tol/α | fp/fn | n_active | E_coeff | E_data | Time (s) | Exact? |
-|:-----------------|:------|:----------|:--------|:------|:---------|:--------|:-------|:---------|:-------|
-| PolyJet          | Clean | STRidge   | 1.0     | 0/0   | 7        | 0.0047  | 0.0175 | 1.2      | 🟢      |
-| PolyJet          | Clean | RFE       |         | 0/0   | 7        | 0.0047  | 0.0175 | 0.6      | 🟢      |
-| PolyJet          | 2%    | STRidge   | 0.1     | 73/0  | 80       | 1.0000  | 0.6364 | 1.7      | 🔴      |
-| PolyJet          | 2%    | RFE       |         | 1/7   | 1        | 1.0000  | 0.6433 | 0.5      | 🔴      |
-| PolyJet          | 5%    | STRidge   | 0.1     | 86/0  | 93       | 1.0000  | 0.8714 | 1.9      | 🔴      |
-| PolyJet          | 5%    | RFE       |         | 1/7   | 1        | 1.0000  | 0.8979 | 0.5      | 🔴      |
-| Multigraphs      | Clean | STRidge   | 10.0    | 0/0   | 3        | 0.0047  | 0.0176 | 0.2      | 🟢      |
-| Multigraphs      | Clean | RFE       |         | 0/0   | 3        | 0.0047  | 0.0176 | 0.2      | 🟢      |
-| Multigraphs      | 2%    | STRidge   | 1.0     | 18/0  | 12       | 1.0000  | 0.6378 | 0.3      | 🔴      |
-| Multigraphs      | 2%    | RFE       |         | 1/7   | 1        | 1.0000  | 0.6433 | 0.2      | 🔴      |
-| Multigraphs      | 5%    | STRidge   | 0.1     | 34/0  | 18       | 1.0000  | 0.8725 | 0.3      | 🔴      |
-| Multigraphs      | 5%    | RFE       |         | 1/7   | 1        | 1.0000  | 0.8979 | 0.2      | 🔴      |
-| Mod. Multigraphs | Clean | STRidge   | 10.0    | 0/0   | 3        | 0.0047  | 0.0176 | 0.2      | 🟢      |
-| Mod. Multigraphs | Clean | RFE       |         | 0/0   | 3        | 0.0047  | 0.0176 | 0.2      | 🟢      |
-| Mod. Multigraphs | 2%    | STRidge   | 0.01    | 35/0  | 18       | 1.0000  | 0.6377 | 0.3      | 🔴      |
-| Mod. Multigraphs | 2%    | RFE       |         | 1/7   | 1        | 1.0000  | 0.6433 | 0.2      | 🔴      |
-| Mod. Multigraphs | 5%    | STRidge   | 0.001   | 37/0  | 20       | 1.0000  | 0.8725 | 0.3      | 🔴      |
-| Mod. Multigraphs | 5%    | RFE       |         | 1/7   | 1        | 1.0000  | 0.8979 | 0.2      | 🔴      |
+| Library     | Noise | Algorithm | d_tol/α | fp/fn | n_active | E_coeff | E_data | Time (s) | Exact? |
+|:------------|:------|:----------|:--------|:------|:---------|:--------|:-------|:---------|:-------|
+| PDE-FIND    | Clean | STRidge   | 0.001   | 55/2  | 60       | 0.4272  | 0.4146 | 5.0      | 🔴      |
+| PDE-FIND    | Clean | RFE       |         | 1/7   | 1        | 0.4409  | 0.4294 | 0.1      | 🔴      |
+| PDE-FIND    | 2%    | STRidge   | 0.001   | 54/2  | 59       | 0.4292  | 0.6377 | 4.7      | 🔴      |
+| PDE-FIND    | 2%    | RFE       |         | 1/7   | 1        | 0.4409  | 0.6433 | 0.1      | 🔴      |
+| PDE-FIND    | 5%    | STRidge   | 0.01    | 47/2  | 52       | 0.4308  | 0.8720 | 4.5      | 🔴      |
+| PDE-FIND    | 5%    | RFE       |         | 1/7   | 1        | 0.5796  | 0.8979 | 0.1      | 🔴      |
+| WSINDy      | Clean | STRidge   | 0.001   | 83/0  | 40       | 0.4280  | 0.4157 | 2.8      | 🔴      |
+| WSINDy      | Clean | RFE       |         | 1/7   | 1        | 0.4409  | 0.4294 | 0.1      | 🔴      |
+| WSINDy      | 2%    | STRidge   | 0.01    | 94/0  | 45       | 0.4291  | 0.6378 | 2.9      | 🔴      |
+| WSINDy      | 2%    | RFE       |         | 1/7   | 1        | 0.4409  | 0.6433 | 0.1      | 🔴      |
+| WSINDy      | 5%    | STRidge   | 0.01    | 89/0  | 44       | 0.4310  | 0.8722 | 2.9      | 🔴      |
+| WSINDy      | 5%    | RFE       |         | 1/7   | 1        | 0.5796  | 0.8979 | 0.1      | 🔴      |
+| PolyJet     | Clean | STRidge   | 0.1     | 0/0   | 7        | 0.0047  | 0.0175 | 3.1      | 🟢      |
+| PolyJet     | Clean | RFE       |         | 0/0   | 7        | 0.0047  | 0.0175 | 0.2      | 🟢      |
+| PolyJet     | 2%    | STRidge   | 0.01    | 83/0  | 90       | 0.4249  | 0.6367 | 11.5     | 🔴      |
+| PolyJet     | 2%    | RFE       |         | 1/7   | 1        | 0.4409  | 0.6433 | 0.2      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 0.01    | 91/0  | 98       | 0.4309  | 0.8714 | 12.2     | 🔴      |
+| PolyJet     | 5%    | RFE       |         | 1/7   | 1        | 0.5796  | 0.8979 | 0.2      | 🔴      |
+| Multigraphs | Clean | STRidge   | 0.1     | 0/0   | 3        | 0.0047  | 0.0176 | 0.5      | 🟢      |
+| Multigraphs | Clean | RFE       |         | 0/0   | 3        | 0.0047  | 0.0176 | 0.1      | 🟢      |
+| Multigraphs | 2%    | STRidge   | 0.1     | 18/0  | 12       | 0.4266  | 0.6378 | 0.7      | 🔴      |
+| Multigraphs | 2%    | RFE       |         | 1/7   | 1        | 0.4409  | 0.6433 | 0.1      | 🔴      |
+| Multigraphs | 5%    | STRidge   | 0.01    | 28/0  | 16       | 0.4318  | 0.8725 | 0.8      | 🔴      |
+| Multigraphs | 5%    | RFE       |         | 1/7   | 1        | 0.5796  | 0.8979 | 0.1      | 🔴      |
 
 ### Polynomial stencils
 
-| Library          | Noise | Algorithm | d_tol/α | fp/fn | n_active | E_coeff | E_data | Time (s) | Exact? |
-|:-----------------|:------|:----------|:--------|:------|:---------|:--------|:-------|:---------|:-------|
-| PolyJet          | Clean | STRidge   | 1.0     | 0/0   | 7        | 0.0130  | 0.0320 | 1.0      | 🟢      |
-| PolyJet          | Clean | RFE       |         | 0/0   | 7        | 0.0128  | 0.0320 | 0.5      | 🟢      |
-| PolyJet          | 2%    | STRidge   | 0.001   | 97/0  | 104      | 0.9991  | 0.6182 | 1.9      | 🔴      |
-| PolyJet          | 2%    | RFE       |         | 1/7   | 1        | 0.9991  | 0.6433 | 0.5      | 🔴      |
-| PolyJet          | 5%    | STRidge   | 0.1     | 86/0  | 93       | 0.9994  | 0.8702 | 1.9      | 🔴      |
-| PolyJet          | 5%    | RFE       |         | 1/7   | 1        | 0.9996  | 0.8979 | 0.5      | 🔴      |
-| Multigraphs      | Clean | STRidge   | 1.0     | 0/0   | 3        | 0.0119  | 0.0325 | 0.2      | 🟢      |
-| Multigraphs      | Clean | RFE       |         | 0/0   | 3        | 0.0117  | 0.0325 | 0.2      | 🟢      |
-| Multigraphs      | 2%    | STRidge   | 0.1     | 29/0  | 16       | 0.9994  | 0.6238 | 0.3      | 🔴      |
-| Multigraphs      | 2%    | RFE       |         | 1/7   | 1        | 0.9991  | 0.6433 | 0.2      | 🔴      |
-| Multigraphs      | 5%    | STRidge   | 0.01    | 31/0  | 17       | 0.9996  | 0.8717 | 0.3      | 🔴      |
-| Multigraphs      | 5%    | RFE       |         | 1/7   | 1        | 0.9996  | 0.8979 | 0.2      | 🔴      |
-| Mod. Multigraphs | Clean | STRidge   | 10.0    | 0/0   | 3        | 0.0119  | 0.0325 | 0.2      | 🟢      |
-| Mod. Multigraphs | Clean | RFE       |         | 0/0   | 3        | 0.0117  | 0.0325 | 0.2      | 🟢      |
-| Mod. Multigraphs | 2%    | STRidge   | 0.1     | 31/0  | 17       | 0.9994  | 0.6238 | 0.3      | 🔴      |
-| Mod. Multigraphs | 2%    | RFE       |         | 1/7   | 1        | 0.9991  | 0.6433 | 0.2      | 🔴      |
-| Mod. Multigraphs | 5%    | STRidge   | 0.001   | 37/0  | 20       | 0.9996  | 0.8717 | 0.4      | 🔴      |
-| Mod. Multigraphs | 5%    | RFE       |         | 1/7   | 1        | 0.9996  | 0.8979 | 0.2      | 🔴      |
+| Library     | Noise | Algorithm | d_tol/α | fp/fn | n_active | E_coeff | E_data | Time (s) | Exact? |
+|:------------|:------|:----------|:--------|:------|:---------|:--------|:-------|:---------|:-------|
+| PDE-FIND    | Clean | STRidge   | 0.01    | 24/2  | 29       | 0.4288  | 0.4158 | 2.9      | 🔴      |
+| PDE-FIND    | Clean | RFE       |         | 1/7   | 1        | 0.4416  | 0.4294 | 0.1      | 🔴      |
+| PDE-FIND    | 2%    | STRidge   | 0.001   | 53/2  | 58       | 0.4294  | 0.6374 | 4.8      | 🔴      |
+| PDE-FIND    | 2%    | RFE       |         | 1/7   | 1        | 0.4417  | 0.6433 | 0.1      | 🔴      |
+| PDE-FIND    | 5%    | STRidge   | 0.001   | 55/2  | 60       | 0.4304  | 0.8716 | 4.6      | 🔴      |
+| PDE-FIND    | 5%    | RFE       |         | 1/7   | 1        | 0.5800  | 0.8979 | 0.1      | 🔴      |
+| WSINDy      | Clean | STRidge   | 0.001   | 83/0  | 40       | 0.4288  | 0.4157 | 2.9      | 🔴      |
+| WSINDy      | Clean | RFE       |         | 1/7   | 1        | 0.4416  | 0.4294 | 0.1      | 🔴      |
+| WSINDy      | 2%    | STRidge   | 0.001   | 79/0  | 41       | 0.4291  | 0.6371 | 2.9      | 🔴      |
+| WSINDy      | 2%    | RFE       |         | 1/7   | 1        | 0.4417  | 0.6433 | 0.1      | 🔴      |
+| WSINDy      | 5%    | STRidge   | 0.01    | 93/0  | 44       | 0.4305  | 0.8718 | 2.9      | 🔴      |
+| WSINDy      | 5%    | RFE       |         | 1/7   | 1        | 0.5800  | 0.8979 | 0.1      | 🔴      |
+| PolyJet     | Clean | STRidge   | 0.1     | 0/0   | 7        | 0.0130  | 0.0320 | 3.3      | 🟢      |
+| PolyJet     | Clean | RFE       |         | 0/0   | 7        | 0.0128  | 0.0320 | 0.2      | 🟢      |
+| PolyJet     | 2%    | STRidge   | 0.001   | 95/0  | 102      | 0.3606  | 0.6182 | 12.6     | 🔴      |
+| PolyJet     | 2%    | RFE       |         | 1/7   | 1        | 0.4417  | 0.6433 | 0.2      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 0.01    | 93/0  | 100      | 0.4194  | 0.8702 | 13.5     | 🔴      |
+| PolyJet     | 5%    | RFE       |         | 1/7   | 1        | 0.5800  | 0.8979 | 0.2      | 🔴      |
+| Multigraphs | Clean | STRidge   | 0.1     | 0/0   | 3        | 0.0119  | 0.0325 | 0.5      | 🟢      |
+| Multigraphs | Clean | RFE       |         | 0/0   | 3        | 0.0117  | 0.0325 | 0.1      | 🟢      |
+| Multigraphs | 2%    | STRidge   | 0.01    | 28/0  | 16       | 0.3663  | 0.6210 | 0.8      | 🔴      |
+| Multigraphs | 2%    | RFE       |         | 1/7   | 1        | 0.4417  | 0.6433 | 0.1      | 🔴      |
+| Multigraphs | 5%    | STRidge   | 0.001   | 33/0  | 18       | 0.4222  | 0.8717 | 0.9      | 🔴      |
+| Multigraphs | 5%    | RFE       |         | 1/7   | 1        | 0.5800  | 0.8979 | 0.1      | 🔴      |
 
 ## Weak formulation
 
 ### Spectral derivatives
 
-| Library          | Noise | Algorithm | d_tol/α | m  | IBP | fp/fn | n_active | E_coeff | E_data | Time (s) | Exact? |
-|:-----------------|:------|:----------|:--------|:---|:----|:------|:---------|:--------|:-------|:---------|:-------|
-| PolyJet          | Clean | STRidge   | 10.0    | 8  | no  | 0/0   | 7        | 0.0032  | 0.0138 | 0.8      | 🟢      |
-| PolyJet          | Clean | MSTLS     | 0.25    | 12 | no  | 0/0   | 7        | 0.0023  | 0.0112 | 2.4      | 🟢      |
-| PolyJet          | Clean | RFE       |         | 12 | no  | 0/0   | 7        | 0.0023  | 0.0112 | 0.2      | 🟢      |
-| PolyJet          | Clean | STRidge   | 10.0    | 12 | yes | 1/0   | 8        | 0.0297  | 0.0100 | 0.6      | 🔴      |
-| PolyJet          | Clean | MSTLS     | 0.25    | 12 | yes | 0/0   | 7        | 0.0280  | 0.0157 | 2.1      | 🟢      |
-| PolyJet          | Clean | RFE       |         | 12 | yes | 0/0   | 7        | 0.0280  | 0.0157 | 0.3      | 🟢      |
-| PolyJet          | 2%    | STRidge   | 10.0    | 12 | no  | 66/0  | 73       | 0.7213  | 0.2564 | 0.8      | 🔴      |
-| PolyJet          | 2%    | MSTLS     | 0.75    | 8  | no  | 12/1  | 18       | 0.9369  | 0.3362 | 3.0      | 🔴      |
-| PolyJet          | 2%    | RFE       |         | 12 | no  | 0/6   | 1        | 1.0000  | 0.3548 | 0.2      | 🔴      |
-| PolyJet          | 2%    | STRidge   | 10.0    | 12 | yes | 66/0  | 73       | 0.7214  | 0.2564 | 1.0      | 🔴      |
-| PolyJet          | 2%    | MSTLS     | 0.5     | 8  | yes | 11/0  | 18       | 0.9200  | 0.3359 | 2.7      | 🔴      |
-| PolyJet          | 2%    | RFE       |         | 12 | yes | 0/6   | 1        | 1.0000  | 0.3548 | 0.2      | 🔴      |
-| PolyJet          | 5%    | STRidge   | 1.0     | 8  | no  | 42/0  | 49       | 0.9995  | 0.4133 | 1.1      | 🔴      |
-| PolyJet          | 5%    | MSTLS     | 0.75    | 12 | no  | 9/3   | 13       | 1.0009  | 0.3575 | 2.1      | 🔴      |
-| PolyJet          | 5%    | RFE       |         | 4  | no  | 1/7   | 1        | 1.0000  | 0.6460 | 0.5      | 🔴      |
-| PolyJet          | 5%    | STRidge   | 1.0     | 4  | yes | 58/0  | 65       | 1.0000  | 0.5348 | 1.7      | 🔴      |
-| PolyJet          | 5%    | MSTLS     | 0.75    | 12 | yes | 9/3   | 13       | 1.0008  | 0.3575 | 2.1      | 🔴      |
-| PolyJet          | 5%    | RFE       |         | 4  | yes | 1/7   | 1        | 1.0000  | 0.6460 | 0.5      | 🔴      |
-| Multigraphs      | Clean | STRidge   | 10.0    | 8  | no  | 0/0   | 3        | 0.0031  | 0.0139 | 0.2      | 🟢      |
-| Multigraphs      | Clean | MSTLS     | 0.5     | 12 | no  | 0/0   | 3        | 0.0022  | 0.0112 | 0.3      | 🟢      |
-| Multigraphs      | Clean | RFE       |         | 12 | no  | 0/0   | 3        | 0.0022  | 0.0112 | 0.2      | 🟢      |
-| Multigraphs      | Clean | STRidge   | 10.0    | 12 | yes | 1/0   | 4        | 0.0297  | 0.0100 | 0.2      | 🔴      |
-| Multigraphs      | Clean | MSTLS     | 0.5     | 12 | yes | 0/0   | 3        | 0.0279  | 0.0158 | 0.3      | 🟢      |
-| Multigraphs      | Clean | RFE       |         | 12 | yes | 0/0   | 3        | 0.0279  | 0.0158 | 0.2      | 🟢      |
-| Multigraphs      | 2%    | STRidge   | 10.0    | 12 | no  | 32/0  | 18       | 0.7870  | 0.2829 | 0.2      | 🔴      |
-| Multigraphs      | 2%    | MSTLS     | 0.75    | 8  | no  | 6/0   | 6        | 0.9307  | 0.3476 | 0.4      | 🔴      |
-| Multigraphs      | 2%    | RFE       |         | 12 | no  | 0/5   | 1        | 1.0000  | 0.3445 | 0.2      | 🔴      |
-| Multigraphs      | 2%    | STRidge   | 1.0     | 4  | yes | 27/0  | 16       | 1.0002  | 0.4177 | 0.3      | 🔴      |
-| Multigraphs      | 2%    | MSTLS     | 0.75    | 12 | yes | 14/0  | 9        | 0.7357  | 0.2872 | 0.3      | 🔴      |
-| Multigraphs      | 2%    | RFE       |         | 12 | yes | 0/5   | 1        | 1.0000  | 0.3445 | 0.2      | 🔴      |
-| Multigraphs      | 5%    | STRidge   | 1.0     | 4  | no  | 28/0  | 17       | 1.0001  | 0.5369 | 0.3      | 🔴      |
-| Multigraphs      | 5%    | MSTLS     | 0.25    | 12 | no  | 1/7   | 1        | 1.0000  | 0.3701 | 0.3      | 🔴      |
-| Multigraphs      | 5%    | RFE       |         | 4  | no  | 1/7   | 1        | 1.0000  | 0.6460 | 0.2      | 🔴      |
-| Multigraphs      | 5%    | STRidge   | 1.0     | 4  | yes | 24/0  | 14       | 1.0001  | 0.5370 | 0.3      | 🔴      |
-| Multigraphs      | 5%    | MSTLS     | 0.25    | 12 | yes | 1/7   | 1        | 1.0000  | 0.3701 | 0.3      | 🔴      |
-| Multigraphs      | 5%    | RFE       |         | 4  | yes | 1/7   | 1        | 1.0000  | 0.6460 | 0.2      | 🔴      |
-| Mod. Multigraphs | Clean | STRidge   | 10.0    | 12 | no  | 0/0   | 3        | 0.0021  | 0.0112 | 0.2      | 🟢      |
-| Mod. Multigraphs | Clean | MSTLS     | 0.5     | 12 | no  | 0/0   | 3        | 0.0022  | 0.0112 | 0.3      | 🟢      |
-| Mod. Multigraphs | Clean | RFE       |         | 12 | no  | 0/0   | 3        | 0.0022  | 0.0112 | 0.2      | 🟢      |
-| Mod. Multigraphs | Clean | STRidge   | 10.0    | 12 | yes | 1/0   | 4        | 0.0297  | 0.0100 | 0.2      | 🔴      |
-| Mod. Multigraphs | Clean | MSTLS     | 0.5     | 12 | yes | 0/0   | 3        | 0.0279  | 0.0158 | 0.3      | 🟢      |
-| Mod. Multigraphs | Clean | RFE       |         | 12 | yes | 0/0   | 3        | 0.0279  | 0.0158 | 0.2      | 🟢      |
-| Mod. Multigraphs | 2%    | STRidge   | 1.0     | 12 | no  | 34/0  | 19       | 0.7852  | 0.2827 | 0.3      | 🔴      |
-| Mod. Multigraphs | 2%    | MSTLS     | 0.75    | 12 | no  | 9/0   | 7        | 0.7235  | 0.2876 | 0.3      | 🔴      |
-| Mod. Multigraphs | 2%    | RFE       |         | 12 | no  | 0/5   | 1        | 1.0000  | 0.3445 | 0.2      | 🔴      |
-| Mod. Multigraphs | 2%    | STRidge   | 1.0     | 4  | yes | 31/0  | 15       | 1.0001  | 0.4268 | 0.3      | 🔴      |
-| Mod. Multigraphs | 2%    | MSTLS     | 0.75    | 12 | yes | 9/0   | 7        | 0.8618  | 0.3082 | 0.3      | 🔴      |
-| Mod. Multigraphs | 2%    | RFE       |         | 12 | yes | 0/5   | 1        | 1.0000  | 0.3445 | 0.2      | 🔴      |
-| Mod. Multigraphs | 5%    | STRidge   | 10.0    | 12 | no  | 35/0  | 18       | 1.0295  | 0.3541 | 0.2      | 🔴      |
-| Mod. Multigraphs | 5%    | MSTLS     | 0.25    | 12 | no  | 1/7   | 1        | 1.0000  | 0.3701 | 0.3      | 🔴      |
-| Mod. Multigraphs | 5%    | RFE       |         | 4  | no  | 1/7   | 1        | 1.0000  | 0.6460 | 0.2      | 🔴      |
-| Mod. Multigraphs | 5%    | STRidge   | 10.0    | 12 | yes | 31/0  | 14       | 1.0336  | 0.3544 | 0.2      | 🔴      |
-| Mod. Multigraphs | 5%    | MSTLS     | 0.75    | 4  | yes | 3/3   | 5        | 1.0000  | 0.5377 | 0.5      | 🔴      |
-| Mod. Multigraphs | 5%    | RFE       |         | 4  | yes | 1/7   | 1        | 1.0000  | 0.6460 | 0.2      | 🔴      |
+| Library     | Noise | Algorithm | d_tol/α | m  | IBP | fp/fn | n_active | E_coeff     | E_data      | Time (s) | Exact? |
+|:------------|:------|:----------|:--------|:---|:----|:------|:---------|:------------|:------------|:---------|:-------|
+| PDE-FIND    | Clean | STRidge   | 0.01    | 4  | no  | 43/2  | 48       | 0.4284      | 0.4002      | 3.9      | 🔴      |
+| PDE-FIND    | Clean | MSTLS     | 0.25    | 4  | no  | 1/7   | 1        | 0.4409      | 0.4173      | 3.2      | 🔴      |
+| PDE-FIND    | Clean | RFE       |         | 4  | no  | 1/7   | 1        | 0.5796      | 0.5615      | 0.1      | 🔴      |
+| PDE-FIND    | Clean | STRidge   | 0.001   | 8  | yes | 55/2  | 60       | 0.4322      | 0.3888      | 3.2      | 🔴      |
+| PDE-FIND    | Clean | MSTLS     | 0.75    | 12 | yes | 7/5   | 9        | 0.4412      | 0.3678      | 1.5      | 🔴      |
+| PDE-FIND    | Clean | RFE       |         | 8  | yes | 1/7   | 1        | 0.5796      | 0.5526      | 0.1      | 🔴      |
+| PDE-FIND    | 2%    | STRidge   | 0.1     | 4  | no  | 23/2  | 28       | 0.4283      | 0.4295      | 2.7      | 🔴      |
+| PDE-FIND    | 2%    | MSTLS     | 0.75    | 12 | no  | 7/5   | 9        | 0.4447      | 0.3361      | 1.6      | 🔴      |
+| PDE-FIND    | 2%    | RFE       |         | 4  | no  | 1/7   | 1        | 0.5796      | 0.5778      | 0.1      | 🔴      |
+| PDE-FIND    | 2%    | STRidge   | 0.1     | 8  | yes | 28/2  | 33       | 0.4311      | 0.4095      | 2.0      | 🔴      |
+| PDE-FIND    | 2%    | MSTLS     | 0.25    | 8  | yes | 1/7   | 1        | 0.4409      | 0.4266      | 2.3      | 🔴      |
+| PDE-FIND    | 2%    | RFE       |         | 8  | yes | 1/7   | 1        | 0.5796      | 0.5630      | 0.1      | 🔴      |
+| PDE-FIND    | 5%    | STRidge   | 1.0     | 12 | no  | 34/2  | 39       | 0.4432      | 0.3506      | 1.5      | 🔴      |
+| PDE-FIND    | 5%    | MSTLS     | 0.25    | 4  | no  | 1/7   | 1        | 0.4409      | 0.5449      | 3.3      | 🔴      |
+| PDE-FIND    | 5%    | RFE       |         | 4  | no  | 1/7   | 1        | 0.5796      | 0.6460      | 0.1      | 🔴      |
+| PDE-FIND    | 5%    | STRidge   | 1.0     | 8  | yes | 22/2  | 27       | 0.4310      | 0.4851      | 1.5      | 🔴      |
+| PDE-FIND    | 5%    | MSTLS     | 0.25    | 8  | yes | 1/7   | 1        | 0.4409      | 0.4974      | 2.2      | 🔴      |
+| PDE-FIND    | 5%    | RFE       |         | 8  | yes | 1/7   | 1        | 0.5796      | 0.6098      | 0.1      | 🔴      |
+| WSINDy      | Clean | STRidge   | 1.0     | 8  | no  | 76/0  | 38       | 0.4334      | 0.3644      | 1.7      | 🔴      |
+| WSINDy      | Clean | MSTLS     | 0.25    | 4  | no  | 4/7   | 4        | 444689.2112 | 448874.7916 | 2.1      | 🔴      |
+| WSINDy      | Clean | RFE       |         | 4  | no  | 1/7   | 1        | 0.5796      | 0.5615      | 0.1      | 🔴      |
+| WSINDy      | Clean | STRidge   | 0.1     | 8  | yes | 90/0  | 44       | 0.4318      | 0.3903      | 1.9      | 🔴      |
+| WSINDy      | Clean | MSTLS     | 0.25    | 8  | yes | 4/7   | 4        | 663202.9871 | 668683.6885 | 1.5      | 🔴      |
+| WSINDy      | Clean | RFE       |         | 8  | yes | 1/7   | 1        | 0.5796      | 0.5526      | 0.1      | 🔴      |
+| WSINDy      | 2%    | STRidge   | 0.01    | 12 | no  | 88/0  | 43       | 0.4506      | 0.3247      | 1.3      | 🔴      |
+| WSINDy      | 2%    | MSTLS     | 0.25    | 4  | no  | 4/7   | 4        | 438342.0538 | 436503.6332 | 2.1      | 🔴      |
+| WSINDy      | 2%    | RFE       |         | 4  | no  | 1/7   | 1        | 0.5796      | 0.5778      | 0.1      | 🔴      |
+| WSINDy      | 2%    | STRidge   | 0.1     | 12 | yes | 85/0  | 43       | 0.4359      | 0.3652      | 1.3      | 🔴      |
+| WSINDy      | 2%    | MSTLS     | 0.25    | 8  | yes | 4/7   | 4        | 653069.4089 | 653081.9030 | 1.5      | 🔴      |
+| WSINDy      | 2%    | RFE       |         | 8  | yes | 1/7   | 1        | 0.5796      | 0.5630      | 0.1      | 🔴      |
+| WSINDy      | 5%    | STRidge   | 0.1     | 8  | no  | 85/0  | 43       | 0.4302      | 0.4131      | 1.9      | 🔴      |
+| WSINDy      | 5%    | MSTLS     | 0.25    | 4  | no  | 4/7   | 4        | 408919.0648 | 381256.0793 | 2.1      | 🔴      |
+| WSINDy      | 5%    | RFE       |         | 4  | no  | 1/7   | 1        | 0.5796      | 0.6460      | 0.1      | 🔴      |
+| WSINDy      | 5%    | STRidge   | 0.01    | 8  | yes | 94/0  | 45       | 0.4298      | 0.4844      | 2.0      | 🔴      |
+| WSINDy      | 5%    | MSTLS     | 0.25    | 8  | yes | 4/7   | 4        | 618999.3579 | 594279.6067 | 1.5      | 🔴      |
+| WSINDy      | 5%    | RFE       |         | 8  | yes | 1/7   | 1        | 0.5796      | 0.6098      | 0.1      | 🔴      |
+| PolyJet     | Clean | STRidge   | 10.0    | 12 | no  | 0/0   | 7        | 0.0023      | 0.0112      | 1.3      | 🟢      |
+| PolyJet     | Clean | MSTLS     | 0.25    | 12 | no  | 0/0   | 7        | 0.0023      | 0.0112      | 3.7      | 🟢      |
+| PolyJet     | Clean | RFE       |         | 12 | no  | 0/0   | 7        | 0.0023      | 0.0112      | 0.1      | 🟢      |
+| PolyJet     | Clean | STRidge   | 10.0    | 12 | yes | 0/0   | 7        | 0.0030      | 0.0133      | 1.3      | 🟢      |
+| PolyJet     | Clean | MSTLS     | 0.25    | 12 | yes | 0/0   | 7        | 0.0030      | 0.0133      | 3.6      | 🟢      |
+| PolyJet     | Clean | RFE       |         | 12 | yes | 0/0   | 7        | 0.0030      | 0.0133      | 0.1      | 🟢      |
+| PolyJet     | 2%    | STRidge   | 0.1     | 8  | no  | 62/0  | 69       | 0.4969      | 0.3239      | 6.1      | 🔴      |
+| PolyJet     | 2%    | MSTLS     | 0.75    | 4  | no  | 12/1  | 18       | 0.4233      | 0.4182      | 8.8      | 🔴      |
+| PolyJet     | 2%    | RFE       |         | 12 | no  | 0/6   | 1        | 0.9275      | 0.3548      | 0.1      | 🔴      |
+| PolyJet     | 2%    | STRidge   | 0.1     | 8  | yes | 37/0  | 44       | 0.4143      | 0.3812      | 4.3      | 🔴      |
+| PolyJet     | 2%    | MSTLS     | 0.5     | 12 | yes | 11/0  | 18       | 0.5365      | 0.3255      | 3.9      | 🔴      |
+| PolyJet     | 2%    | RFE       |         | 12 | yes | 0/6   | 1        | 0.9288      | 0.4103      | 0.1      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 0.1     | 8  | no  | 59/0  | 66       | 0.4459      | 0.4115      | 5.6      | 🔴      |
+| PolyJet     | 5%    | MSTLS     | 0.75    | 12 | no  | 9/3   | 13       | 0.4430      | 0.3575      | 3.6      | 🔴      |
+| PolyJet     | 5%    | RFE       |         | 4  | no  | 1/7   | 1        | 0.5796      | 0.6460      | 0.2      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 1.0     | 8  | yes | 78/0  | 85       | 0.4340      | 0.4833      | 5.8      | 🔴      |
+| PolyJet     | 5%    | MSTLS     | 0.25    | 8  | yes | 1/7   | 1        | 0.4409      | 0.4974      | 5.4      | 🔴      |
+| PolyJet     | 5%    | RFE       |         | 8  | yes | 1/7   | 1        | 0.5796      | 0.6098      | 0.2      | 🔴      |
+| Multigraphs | Clean | STRidge   | 10.0    | 12 | no  | 0/0   | 3        | 0.0021      | 0.0112      | 0.3      | 🟢      |
+| Multigraphs | Clean | MSTLS     | 0.5     | 12 | no  | 0/0   | 3        | 0.0022      | 0.0112      | 0.3      | 🟢      |
+| Multigraphs | Clean | RFE       |         | 12 | no  | 0/0   | 3        | 0.0022      | 0.0112      | 0.1      | 🟢      |
+| Multigraphs | Clean | STRidge   | 10.0    | 12 | yes | 0/0   | 3        | 0.0029      | 0.0133      | 0.3      | 🟢      |
+| Multigraphs | Clean | MSTLS     | 0.25    | 12 | yes | 0/0   | 3        | 0.0030      | 0.0133      | 0.3      | 🟢      |
+| Multigraphs | Clean | RFE       |         | 12 | yes | 0/0   | 3        | 0.0030      | 0.0133      | 0.1      | 🟢      |
+| Multigraphs | 2%    | STRidge   | 0.1     | 4  | no  | 30/0  | 17       | 0.4212      | 0.4176      | 0.8      | 🔴      |
+| Multigraphs | 2%    | MSTLS     | 0.75    | 8  | no  | 6/0   | 6        | 0.5485      | 0.3476      | 0.4      | 🔴      |
+| Multigraphs | 2%    | RFE       |         | 12 | no  | 0/5   | 1        | 0.9250      | 0.3445      | 0.1      | 🔴      |
+| Multigraphs | 2%    | STRidge   | 0.1     | 8  | yes | 30/0  | 17       | 0.4404      | 0.3931      | 0.6      | 🔴      |
+| Multigraphs | 2%    | MSTLS     | 0.75    | 8  | yes | 6/3   | 5        | 0.4485      | 0.3981      | 0.4      | 🔴      |
+| Multigraphs | 2%    | RFE       |         | 12 | yes | 0/5   | 1        | 0.9259      | 0.3931      | 0.1      | 🔴      |
+| Multigraphs | 5%    | STRidge   | 0.1     | 4  | no  | 30/0  | 17       | 0.4313      | 0.5369      | 0.8      | 🔴      |
+| Multigraphs | 5%    | MSTLS     | 0.25    | 4  | no  | 1/7   | 1        | 0.4409      | 0.5449      | 0.6      | 🔴      |
+| Multigraphs | 5%    | RFE       |         | 4  | no  | 1/7   | 1        | 0.5796      | 0.6460      | 0.1      | 🔴      |
+| Multigraphs | 5%    | STRidge   | 0.001   | 8  | yes | 37/0  | 20       | 0.4345      | 0.4875      | 0.6      | 🔴      |
+| Multigraphs | 5%    | MSTLS     | 0.25    | 8  | yes | 1/7   | 1        | 0.4409      | 0.4974      | 0.4      | 🔴      |
+| Multigraphs | 5%    | RFE       |         | 8  | yes | 1/7   | 1        | 0.5796      | 0.6098      | 0.1      | 🔴      |
 
 ### Polynomial stencils
 
-| Library          | Noise | Algorithm | d_tol/α | m  | IBP | fp/fn | n_active | E_coeff | E_data | Time (s) | Exact? |
-|:-----------------|:------|:----------|:--------|:---|:----|:------|:---------|:--------|:-------|:---------|:-------|
-| PolyJet          | Clean | STRidge   | 10.0    | 8  | no  | 0/0   | 7        | 0.0042  | 0.0141 | 0.8      | 🟢      |
-| PolyJet          | Clean | MSTLS     | 0.25    | 12 | no  | 0/0   | 7        | 0.0023  | 0.0112 | 1.9      | 🟢      |
-| PolyJet          | Clean | RFE       |         | 12 | no  | 0/0   | 7        | 0.0023  | 0.0112 | 0.2      | 🟢      |
-| PolyJet          | Clean | STRidge   | 10.0    | 12 | yes | 1/0   | 8        | 0.0297  | 0.0100 | 0.6      | 🔴      |
-| PolyJet          | Clean | MSTLS     | 0.25    | 12 | yes | 0/0   | 7        | 0.0279  | 0.0157 | 2.3      | 🟢      |
-| PolyJet          | Clean | RFE       |         | 12 | yes | 0/0   | 7        | 0.0279  | 0.0157 | 0.3      | 🟢      |
-| PolyJet          | 2%    | STRidge   | 10.0    | 12 | no  | 17/0  | 24       | 0.2182  | 0.1089 | 0.8      | 🔴      |
-| PolyJet          | 2%    | MSTLS     | 0.5     | 12 | no  | 9/0   | 16       | 0.1883  | 0.1099 | 2.2      | 🔴      |
-| PolyJet          | 2%    | RFE       |         | 8  | no  | 0/6   | 1        | 0.9987  | 0.4262 | 0.4      | 🔴      |
-| PolyJet          | 2%    | STRidge   | 10.0    | 12 | yes | 16/0  | 23       | 0.2185  | 0.1091 | 0.7      | 🔴      |
-| PolyJet          | 2%    | MSTLS     | 0.5     | 12 | yes | 9/0   | 16       | 0.1972  | 0.1098 | 2.1      | 🔴      |
-| PolyJet          | 2%    | RFE       |         | 8  | yes | 0/6   | 1        | 0.9987  | 0.4262 | 0.3      | 🔴      |
-| PolyJet          | 5%    | STRidge   | 10.0    | 12 | no  | 55/0  | 62       | 0.6891  | 0.2526 | 0.9      | 🔴      |
-| PolyJet          | 5%    | MSTLS     | 0.5     | 12 | no  | 13/0  | 20       | 0.6399  | 0.2611 | 2.2      | 🔴      |
-| PolyJet          | 5%    | RFE       |         | 12 | no  | 1/7   | 1        | 0.9996  | 0.5246 | 0.3      | 🔴      |
-| PolyJet          | 5%    | STRidge   | 10.0    | 12 | yes | 54/0  | 61       | 0.6911  | 0.2526 | 0.9      | 🔴      |
-| PolyJet          | 5%    | MSTLS     | 0.5     | 12 | yes | 13/0  | 20       | 0.6181  | 0.2604 | 2.3      | 🔴      |
-| PolyJet          | 5%    | RFE       |         | 12 | yes | 1/7   | 1        | 0.9996  | 0.5246 | 0.3      | 🔴      |
-| Multigraphs      | Clean | STRidge   | 10.0    | 8  | no  | 0/0   | 3        | 0.0039  | 0.0141 | 0.2      | 🟢      |
-| Multigraphs      | Clean | MSTLS     | 0.5     | 12 | no  | 0/0   | 3        | 0.0022  | 0.0112 | 0.3      | 🟢      |
-| Multigraphs      | Clean | RFE       |         | 12 | no  | 0/0   | 3        | 0.0022  | 0.0112 | 0.2      | 🟢      |
-| Multigraphs      | Clean | STRidge   | 10.0    | 12 | yes | 1/0   | 4        | 0.0296  | 0.0100 | 0.2      | 🔴      |
-| Multigraphs      | Clean | MSTLS     | 0.5     | 12 | yes | 0/0   | 3        | 0.0278  | 0.0158 | 0.3      | 🟢      |
-| Multigraphs      | Clean | RFE       |         | 12 | yes | 0/0   | 3        | 0.0278  | 0.0158 | 0.2      | 🟢      |
-| Multigraphs      | 2%    | STRidge   | 10.0    | 12 | no  | 27/0  | 16       | 0.2379  | 0.1227 | 0.2      | 🔴      |
-| Multigraphs      | 2%    | MSTLS     | 0.25    | 12 | no  | 1/0   | 4        | 0.3372  | 0.1866 | 0.3      | 🔴      |
-| Multigraphs      | 2%    | RFE       |         | 12 | no  | 0/5   | 1        | 0.9984  | 0.2228 | 0.2      | 🔴      |
-| Multigraphs      | 2%    | STRidge   | 1.0     | 4  | yes | 22/0  | 14       | 1.0008  | 0.3485 | 0.3      | 🔴      |
-| Multigraphs      | 2%    | MSTLS     | 0.25    | 12 | yes | 1/0   | 4        | 0.3329  | 0.1858 | 0.3      | 🔴      |
-| Multigraphs      | 2%    | RFE       |         | 12 | yes | 0/5   | 1        | 0.9984  | 0.2228 | 0.2      | 🔴      |
-| Multigraphs      | 5%    | STRidge   | 0.001   | 12 | no  | 37/0  | 20       | 0.8344  | 0.3033 | 0.3      | 🔴      |
-| Multigraphs      | 5%    | MSTLS     | 0.75    | 8  | no  | 5/0   | 5        | 0.9730  | 0.3915 | 0.4      | 🔴      |
-| Multigraphs      | 5%    | RFE       |         | 8  | no  | 0/5   | 1        | 0.9988  | 0.4485 | 0.2      | 🔴      |
-| Multigraphs      | 5%    | STRidge   | 1.0     | 4  | yes | 30/0  | 17       | 1.0002  | 0.5244 | 0.3      | 🔴      |
-| Multigraphs      | 5%    | MSTLS     | 0.75    | 8  | yes | 5/0   | 5        | 0.9617  | 0.3901 | 0.4      | 🔴      |
-| Multigraphs      | 5%    | RFE       |         | 8  | yes | 0/5   | 1        | 0.9988  | 0.4485 | 0.2      | 🔴      |
-| Mod. Multigraphs | Clean | STRidge   | 10.0    | 12 | no  | 0/0   | 3        | 0.0024  | 0.0112 | 0.2      | 🟢      |
-| Mod. Multigraphs | Clean | MSTLS     | 0.5     | 12 | no  | 0/0   | 3        | 0.0022  | 0.0112 | 0.3      | 🟢      |
-| Mod. Multigraphs | Clean | RFE       |         | 12 | no  | 0/0   | 3        | 0.0022  | 0.0112 | 0.2      | 🟢      |
-| Mod. Multigraphs | Clean | STRidge   | 10.0    | 12 | yes | 1/0   | 4        | 0.0296  | 0.0100 | 0.2      | 🔴      |
-| Mod. Multigraphs | Clean | MSTLS     | 0.5     | 12 | yes | 0/0   | 3        | 0.0278  | 0.0158 | 0.3      | 🟢      |
-| Mod. Multigraphs | Clean | RFE       |         | 12 | yes | 0/0   | 3        | 0.0278  | 0.0158 | 0.2      | 🟢      |
-| Mod. Multigraphs | 2%    | STRidge   | 10.0    | 12 | no  | 27/0  | 16       | 0.2379  | 0.1227 | 0.2      | 🔴      |
-| Mod. Multigraphs | 2%    | MSTLS     | 0.25    | 12 | no  | 1/0   | 4        | 0.3372  | 0.1866 | 0.4      | 🔴      |
-| Mod. Multigraphs | 2%    | RFE       |         | 12 | no  | 0/5   | 1        | 0.9984  | 0.2228 | 0.2      | 🔴      |
-| Mod. Multigraphs | 2%    | STRidge   | 10.0    | 12 | yes | 34/0  | 17       | 0.4032  | 0.1233 | 0.2      | 🔴      |
-| Mod. Multigraphs | 2%    | MSTLS     | 0.25    | 12 | yes | 1/0   | 4        | 0.3329  | 0.1858 | 0.3      | 🔴      |
-| Mod. Multigraphs | 2%    | RFE       |         | 12 | yes | 0/5   | 1        | 0.9984  | 0.2228 | 0.2      | 🔴      |
-| Mod. Multigraphs | 5%    | STRidge   | 0.1     | 4  | no  | 31/0  | 18       | 1.0004  | 0.5244 | 0.3      | 🔴      |
-| Mod. Multigraphs | 5%    | MSTLS     | 0.75    | 12 | no  | 10/0  | 8        | 0.8007  | 0.3099 | 0.3      | 🔴      |
-| Mod. Multigraphs | 5%    | RFE       |         | 12 | no  | 0/5   | 1        | 0.9988  | 0.3690 | 0.2      | 🔴      |
-| Mod. Multigraphs | 5%    | STRidge   | 1.0     | 12 | yes | 30/0  | 16       | 0.9072  | 0.3098 | 0.2      | 🔴      |
-| Mod. Multigraphs | 5%    | MSTLS     | 0.25    | 12 | yes | 0/5   | 1        | 0.9988  | 0.3690 | 0.3      | 🔴      |
-| Mod. Multigraphs | 5%    | RFE       |         | 12 | yes | 0/5   | 1        | 0.9988  | 0.3690 | 0.2      | 🔴      |
+| Library     | Noise | Algorithm | d_tol/α | m  | IBP | fp/fn | n_active | E_coeff     | E_data      | Time (s) | Exact? |
+|:------------|:------|:----------|:--------|:---|:----|:------|:---------|:------------|:------------|:---------|:-------|
+| PDE-FIND    | Clean | STRidge   | 0.01    | 4  | no  | 43/2  | 48       | 0.4291      | 0.4002      | 4.2      | 🔴      |
+| PDE-FIND    | Clean | MSTLS     | 0.25    | 4  | no  | 1/7   | 1        | 0.4416      | 0.4173      | 3.3      | 🔴      |
+| PDE-FIND    | Clean | RFE       |         | 4  | no  | 1/7   | 1        | 0.5800      | 0.5615      | 0.1      | 🔴      |
+| PDE-FIND    | Clean | STRidge   | 0.001   | 8  | yes | 54/2  | 59       | 0.4327      | 0.3889      | 3.2      | 🔴      |
+| PDE-FIND    | Clean | MSTLS     | 0.75    | 12 | yes | 7/5   | 9        | 0.4419      | 0.3678      | 1.6      | 🔴      |
+| PDE-FIND    | Clean | RFE       |         | 8  | yes | 1/7   | 1        | 0.5801      | 0.5526      | 0.1      | 🔴      |
+| PDE-FIND    | 2%    | STRidge   | 1.0     | 12 | no  | 27/2  | 32       | 0.4398      | 0.3266      | 1.4      | 🔴      |
+| PDE-FIND    | 2%    | MSTLS     | 0.25    | 4  | no  | 1/7   | 1        | 0.4416      | 0.4432      | 3.1      | 🔴      |
+| PDE-FIND    | 2%    | RFE       |         | 4  | no  | 1/7   | 1        | 0.5800      | 0.5778      | 0.1      | 🔴      |
+| PDE-FIND    | 2%    | STRidge   | 0.1     | 12 | yes | 41/2  | 46       | 0.4368      | 0.3649      | 1.7      | 🔴      |
+| PDE-FIND    | 2%    | MSTLS     | 0.25    | 8  | yes | 1/7   | 1        | 0.4416      | 0.4266      | 2.2      | 🔴      |
+| PDE-FIND    | 2%    | RFE       |         | 8  | yes | 1/7   | 1        | 0.5801      | 0.5630      | 0.1      | 🔴      |
+| PDE-FIND    | 5%    | STRidge   | 1.0     | 12 | no  | 27/2  | 32       | 0.4374      | 0.3491      | 1.4      | 🔴      |
+| PDE-FIND    | 5%    | MSTLS     | 0.25    | 4  | no  | 1/7   | 1        | 0.4416      | 0.5449      | 3.4      | 🔴      |
+| PDE-FIND    | 5%    | RFE       |         | 4  | no  | 1/7   | 1        | 0.5800      | 0.6460      | 0.1      | 🔴      |
+| PDE-FIND    | 5%    | STRidge   | 1.0     | 12 | yes | 11/2  | 16       | 0.4347      | 0.4060      | 1.0      | 🔴      |
+| PDE-FIND    | 5%    | MSTLS     | 0.25    | 8  | yes | 1/7   | 1        | 0.4416      | 0.4974      | 2.2      | 🔴      |
+| PDE-FIND    | 5%    | RFE       |         | 8  | yes | 1/7   | 1        | 0.5801      | 0.6098      | 0.1      | 🔴      |
+| WSINDy      | Clean | STRidge   | 1.0     | 8  | no  | 76/0  | 38       | 0.4336      | 0.3644      | 1.8      | 🔴      |
+| WSINDy      | Clean | MSTLS     | 0.25    | 4  | no  | 4/7   | 4        | 444514.6420 | 448874.7916 | 2.1      | 🔴      |
+| WSINDy      | Clean | RFE       |         | 4  | no  | 1/7   | 1        | 0.5800      | 0.5615      | 0.1      | 🔴      |
+| WSINDy      | Clean | STRidge   | 0.01    | 8  | yes | 83/0  | 41       | 0.4321      | 0.3906      | 2.0      | 🔴      |
+| WSINDy      | Clean | MSTLS     | 0.25    | 8  | yes | 4/7   | 4        | 662942.6372 | 668683.6885 | 1.6      | 🔴      |
+| WSINDy      | Clean | RFE       |         | 8  | yes | 1/7   | 1        | 0.5801      | 0.5526      | 0.1      | 🔴      |
+| WSINDy      | 2%    | STRidge   | 0.01    | 12 | no  | 88/0  | 43       | 0.4503      | 0.3247      | 1.3      | 🔴      |
+| WSINDy      | 2%    | MSTLS     | 0.25    | 4  | no  | 4/7   | 4        | 438169.9763 | 436503.6332 | 2.2      | 🔴      |
+| WSINDy      | 2%    | RFE       |         | 4  | no  | 1/7   | 1        | 0.5800      | 0.5778      | 0.1      | 🔴      |
+| WSINDy      | 2%    | STRidge   | 0.01    | 8  | yes | 95/0  | 45       | 0.4313      | 0.4096      | 2.1      | 🔴      |
+| WSINDy      | 2%    | MSTLS     | 0.25    | 8  | yes | 4/7   | 4        | 652813.0372 | 653081.9030 | 1.5      | 🔴      |
+| WSINDy      | 2%    | RFE       |         | 8  | yes | 1/7   | 1        | 0.5801      | 0.5630      | 0.1      | 🔴      |
+| WSINDy      | 5%    | STRidge   | 0.01    | 4  | no  | 85/0  | 44       | 0.4292      | 0.5353      | 2.8      | 🔴      |
+| WSINDy      | 5%    | MSTLS     | 0.25    | 4  | no  | 4/7   | 4        | 408758.5378 | 381256.0793 | 2.1      | 🔴      |
+| WSINDy      | 5%    | RFE       |         | 4  | no  | 1/7   | 1        | 0.5800      | 0.6460      | 0.1      | 🔴      |
+| WSINDy      | 5%    | STRidge   | 0.01    | 12 | yes | 90/0  | 44       | 0.4343      | 0.4018      | 1.3      | 🔴      |
+| WSINDy      | 5%    | MSTLS     | 0.25    | 8  | yes | 4/7   | 4        | 618756.3608 | 594279.6067 | 1.5      | 🔴      |
+| WSINDy      | 5%    | RFE       |         | 8  | yes | 1/7   | 1        | 0.5801      | 0.6098      | 0.1      | 🔴      |
+| PolyJet     | Clean | STRidge   | 10.0    | 12 | no  | 0/0   | 7        | 0.0024      | 0.0112      | 1.4      | 🟢      |
+| PolyJet     | Clean | MSTLS     | 0.25    | 12 | no  | 0/0   | 7        | 0.0023      | 0.0112      | 3.7      | 🟢      |
+| PolyJet     | Clean | RFE       |         | 12 | no  | 0/0   | 7        | 0.0023      | 0.0112      | 0.1      | 🟢      |
+| PolyJet     | Clean | STRidge   | 10.0    | 12 | yes | 0/0   | 7        | 0.0029      | 0.0133      | 1.3      | 🟢      |
+| PolyJet     | Clean | MSTLS     | 0.25    | 12 | yes | 0/0   | 7        | 0.0030      | 0.0133      | 3.8      | 🟢      |
+| PolyJet     | Clean | RFE       |         | 12 | yes | 0/0   | 7        | 0.0030      | 0.0133      | 0.1      | 🟢      |
+| PolyJet     | 2%    | STRidge   | 10.0    | 8  | no  | 10/0  | 17       | 0.2682      | 0.2197      | 2.4      | 🔴      |
+| PolyJet     | 2%    | MSTLS     | 0.5     | 12 | no  | 9/0   | 16       | 0.0954      | 0.1099      | 4.0      | 🔴      |
+| PolyJet     | 2%    | RFE       |         | 12 | no  | 0/6   | 1        | 0.7043      | 0.3248      | 0.1      | 🔴      |
+| PolyJet     | 2%    | STRidge   | 1.0     | 12 | yes | 33/0  | 40       | 0.2693      | 0.2026      | 2.9      | 🔴      |
+| PolyJet     | 2%    | MSTLS     | 0.75    | 12 | yes | 10/1  | 16       | 0.2877      | 0.2122      | 3.9      | 🔴      |
+| PolyJet     | 2%    | RFE       |         | 12 | yes | 0/6   | 1        | 0.7062      | 0.4060      | 0.1      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 10.0    | 12 | no  | 37/0  | 44       | 0.2682      | 0.2533      | 2.6      | 🔴      |
+| PolyJet     | 5%    | MSTLS     | 0.5     | 12 | no  | 13/0  | 20       | 0.2512      | 0.2611      | 3.9      | 🔴      |
+| PolyJet     | 5%    | RFE       |         | 4  | no  | 1/7   | 1        | 0.5800      | 0.6460      | 0.2      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 1.0     | 12 | yes | 58/0  | 65       | 0.3374      | 0.3361      | 3.2      | 🔴      |
+| PolyJet     | 5%    | MSTLS     | 0.75    | 12 | yes | 17/0  | 24       | 0.3406      | 0.3414      | 3.7      | 🔴      |
+| PolyJet     | 5%    | RFE       |         | 8  | yes | 1/7   | 1        | 0.5801      | 0.6098      | 0.2      | 🔴      |
+| Multigraphs | Clean | STRidge   | 10.0    | 8  | no  | 0/0   | 3        | 0.0039      | 0.0141      | 0.4      | 🟢      |
+| Multigraphs | Clean | MSTLS     | 0.5     | 12 | no  | 0/0   | 3        | 0.0022      | 0.0112      | 0.3      | 🟢      |
+| Multigraphs | Clean | RFE       |         | 12 | no  | 0/0   | 3        | 0.0022      | 0.0112      | 0.1      | 🟢      |
+| Multigraphs | Clean | STRidge   | 10.0    | 12 | yes | 0/0   | 3        | 0.0029      | 0.0133      | 0.3      | 🟢      |
+| Multigraphs | Clean | MSTLS     | 0.25    | 12 | yes | 0/0   | 3        | 0.0029      | 0.0133      | 0.3      | 🟢      |
+| Multigraphs | Clean | RFE       |         | 12 | yes | 0/0   | 3        | 0.0029      | 0.0133      | 0.1      | 🟢      |
+| Multigraphs | 2%    | STRidge   | 10.0    | 12 | no  | 7/0   | 5        | 0.1341      | 0.1168      | 0.4      | 🔴      |
+| Multigraphs | 2%    | MSTLS     | 0.75    | 12 | no  | 7/0   | 5        | 0.1307      | 0.1168      | 0.3      | 🔴      |
+| Multigraphs | 2%    | RFE       |         | 12 | no  | 0/5   | 1        | 0.5578      | 0.2228      | 0.1      | 🔴      |
+| Multigraphs | 2%    | STRidge   | 1.0     | 12 | yes | 33/0  | 18       | 0.3000      | 0.2119      | 0.5      | 🔴      |
+| Multigraphs | 2%    | MSTLS     | 0.75    | 12 | yes | 9/0   | 7        | 0.3100      | 0.2168      | 0.3      | 🔴      |
+| Multigraphs | 2%    | RFE       |         | 12 | yes | 0/5   | 1        | 0.5617      | 0.2773      | 0.1      | 🔴      |
+| Multigraphs | 5%    | STRidge   | 1.0     | 4  | no  | 22/0  | 14       | 0.3894      | 0.5225      | 0.9      | 🔴      |
+| Multigraphs | 5%    | MSTLS     | 0.75    | 12 | no  | 8/0   | 6        | 0.3897      | 0.2940      | 0.3      | 🔴      |
+| Multigraphs | 5%    | RFE       |         | 4  | no  | 1/7   | 1        | 0.5800      | 0.6460      | 0.1      | 🔴      |
+| Multigraphs | 5%    | STRidge   | 0.001   | 8  | yes | 37/0  | 20       | 0.3803      | 0.4640      | 0.6      | 🔴      |
+| Multigraphs | 5%    | MSTLS     | 0.75    | 12 | yes | 9/2   | 6        | 0.4026      | 0.3677      | 0.3      | 🔴      |
+| Multigraphs | 5%    | RFE       |         | 12 | yes | 0/5   | 1        | 0.8602      | 0.4354      | 0.1      | 🔴      |
 
-
-## Oracle (ground-truth residual)
-
-The oracle plugs the true coefficients into ``evaluate_unified`` (same pipeline as all regression results).  Oracle E = 0 always (w ≡ true).  E_fit = ‖Θ·true − Ft‖/‖Ft‖ is the irreducible noise floor.
-
-| Noise | Formulation   | Backend    | m  | IBP | E_data floor | cond(Θ)     |
-|:------|:--------------|:-----------|:--:|:---:|-------------:|:------------|
-| Clean | weak (no IBP) | spectral   | 4  | no  | 0.0171       | 15559622.6  |
-| Clean | weak (no IBP) | spectral   | 8  | no  | 0.0142       | 21531316.4  |
-| Clean | weak (no IBP) | spectral   | 12 | no  | 0.0114       | 34013918.5  |
-| Clean | weak (no IBP) | polynomial | 4  | no  | 0.0227       | 15564349.3  |
-| Clean | weak (no IBP) | polynomial | 8  | no  | 0.0145       | 21542667.8  |
-| Clean | weak (no IBP) | polynomial | 12 | no  | 0.0114       | 34063590.5  |
-| Clean | weak (IBP)    | spectral   | 4  | yes | 178.9467     | 59713062.9  |
-| Clean | weak (IBP)    | spectral   | 8  | yes | 0.7600       | 22310889.7  |
-| Clean | weak (IBP)    | spectral   | 12 | yes | 0.0326       | 34140137.1  |
-| Clean | weak (IBP)    | polynomial | 4  | yes | 178.9467     | 59112570.3  |
-| Clean | weak (IBP)    | polynomial | 8  | yes | 0.7599       | 22378946.1  |
-| Clean | weak (IBP)    | polynomial | 12 | yes | 0.0326       | 34199127.9  |
-| 2%    | weak (no IBP) | spectral   | 4  | no  | 18.4247      | 21474809.9  |
-| 2%    | weak (no IBP) | spectral   | 8  | no  | 11.3180      | 33213146.7  |
-| 2%    | weak (no IBP) | spectral   | 12 | no  | 11.4029      | 45377815.8  |
-| 2%    | weak (no IBP) | polynomial | 4  | no  | 5.3848       | 18300991.0  |
-| 2%    | weak (no IBP) | polynomial | 8  | no  | 0.9636       | 24727456.6  |
-| 2%    | weak (no IBP) | polynomial | 12 | no  | 0.8842       | 32039332.3  |
-| 2%    | weak (IBP)    | spectral   | 4  | yes | 186.5849     | 21421560.4  |
-| 2%    | weak (IBP)    | spectral   | 8  | yes | 11.9736      | 33218011.5  |
-| 2%    | weak (IBP)    | spectral   | 12 | yes | 11.4293      | 45383276.7  |
-| 2%    | weak (IBP)    | polynomial | 4  | yes | 177.7529     | 18291220.6  |
-| 2%    | weak (IBP)    | polynomial | 8  | yes | 1.6306       | 24702480.8  |
-| 2%    | weak (IBP)    | polynomial | 12 | yes | 0.9103       | 32035475.0  |
-| 5%    | weak (no IBP) | spectral   | 4  | no  | 75.2191      | 64231689.3  |
-| 5%    | weak (no IBP) | spectral   | 8  | no  | 69.4094      | 93763895.2  |
-| 5%    | weak (no IBP) | spectral   | 12 | no  | 70.6711      | 125136634.2 |
-| 5%    | weak (no IBP) | polynomial | 4  | no  | 13.4584      | 18973257.7  |
-| 5%    | weak (no IBP) | polynomial | 8  | no  | 5.4893       | 27941601.0  |
-| 5%    | weak (no IBP) | polynomial | 12 | no  | 5.4493       | 36171050.9  |
-| 5%    | weak (IBP)    | spectral   | 4  | yes | 226.1469     | 63892845.2  |
-| 5%    | weak (IBP)    | spectral   | 8  | yes | 70.0482      | 93755748.7  |
-| 5%    | weak (IBP)    | spectral   | 12 | yes | 70.6973      | 125136813.2 |
-| 5%    | weak (IBP)    | polynomial | 4  | yes | 172.5340     | 18941693.6  |
-| 5%    | weak (IBP)    | polynomial | 8  | yes | 6.1362       | 27917652.5  |
-| 5%    | weak (IBP)    | polynomial | 12 | yes | 5.4753       | 36169050.1  |
 ---
-| Source                                        | Wall time | CPU                                           | Threads |
-|:----------------------------------------------|----------:|:----------------------------------------------|:-------:|
-| `sweep_20260715_190818_ks_wchaos_trimmed.csv` | 45.7 min  | AMD Ryzen 7 PRO 7840U w/ Radeon 780M Graphics | 1       |
+## Provenance
+
+Generated by `scripts/build_summary.py` from the sweep CSV(s) below. Regenerate
+after code or sweep changes with `python scripts/build_summary.py <csv> --equation ks_wchaos`.
+
+| Source                                     | Wall time | CPU                                      | Threads |
+|:-------------------------------------------|----------:|:-----------------------------------------|:-------:|
+| `sweep_20260802_081855_ks_wchaos_full.csv` | 163.3 min | Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz | 1       |

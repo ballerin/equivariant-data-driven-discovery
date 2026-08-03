@@ -107,6 +107,9 @@ def build_markdown(csv_paths, equation=None):
         rows = [r for r in all_rows if r["equation"] == equation]
     else:
         equation = sorted(eq_names)[0]
+        if len(eq_names) > 1:
+            print(f"Warning: no --equation given; defaulting to {equation!r}. "
+                  f"Available: {eq_names}")
         rows = [r for r in all_rows if r["equation"] == equation]
 
     meta = get_meta(equation)
@@ -260,7 +263,13 @@ def main():
     )
     args = parser.parse_args()
 
-    md = build_markdown(args.csv, args.equation)
+    # Infer equation from --out filename if --equation not explicitly given
+    equation = args.equation
+    if equation is None and args.out:
+        basename = os.path.splitext(os.path.basename(args.out))[0]
+        equation = basename  # normalize_eq_name handles aliases
+
+    md = build_markdown(args.csv, equation)
 
     # Determine output path
     if args.out:
@@ -269,7 +278,7 @@ def main():
         with open(args.csv[0]) as f:
             reader = csv.DictReader(f)
             eq_names = set(r["equation"] for r in reader)
-        eq = args.equation or sorted(eq_names)[0]
+        eq = equation or sorted(eq_names)[0]
         out_path = os.path.join(SUMMARIES_DIR, f"{eq}.md")
 
     with open(out_path, "w") as f:

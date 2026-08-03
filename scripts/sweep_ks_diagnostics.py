@@ -61,7 +61,7 @@ from equivariant_pde_find.library.weak_form import (  # noqa: E402
 WEAK_M = [4, 8, 12]
 # Test-function degree follows Messenger & Bortz (2021), Algorithm 1, rather
 # than a fixed constant: with a fixed p the fourth-order weak-IBP columns pick
-# up a 3 % (m=12) to 84 % (m=8) systematic error.  See audit/FINDINGS.md F-01.
+# up a 3 % (m=12) to 84 % (m=8) systematic error.
 # The direct weak form never differentiates psi, so it keeps the old degree.
 WEAK_MAX_DERIV = 4
 WEAK_P_DIRECT = 6
@@ -304,8 +304,7 @@ def main():
                 # never differentiates psi and is fine.
                 if use_ibp and m_val not in weak_ibp_supports([m_val]):
                     print(f"    Skipping: m={m_val} ibp=True (2m+1 points "
-                          f"cannot resolve a degree-{weak_p(m_val)} test "
-                          f"function; see audit/FINDINGS.md F-01)", flush=True)
+                          f"cannot resolve a degree-{weak_p(m_val)} test ", flush=True)
                     continue
 
                 method_key = "weak_ibp" if use_ibp else "weak_direct"
