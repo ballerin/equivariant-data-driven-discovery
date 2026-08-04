@@ -59,7 +59,7 @@ def summarize(csv_path, group_keys):
         reader = csv.DictReader(f)
         for row in reader:
             # Convert numeric fields
-            for key in ["noise", "fp", "fn", "exact_recovery", "E",
+            for key in ["noise", "fp", "fn", "exact_recovery", "E", "E_coeff",
                         "max_coeff_err", "cond_theta", "n_active",
                         "n_samples", "lam", "d_tol"]:
                 if key in row and row[key] != "" and row[key] is not None:
@@ -95,7 +95,7 @@ def summarize(csv_path, group_keys):
         best_rows.append(best)
 
     # Sort for readability
-    sort_keys = group_keys + ["E"]
+    sort_keys = group_keys + ["E_coeff"]
     def sort_key(r):
         return tuple(r.get(k, "") for k in sort_keys)
     best_rows.sort(key=sort_key)
@@ -108,7 +108,7 @@ def print_table(best_rows, group_keys):
     # Columns to display
     display_cols = group_keys + [
         "method", "algorithm", "weak_m",
-        "d_tol", "fp", "fn", "exact_recovery", "E", "cond_theta",
+        "d_tol", "fp", "fn", "exact_recovery", "E_coeff", "cond_theta",
     ]
     # Filter to columns that exist
     available = [c for c in display_cols if c in best_rows[0]] if best_rows else []

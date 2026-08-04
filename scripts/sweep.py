@@ -102,8 +102,7 @@ WEAK_M = [4, 8, 12]
 # The Messenger & Bortz (2021) Algorithm 1 prescribes p via
 #   select_test_function_degree(m, max_deriv=4, tau=1e-10)
 # which gives p=13 for m=12.  This satisfies a quadrature-accuracy decay
-# condition (phi^(4) < 1e-10 at the support boundary), yielding < 0.001 %
-# IBP discretisation error for Delta^2 f.
+# condition (phi^(4) < 1e-10 at the support boundary).
 #
 # However, p=13 produces a narrow test function (effective width ~4 grid
 # points) whose columns for different differential operators are nearly
@@ -383,6 +382,12 @@ def main():
         "--aniso", action="store_true",
         help="Include anisotropic-noise datasets (excluded by default).",
     )
+    parser.add_argument(
+        "--out", default=None,
+        help="Exact output CSV path. When set, overrides the auto-generated "
+             "timestamp-based filename. Use when running multiple workers "
+             "that each need their own output file.",
+    )
     args = parser.parse_args()
 
     # ── discover datasets ────────────────────────────────────────────────
@@ -459,8 +464,12 @@ def main():
 
     # ── output ───────────────────────────────────────────────────────────
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    tag = f"_{args.name}" if args.name else ""
-    out_path = os.path.join(RESULTS_DIR, f"sweep_{timestamp}{tag}.csv")
+    if args.out:
+        out_path = args.out
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    else:
+        tag = f"_{args.name}" if args.name else ""
+        out_path = os.path.join(RESULTS_DIR, f"sweep_{timestamp}{tag}.csv")
     print(f"Output → {out_path}", flush=True)
 
     fieldnames = [

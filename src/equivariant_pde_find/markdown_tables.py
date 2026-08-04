@@ -941,15 +941,15 @@ def build_anisotropic_summary_table(rows):
 
     Like ``build_standard_summary_table`` but adds a Profile column.
     """
-    from .summary_metadata import LIB_NAMES, METHOD_MAP, PROFILE_ORDER, PROFILE_LABELS
+    from .summary_metadata import LIB_NAMES, METHOD_MAP, PROFILE_ORDER, PROFILE_LABELS, ALGORITHM_LABELS
 
     t = MarkdownTable(
         [
             "Noise", "Method", "Backend", "Profile", "Eq best",
-            "Multigraphs fp/fn", "Multigraphs E",
+            "Multigraphs fp/fn", "Multigraphs E", "Mult. best",
             "Non-eq best", "Non-eq fp/fn", "Non-eq E",
         ],
-        align=["left"] + ["center"] * 4 + ["left"] * 5,
+        align=["left"] + ["center"] * 4 + ["left"] * 6,
     )
 
     for noise, noise_label in [("0.0", "Clean"), ("0.02", "2%"), ("0.05", "5%")]:
@@ -989,6 +989,13 @@ def build_anisotropic_summary_table(rows):
                     winner = eq_wins(eq, ne)
                     eq_fpf = f"{eq['fp']}/{eq['fn']}{status_mark(eq)}" if eq else "\u2014"
                     eq_E = fmt_val(eq["E_coeff"]) if eq else "\u2014"
+                    eq_best = "\u2014"
+                    if eq and not is_failure(eq):
+                        lib_orig = eq.get("library_original", eq.get("library", ""))
+                        alg_label = ALGORITHM_LABELS.get(
+                            eq.get("algorithm", ""), eq.get("algorithm", ""),
+                        )
+                        eq_best = f"{lib_orig}/{alg_label}"
 
                     if ne is None:
                         ne_lib = "\u2014"
@@ -1004,7 +1011,7 @@ def build_anisotropic_summary_table(rows):
 
                     t.add_row(
                         noise_label, method_label, be_label, label, winner,
-                        eq_fpf, eq_E, ne_lib, ne_fpf, ne_E,
+                        eq_fpf, eq_E, eq_best, ne_lib, ne_fpf, ne_E,
                     )
     return t
 

@@ -65,8 +65,8 @@ def build_comparison_table(noise_data):
             w = compare_bases(bo, bm)
             t.add_row(
                 ns, be, mv, ibp,
-                f"{bo['fp']}/{bo['fn']}", f"{float(bo['E']):.4f}",
-                f"{bm['fp']}/{bm['fn']}", f"{float(bm['E']):.4f}",
+                f"{bo['fp']}/{bo['fn']}", f"{float(bo.get('E_coeff', bo.get('E', 'nan'))):.4f}",
+                f"{bm['fp']}/{bm['fn']}", f"{float(bm.get('E_coeff', bm.get('E', 'nan'))):.4f}",
                 w,
             )
     return t
@@ -95,7 +95,7 @@ def build_detailed_table(noise_data):
                 ns, be, mv, ibp, lib_disp,
                 f"{best['fp']}/{best['fn']}",
                 best["n_active"],
-                f"{float(best['E']):.4f}",
+                f"{float(best.get('E_coeff', best.get('E', 'nan'))):.4f}",
                 exact,
                 best.get("d_tol", ""),
                 f"{float(best['cond_theta']):.1f}" if best.get("cond_theta", "nan") != "nan" else "nan",

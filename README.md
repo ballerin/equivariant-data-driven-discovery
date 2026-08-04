@@ -39,6 +39,20 @@ extract the best results.
 
 ### Setup
 
+**Option A: Conda environment (recommended)**
+
+A conda environment file ``environment.yml`` is provided for reproducible setup:
+
+```bash
+conda env create -f environment.yml
+conda activate PDEDisc
+pip install -e .
+```
+
+This creates an environment named ``PDEDisc`` with Python 3.11 and all required dependencies (numpy, scipy, pytest, tqdm, sympy).
+
+**Option B: pip only**
+
 Install in editable mode:
 
     pip install -e .
