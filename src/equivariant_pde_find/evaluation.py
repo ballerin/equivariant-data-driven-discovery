@@ -55,11 +55,12 @@ def _is_nan(val):
 
 
 def build_eval_theta_multigraphs(snapshots, times, Lx, Ly,
-                                  skip_fraction=0.0, seed=0, backend=None):
+                                  skip_fraction=0.0, seed=0, backend="spectral"):
     """Build the pointwise equivariant (multigraph) Theta and Ft.
 
     Constructs the design matrix in the multigraph library on every grid
-    point across all interior snapshots.
+    point across all interior snapshots.  By default uses spectral
+    (FFT-based) derivatives because they are exact on periodic domains.
 
     For cross-library comparison, prefer ``build_eval_theta_jet``,
     which uses the polynomial-jet universal space as the evaluation basis.
@@ -71,9 +72,8 @@ def build_eval_theta_multigraphs(snapshots, times, Lx, Ly,
     Lx, Ly          : float - domain lengths
     skip_fraction   : float - fraction of leading snapshots to discard
     seed            : int - RNG seed for spatial subsampling
-    backend         : str/None - derivative backend ("spectral" or
-                        "polynomial").  If None, fallback to the currently
-                        configured backend (default: "spectral").
+    backend         : str - derivative backend ("spectral" or
+                        "polynomial").  Default is "spectral".
 
     Returns
     -------
@@ -81,9 +81,6 @@ def build_eval_theta_multigraphs(snapshots, times, Lx, Ly,
     Ft    : ndarray (n_total,)   - time derivative on ALL grid points
     """
     from . import derivatives as _deriv
-
-    if backend is None:
-        backend = _deriv.get_backend()
 
     with _deriv.use_backend(backend):
         f_snaps, ft_snaps, _, _ = make_regression_data(
@@ -99,7 +96,7 @@ def build_eval_theta_multigraphs(snapshots, times, Lx, Ly,
 
 
 def build_eval_theta_jet(snapshots, times, Lx, Ly,
-                          skip_fraction=0.0, seed=0, backend=None,
+                          skip_fraction=0.0, seed=0, backend="spectral",
                           jet_monomials=None):
     """Build the polynomial-jet Theta and Ft for unified evaluation.
 
@@ -109,6 +106,11 @@ def build_eval_theta_jet(snapshots, times, Lx, Ly,
     making it a universal comparison space into which ALL library types
     can be analytically mapped.
 
+    The evaluation Theta is always built with **spectral** (FFT-based)
+    derivatives by default, because on periodic domains these are exact
+    up to Nyquist and give the most faithful representation of the true
+    PDE right-hand side.  The evaluation data should be clean (noise-free)
+    for the same reason.
 
     Parameters
     ----------
@@ -117,9 +119,8 @@ def build_eval_theta_jet(snapshots, times, Lx, Ly,
     Lx, Ly     : float - domain lengths
     skip_fraction : float - fraction of leading snapshots to discard
     seed       : int - RNG seed for spatial subsampling
-    backend    : str/None - derivative backend ("spectral" or
-                    "polynomial").  If None, fallback to the currently
-                    configured backend (default: "spectral").
+    backend    : str - derivative backend ("spectral" or "polynomial").
+                    Default is "spectral".
     jet_monomials : list of str or None
         If provided, build exactly these monomials via the dynamic builder
         (``build_polyjet_from_descriptions``).  If None (default), use the
@@ -133,9 +134,6 @@ def build_eval_theta_jet(snapshots, times, Lx, Ly,
     """
     from . import derivatives as _deriv
     from .library import build_polyjet_from_descriptions as _bpfj
-
-    if backend is None:
-        backend = _deriv.get_backend()
 
     with _deriv.use_backend(backend):
         f_snaps, ft_snaps, _, _ = make_regression_data(
@@ -337,7 +335,7 @@ def evaluate_jet_with_truth(w, true_eq, desc_eq, desc_jet, Theta_jet, Ft):
 
 
 def evaluate_recovery(w, true_eq, snapshots, times, Lx, Ly,
-                      skip_fraction=0.0, seed=0, backend=None):
+                      skip_fraction=0.0, seed=0, backend="spectral"):
     """Convenience: build Theta and evaluate in one call.
 
     For sweep scripts that evaluate many w vectors against the same data,
@@ -353,7 +351,7 @@ def evaluate_recovery(w, true_eq, snapshots, times, Lx, Ly,
     Lx, Ly     : float
     skip_fraction : float
     seed       : int — RNG seed for spatial subsampling
-    backend    : str or None — derivative backend
+    backend    : str — derivative backend.  Default is "spectral".
 
     Returns
     -------

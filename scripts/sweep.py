@@ -503,9 +503,9 @@ def main():
             eq_name = normalize_eq_name(eq_name)
             true_fn, skip_frac, mask_fn = _get_meta(eq_name)
 
-            # If noisy dataset, load clean counterpart for evaluation
-            # (Option B: evaluate against clean data so that E_coeff
-            #  is comparable across noise levels)
+            # Evaluation must always run on clean data (pointwise spectral).
+            # For noisy datasets, load the clean counterpart .npz file.
+            # For clean datasets, the loaded data is the clean reference.
             if obs_noise > 0:
                 # For anisotropic datasets (e.g. ac_aniso_radial_decay_noise2pct),
                 # the clean counterpart is {name}_clean.npz, not
@@ -519,15 +519,18 @@ def main():
                     clean_path = npz_path.replace(
                         "_noise2pct", "_clean",
                     ).replace("_noise5pct", "_clean")
-                if os.path.exists(clean_path):
-                    _clean_data = np.load(clean_path)
-                    snapshots_clean_eval = _clean_data["snapshots"]
-                    print(f"    clean eval: {os.path.basename(clean_path)}")
-                else:
-                    print(f"    WARNING: clean counterpart missing: {clean_path}")
-                    snapshots_clean_eval = None
+                if not os.path.exists(clean_path):
+                    raise FileNotFoundError(
+                        f"Clean evaluation data required but not found: "
+                        f"{clean_path}.  Generate it with "
+                        f"`python scripts/generate_data.py --equations "
+                        f"{eq_name}`."
+                    )
+                _clean_data = np.load(clean_path)
+                snapshots_clean_eval = _clean_data["snapshots"]
+                print(f"    clean eval: {os.path.basename(clean_path)}")
             else:
-                snapshots_clean_eval = None  # already clean, no separate copy
+                snapshots_clean_eval = snapshots_orig  # data IS clean
 
             # CH epsilon is fixed in equations.CH_EPSILON
             is_ch = eq_name == "ch"
@@ -640,23 +643,17 @@ def main():
 
                     M_ws_to_jet = build_wsindy_to_jet_map(desc_ws, desc_jet)
 
-                    # ── Per-backend evaluation Theta ─────────────────────
+                    # ── Build evaluation Theta (pointwise, spectral) ────
+                    # Always use pointwise formulation + spectral derivatives
+                    # on clean snapshots.  The polynomial jet basis is the
+                    # universal comparison space into which all library
+                    # coefficients are analytically mapped.
                     t_eval = time.time()
-                    # Evaluate against clean data when available (Option B)
-                    eval_snaps = (
-                        snapshots_clean_eval
-                        if snapshots_clean_eval is not None
-                        else snapshots_proc
+                    Theta_eval, Ft_eval = build_eval_theta_jet(
+                        snapshots_clean_eval, times, Lx, Ly,
+                        skip_fraction=skip_frac, seed=0, backend="spectral",
+                        jet_monomials=desc_jet,
                     )
-                    eval_thetas = {}
-                    for b in backends:
-                        Tj, Ftj = build_eval_theta_jet(
-                            eval_snaps, times, Lx, Ly,
-                            skip_fraction=skip_frac, seed=0, backend=b,
-                            jet_monomials=desc_jet,
-                        )
-                        eval_thetas[b] = (Tj, Ftj)
-                    Theta_eval, Ft_eval = eval_thetas[backends[0]]
                     print(f"    eval Theta: {Theta_eval.shape}  "
                           f"active_true="
                           f"{int(np.sum(np.abs(true_jet) > 1e-10))}"
@@ -802,7 +799,7 @@ def main():
 
                                         eval_result = evaluate_unified(
                                             w, library, desc, desc_jet,
-                                            *eval_thetas[backend], true_jet,
+                                            Theta_eval, Ft_eval, true_jet,
                                             M_ws_to_jet=M_ws_to_jet,
                                         )
                                         dt_ms = (time.time() - t_row) * 1000
@@ -859,7 +856,7 @@ def main():
 
                                         eval_result = evaluate_unified(
                                             w, library, desc, desc_jet,
-                                            *eval_thetas[backend], true_jet,
+                                            Theta_eval, Ft_eval, true_jet,
                                             M_ws_to_jet=M_ws_to_jet,
                                         )
                                         dt_ms = (time.time() - t_row) * 1000
@@ -927,7 +924,7 @@ def main():
 
                                         eval_result = evaluate_unified(
                                             w, library, desc, desc_jet,
-                                            *eval_thetas[backend], true_jet,
+                                            Theta_eval, Ft_eval, true_jet,
                                             M_ws_to_jet=M_ws_to_jet,
                                         )
                                         dt_ms = (time.time() - t_row) * 1000
@@ -986,7 +983,7 @@ def main():
 
                                         eval_result = evaluate_unified(
                                             w, library, desc, desc_jet,
-                                            *eval_thetas[backend], true_jet,
+                                            Theta_eval, Ft_eval, true_jet,
                                             M_ws_to_jet=M_ws_to_jet,
                                         )
                                         dt_ms = (time.time() - t_row) * 1000

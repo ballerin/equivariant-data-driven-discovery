@@ -254,6 +254,62 @@ def true_cahn_hilliard_pdefind(ndim, eps=CH_EPSILON):
     return result
 
 
+def true_swift_hohenberg_pdefind(ndim, r=0.3):
+    """Ground-truth coefficients for Swift-Hohenberg in the PDE-FIND basis.
+
+    f_t = (r-1) f - 2 Delta f - Delta^2 f - f^3
+
+      - f                              →  r - 1
+      - f^3                            → -1
+      - Pure 2nd derivatives (Delta f) → -2        (ndim terms)
+      - Pure 4th derivatives           → -1        (ndim terms)
+      - Mixed 4th derivatives          → -2        (C(ndim,2) terms)
+
+    Total active: 2 + 2*ndim + C(ndim,2).
+    """
+    if not 1 <= ndim <= _MAX_NDIM:
+        raise ValueError(f"ndim must be 1-{_MAX_NDIM}, got {ndim}")
+    axes = _pdefind_axis_labels(ndim)
+    result = {"f": r - 1.0, "f\u00b3": -1.0}
+    # Pure 2nd: f_xx, f_yy, ...  (from -2 Delta f)
+    for a in axes:
+        result[f"f_{a*2}"] = -2.0
+    # Pure 4th: f_xxxx, f_yyyy, ...  (from -Delta^2 f)
+    for a in axes:
+        result[f"f_{a*4}"] = -1.0
+    # Mixed 4th: f_xxyy, f_xxzz, ...
+    for i in range(ndim):
+        for j in range(i + 1, ndim):
+            a, b = axes[i], axes[j]
+            result[f"f_{a*2}{b*2}"] = -2.0
+    return result
+
+
+def true_pme_pdefind(ndim):
+    """Ground-truth coefficients for Porous Medium in the PDE-FIND basis.
+
+    PME:  f_t = Delta(f^3) / 3 = f^2 Delta f + 2 f ||grad f||^2
+
+    The term f ||grad f||^2 = f * (f_x^2 + f_y^2 + ...) has NO representation
+    in the PDE-FIND monomial basis f^p * ∂^α f (products of first derivatives
+    are not PDE-FIND columns).  Therefore only the f^2 Delta f portion is
+    encoded:
+
+      - f^2 * pure 2nd derivatives → +1   (ndim terms, from f^2 Delta f)
+
+    This is an *incomplete* representation — the truth vector is provided for
+    benchmark purposes, but exact sparse recovery in the PDE-FIND basis is
+    not expected.  The equivariant library is required for full recovery.
+    """
+    if not 1 <= ndim <= _MAX_NDIM:
+        raise ValueError(f"ndim must be 1-{_MAX_NDIM}, got {ndim}")
+    axes = _pdefind_axis_labels(ndim)
+    result = {}
+    for a in axes:
+        result[f"f\u00b2\u00b7f_{a*2}"] = 1.0
+    return result
+
+
 # Subsection 2d — WSINDy basis ground truth
 # -----------------------------------------
 
@@ -271,6 +327,109 @@ def true_pme_wsindy(descriptions):
     w[find_op(descriptions, '(f³)_{xx}')] = 1.0 / 3.0
     w[find_op(descriptions, '(f³)_{yy}')] = 1.0 / 3.0
     return w
+
+
+def true_allen_cahn_wsindy(ndim, eps=0.15):
+    """Ground-truth coefficients for Allen-Cahn in the WSINDy basis ∂^α(f^q).
+
+    Allen-Cahn in N dimensions:
+
+        f_t = ε² Δf + f − f³
+
+    In WSINDy, Δf = Σ_i ∂_i² f, so the active columns are:
+
+        f          →  1.0
+        f³         → −1.0
+        f_{aa}     → ε²   for each axis a ∈ {x, y, z, w, v, …}
+
+    Returns a dict {column_name: coefficient} matching the pdefind truth
+    convention so the sweep code can use the same ``truth_fn_ndim=True`` path.
+
+    Total active terms: 2 + ndim.
+    """
+    d = {"f": 1.0, "f³": -1.0}
+    for a in _AXIS_LABELS[:ndim]:
+        d[f"f_{{{a}{a}}}"] = eps ** 2
+    return d
+
+
+def true_swift_hohenberg_wsindy(ndim, r=0.3):
+    """Ground-truth coefficients for Swift-Hohenberg in the WSINDy basis.
+
+    f_t = (r-1) f - 2 Δf - Δ²f - f³
+
+    In WSINDy:
+      - f                                → r - 1
+      - f³                               → -1
+      - f_{aa}                           → -2      (ndim pure 2nd derivs)
+      - f_{aaaa}                         → -1      (ndim pure 4th derivs)
+      - f_{aabb} (a < b)                 → -2      (C(ndim,2) mixed 4th)
+
+    Total active: 2 + 2*ndim + C(ndim,2).
+    """
+    axes = _AXIS_LABELS[:ndim]
+    d = {"f": r - 1.0, "f³": -1.0}
+    # Pure 2nd: f_{xx}, f_{yy}, ...  (from -2 Δf)
+    for a in axes:
+        d[f"f_{{{a}{a}}}"] = -2.0
+    # Pure 4th: f_{xxxx}, f_{yyyy}, ...  (from -Δ²f)
+    for a in axes:
+        d[f"f_{{{a*4}}}"] = -1.0
+    # Mixed 4th: f_{xxyy}, f_{xxzz}, ...
+    for i in range(ndim):
+        for j in range(i + 1, ndim):
+            a, b = axes[i], axes[j]
+            d[f"f_{{{a*2}{b*2}}}"] = -2.0
+    return d
+
+
+def true_pme_wsindy_nd(ndim):
+    """Ground-truth coefficients for PME in the WSINDy basis (N-D).
+
+    PME:  f_t = (1/3) Δ(f³)
+
+    In WSINDy, Δ(f³) = Σ_i ∂_i²(f³), so:
+
+        (f³)_{aa}  →  1/3    for each axis a ∈ {x, y, z, w, v, …}
+
+    Total active terms: ndim.
+    """
+    d = {}
+    for a in _AXIS_LABELS[:ndim]:
+        d[f"(f³)_{{{a}{a}}}"] = 1.0 / 3.0
+    return d
+
+
+def true_cahn_hilliard_wsindy(ndim, eps=CH_EPSILON):
+    """Ground-truth coefficients for Cahn-Hilliard in the WSINDy basis.
+
+    CH:  f_t = -ε² Δ²f + Δf - Δ(f³)
+
+    In WSINDy (∂^α(f^q) monomials):
+      - f_{aa}           → +1          (ndim terms, from +Δf)
+      - f_{aaaa}         → -ε²         (ndim terms, from -ε²Δ²f)
+      - f_{aabb} (a<b)   → -2ε²        (C(ndim,2) terms, from -ε²Δ²f)
+      - (f³)_{aa}        → -1          (ndim terms, from -Δ(f³))
+
+    Total active: 3*ndim + C(ndim,2).
+    """
+    axes = _AXIS_LABELS[:ndim]
+    d = {}
+    # Pure 2nd of f: f_{xx}, f_{yy}, ...  (from +Δf)
+    for a in axes:
+        d[f"f_{{{a}{a}}}"] = 1.0
+    # Pure 4th of f: f_{xxxx}, f_{yyyy}, ...  (from -ε²Δ²f)
+    for a in axes:
+        d[f"f_{{{a*4}}}"] = -(eps ** 2)
+    # Mixed 4th of f: f_{xxyy}, f_{xxzz}, ...
+    for i in range(ndim):
+        for j in range(i + 1, ndim):
+            a, b = axes[i], axes[j]
+            d[f"f_{{{a*2}{b*2}}}"] = -2.0 * (eps ** 2)
+    # Pure 2nd of f³: (f³)_{xx}, (f³)_{yy}, ...  (from -Δ(f³))
+    for a in axes:
+        d[f"(f³)_{{{a}{a}}}"] = -1.0
+    return d
 
 
 # ============================================================================

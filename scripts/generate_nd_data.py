@@ -25,6 +25,8 @@ sys.path.insert(0, CODE_DIR)
 from equivariant_pde_find import derivatives
 from equivariant_pde_find.simulations.allen_cahn import allen_cahn_nd
 from equivariant_pde_find.simulations.cahn_hilliard import cahn_hilliard_nd
+from equivariant_pde_find.simulations.swift_hohenberg import swift_hohenberg_nd
+from equivariant_pde_find.simulations.porous_medium import porous_medium_nd
 
 DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "data"))
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -39,12 +41,18 @@ def _rhs_ch(f, L, eps):
             + derivatives.laplacian(f**3 - f, L, L, L))
 
 
+def _rhs_sh(f, L, r):
+    return (r - 1.0) * f - 2.0 * derivatives.laplacian(f, L, L, L) \
+           - derivatives.bilaplacian(f, L, L, L) - f**3
+
+
 EQUATION_CONFIGS = {
     "ac": {
         "sim_fn": allen_cahn_nd,
         "name": "allen_cahn",
         "L": 2 * np.pi,
-        "eps": 0.15,
+        "eps": 0.15,            # used for PDE residual check
+        "sim_kwargs": {"eps": 0.15},
         "rhs": _rhs_ac,
     },
     "ch": {
@@ -52,11 +60,28 @@ EQUATION_CONFIGS = {
         "name": "cahn_hilliard",
         "L": 8 * np.pi,
         "eps": 0.2,
+        "sim_kwargs": {"eps": 0.2},
         "rhs": _rhs_ch,
+    },
+    "sh": {
+        "sim_fn": swift_hohenberg_nd,
+        "name": "swift_hohenberg",
+        "L": 8 * np.pi,
+        "eps": 0.3,             # used as 'r' for PDE residual check
+        "sim_kwargs": {"r": 0.3},
+        "rhs": _rhs_sh,
+    },
+    "pme": {
+        "sim_fn": porous_medium_nd,
+        "name": "porous_medium",
+        "L": 6 * np.pi,
+        "eps": None,            # PME has no interface parameter
+        "sim_kwargs": {},
+        "rhs": None,            # PME residual not checked (nonlinear diffusion)
     },
 }
 
-NOISE_LABELS = {0.0: "clean", 0.02: "noise2pct", 0.05: "noise5pct"}
+NOISE_LABELS = {0.0: "clean", 0.01: "noise1pct", 0.02: "noise2pct", 0.05: "noise5pct"}
 
 
 def pde_residual(snaps, times, L, eps, rhs_fn):
@@ -160,8 +185,12 @@ def main():
 
             # Generate clean data once
             sim_kwargs = {"ndim": ndim, "seed": args.seed, "obs_noise": 0.0}
-            for key, value in (("N", args.N), ("eps", args.eps),
-                               ("T_end", args.T_end),
+            # Merge equation-specific defaults (e.g. eps for AC/CH, r for SH)
+            sim_kwargs.update(cfg.get("sim_kwargs", {}))
+            # Always pass L so the domain size matches the RHS checker
+            sim_kwargs.setdefault("L", cfg["L"])
+            # CLI overrides for common simulator parameters
+            for key, value in (("N", args.N), ("T_end", args.T_end),
                                ("save_every", args.save_every)):
                 if value is not None:
                     sim_kwargs[key] = value
@@ -187,10 +216,13 @@ def main():
             eps = args.eps if args.eps is not None else cfg["eps"]
 
             # Does the data satisfy the equation it is labelled with?
-            with derivatives.use_backend("spectral"):
-                resid = pde_residual(snaps_clean, times, L, eps, cfg["rhs"])
-            flag = "" if not (resid > 0.01) else "   <-- WARNING: > 1 %"
-            print(f"  PDE residual (median, clean): {resid:.3e}{flag}")
+            if cfg["rhs"] is not None:
+                with derivatives.use_backend("spectral"):
+                    resid = pde_residual(snaps_clean, times, L, eps, cfg["rhs"])
+                flag = "" if not (resid > 0.01) else "   <-- WARNING: > 1 %"
+                print(f"  PDE residual (median, clean): {resid:.3e}{flag}")
+            else:
+                print(f"  PDE residual: skipped (no RHS checker for {eq_key})")
 
             for noise_level in args.noise:
                 label = NOISE_LABELS[noise_level]

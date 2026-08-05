@@ -449,3 +449,144 @@ class TestEvaluateUnifiedPolyjet:
         assert result["exact_recovery"] == 1
         assert result["fp"] == 0
         assert result["fn"] == 0
+
+
+# ======================================================================
+
+
+class TestSpectralDefaultEvaluation:
+    """Verify that evaluation builders always use spectral derivatives
+    regardless of the globally configured backend."""
+
+    def test_jet_defaults_to_spectral_when_polynomial_is_active(self, ac_data):
+        """build_eval_theta_jet uses spectral even when global backend
+        is polynomial."""
+        snaps, times, true_eq, desc = ac_data
+        from equivariant_pde_find import derivatives
+
+        # Force polynomial as the global backend
+        derivatives.set_backend("polynomial")
+        try:
+            # Build WITHOUT explicit backend — should still use spectral
+            T_jet, _ = build_eval_theta_jet(
+                snaps, times, 2 * np.pi, 2 * np.pi, jet_monomials=None,
+            )
+            # Build WITH explicit spectral for comparison
+            T_spec, _ = build_eval_theta_jet(
+                snaps, times, 2 * np.pi, 2 * np.pi,
+                backend="spectral", jet_monomials=None,
+            )
+        finally:
+            derivatives.set_backend("spectral")
+
+        # They should match (both spectral)
+        assert np.allclose(T_jet, T_spec, atol=1e-12), (
+            "build_eval_theta_jet did not default to spectral"
+        )
+
+    def test_jet_default_spectral_differs_from_polynomial(self, ac_data):
+        """Explicitly confirm that spectral vs polynomial eval Thetas
+        differ somewhere (higher-order derivatives), to guard against
+        a degenerate test where both backends accidentally match."""
+        snaps, times, true_eq, desc = ac_data
+
+        T_spec, _ = build_eval_theta_jet(
+            snaps, times, 2 * np.pi, 2 * np.pi,
+            backend="spectral", jet_monomials=None,
+        )
+        T_poly, _ = build_eval_theta_jet(
+            snaps, times, 2 * np.pi, 2 * np.pi,
+            backend="polynomial", jet_monomials=None,
+        )
+
+        # Same shape
+        assert T_spec.shape == T_poly.shape
+
+        # The "f" column is backend-independent (no derivatives taken)
+        assert np.allclose(T_spec[:, 0], T_poly[:, 0], atol=1e-12)
+
+        # Higher-order derivative columns should differ at machine precision
+        # because the polynomial stencil is not exact.  Check the full
+        # matrices differ (excluding the field-only column).
+        max_diff = np.max(np.abs(T_spec[:, 1:] - T_poly[:, 1:]))
+        assert max_diff > 1e-15, (
+            f"Polynomial and spectral Thetas are identical to machine "
+            f"precision (max_diff={max_diff}); test is degenerate"
+        )
+
+    def test_multigraphs_defaults_to_spectral(self, ac_data):
+        """build_eval_theta_multigraphs defaults to spectral."""
+        snaps, times, true_eq, desc = ac_data
+        from equivariant_pde_find import derivatives
+
+        derivatives.set_backend("polynomial")
+        try:
+            T_def, _ = build_eval_theta_multigraphs(
+                snaps, times, 2 * np.pi, 2 * np.pi,
+            )
+            T_spec, _ = build_eval_theta_multigraphs(
+                snaps, times, 2 * np.pi, 2 * np.pi, backend="spectral",
+            )
+        finally:
+            derivatives.set_backend("spectral")
+
+        assert np.allclose(T_def, T_spec, atol=1e-12), (
+            "build_eval_theta_multigraphs did not default to spectral"
+        )
+
+    def test_evaluate_recovery_uses_spectral_eval_theta(self, ac_data):
+        """evaluate_recovery computes E_coeff against spectral eval Theta
+        by default, so exact ground-truth coefficients yield E_coeff ≈ 0."""
+        snaps, times, true_eq, desc = ac_data
+        from equivariant_pde_find import derivatives
+
+        # Force polynomial as global backend — should not affect evaluation
+        derivatives.set_backend("polynomial")
+        try:
+            result = evaluate_recovery(
+                true_eq, true_eq, snaps, times, 2 * np.pi, 2 * np.pi,
+            )
+        finally:
+            derivatives.set_backend("spectral")
+
+        assert result["exact_recovery"] == 1
+        assert result["fp"] == 0
+        assert result["fn"] == 0
+        assert result["E_coeff"] < 1e-8, (
+            f"E_coeff={result['E_coeff']} should be near 0 for exact recovery"
+        )
+
+    def test_evaluate_recovery_spectral_vs_polynomial_yield_different_E(
+        self, ac_data,
+    ):
+        """E_coeff for the SAME perturbed coefficients differs between
+        spectral and polynomial eval Thetas, confirming the backend
+        choice matters for the metric."""
+        snaps, times, true_eq, desc = ac_data
+
+        # Perturb the coefficients slightly so E_coeff > 0
+        w_perturbed = true_eq.copy()
+        # Add 1 % error to the first non-zero coefficient
+        nz = np.where(np.abs(true_eq) > 1e-10)[0]
+        w_perturbed[nz[0]] *= 1.01
+
+        result_spec = evaluate_recovery(
+            w_perturbed, true_eq, snaps, times, 2 * np.pi, 2 * np.pi,
+            backend="spectral",
+        )
+        result_poly = evaluate_recovery(
+            w_perturbed, true_eq, snaps, times, 2 * np.pi, 2 * np.pi,
+            backend="polynomial",
+        )
+
+        # Both should have E_coeff > 0 (coefficients are wrong)
+        assert result_spec["E_coeff"] > 0
+        assert result_poly["E_coeff"] > 0
+
+        # They should differ because the eval Thetas differ
+        assert not np.isclose(
+            result_spec["E_coeff"], result_poly["E_coeff"], rtol=0, atol=0,
+        ), (
+            f"Spectral E_coeff ({result_spec['E_coeff']:.6e}) and polynomial "
+            f"E_coeff ({result_poly['E_coeff']:.6e}) should differ"
+        )

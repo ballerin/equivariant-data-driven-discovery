@@ -254,6 +254,28 @@ def main():
             true_fn_key = _map_equivariant_key(eq_name)
             true_fn, skip_frac, mask_fn = _get_meta(eq_name)
 
+            # ── Load clean evaluation data (mandatory) ─────────────────
+            # Evaluation always uses pointwise spectral derivatives on clean
+            # data.  For noisy datasets, load the clean counterpart.
+            if obs_noise > 0:
+                clean_path = npz_path.replace(
+                    "_noise2pct", "_clean",
+                ).replace("_noise5pct", "_clean"
+                ).replace("_noise1pct", "_clean"
+                ).replace("_noise0p5pct", "_clean"
+                ).replace("_noise0p1pct", "_clean")
+                if not os.path.exists(clean_path):
+                    raise FileNotFoundError(
+                        f"Clean evaluation data required but not found: "
+                        f"{clean_path}.  Generate it with "
+                        f"`python scripts/generate_data.py --equations "
+                        f"{eq_name}`."
+                    )
+                snapshots_eval = np.load(clean_path)["snapshots"]
+                print(f"    clean eval: {os.path.basename(clean_path)}")
+            else:
+                snapshots_eval = snapshots  # data IS clean
+
             is_ch = eq_name == "ch"
             eps_list = [CH_EPSILON] if is_ch else [None]
 
@@ -295,14 +317,12 @@ def main():
                 desc_jet = collect_needed_jet_monomials(
                     desc_mg=desc_mg_jet, desc_mod_mg=desc_mod_jet,
                 )
-                eval_thetas = {}
-                for b in args.backends:
-                    Tj, Ftj = build_eval_theta_jet(
-                        snapshots, times, Lx, Ly,
-                        skip_fraction=skip_frac, seed=0, backend=b,
-                        jet_monomials=desc_jet,
-                    )
-                    eval_thetas[b] = (Tj, Ftj)
+                # ── Build evaluation Theta (pointwise, spectral) ───────
+                Theta_eval, Ft_eval = build_eval_theta_jet(
+                    snapshots_eval, times, Lx, Ly,
+                    skip_fraction=skip_frac, seed=0, backend="spectral",
+                    jet_monomials=desc_jet,
+                )
 
                 # Build ground truth in jet basis for each library
                 true_jet = {}
@@ -366,7 +386,7 @@ def main():
                         w = TrainSTRidge(Theta, Ft, 1e-6, d_tol, maxit=25, seed=0)
                         eval_result = evaluate_unified(
                             w, lib, desc, desc_jet,
-                            *eval_thetas[backend], true_jet[lib],
+                            Theta_eval, Ft_eval, true_jet["multigraph"],
                         )
                         dt_ms = (time.time() - t_row) * 1000
 

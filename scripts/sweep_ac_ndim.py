@@ -55,10 +55,17 @@ from equivariant_pde_find.library import (  # noqa: E402
 from equivariant_pde_find.library import weak_form as wf  # noqa: E402
 from equivariant_pde_find.regression import TrainSTRidge  # noqa: E402
 from equivariant_pde_find.simulations import make_regression_data  # noqa: E402
-
-# evaluate_native defines fp/fn/exact/E_coeff for a native-basis recovery;
-# imported rather than copied so this study and sweep_nd.py cannot drift.
-from sweep_nd import evaluate_native  # noqa: E402
+from equivariant_pde_find.evaluation import (  # noqa: E402
+    build_eval_theta_jet, evaluate_unified,
+)
+from equivariant_pde_find.library.conversions import (  # noqa: E402
+    collect_needed_jet_monomials,
+    map_multigraph_to_jet,
+    map_mod_multigraph_to_jet,
+)
+from equivariant_pde_find.library import (  # noqa: E402
+    build_polyjet_from_descriptions,
+)
 
 DATA_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "data"))
 RESULTS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "results"))
@@ -84,6 +91,129 @@ LIBRARIES = {
 
 def peak_rss_mb():
     return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
+
+
+# ── Jet-based evaluation (pointwise, spectral, clean data) ─────────────
+#
+# Evaluation metric:  E_coeff = ||Θ_jet · (w_jet − ξ_jet)|| / ||Θ_jet · ξ_jet||
+#
+# This is the PDE-prediction error in the polynomial-jet basis, matching the
+# evaluation used by sweep.py and all other 2-D sweep scripts.  The recovered
+# coefficients w (in any library basis) are analytically mapped to jet space
+# via the decompositions in library/conversions.py, then scored against a
+# pointwise, spectral-derivative, clean-data jet design matrix Θ_jet.
+#
+# Subsampling
+# -----------
+# At ndim ≥ 4, building Θ_jet on every grid point is intractable
+# (ndim=5, N=32 → 33.6M points/snapshot → ~40 GB per snapshot for
+# ~150 jet columns in float64).  We therefore randomly subsample to
+# MAX_ROWS points total (default 2000), stratified across snapshots.
+# This keeps the evaluation Theta at ~2 MB regardless of dimension.
+#
+# Implications of subsampling:
+#   • E_coeff is estimated from a random subset of grid points, so it has
+#     a small sampling variance.  The seed is fixed (rng seed = 42) for
+#     reproducibility.
+#   • At low dimensions (ndim=2,3) the full grid would give a more precise
+#     estimate, but MAX_ROWS=2000 is ample for the 3-term Allen-Cahn PDE
+#     and keeps the metric strictly comparable across all dimensions.
+#   • The same MAX_ROWS is used for the regression (weak-form G matrix),
+#     so the evaluation uses the same order of data as the fit — no
+#     evaluation-data advantage.
+#
+# Clean data
+# ----------
+# Evaluation always runs on the noise-free .npz file (noise = 0.0),
+# regardless of which noise level was used for regression.  If the clean
+# file is missing, load_clean() raises FileNotFoundError.  This is the
+# same policy as sweep.py.
+
+
+def build_eval_jet(snaps_eval, times, L, ndim, library, desc_lib, w_true_lib):
+    """Build the evaluation Theta and jet-basis ground truth for one
+    (ndim, library) combination.
+
+    Uses pointwise formulation + spectral derivatives on clean data,
+    subsampled to MAX_ROWS random points to keep memory manageable at
+    high dimensions (N=32, ndim=5 gives 33M grid points — too many).
+
+    Parameters
+    ----------
+    snaps_eval : ndarray (n_saved, N, ..., N)  — clean field snapshots
+    times      : ndarray (n_saved,)            — simulation times
+    L          : float                         — domain length (isotropic)
+    ndim       : int                           — spatial dimension
+    library    : str                           — "multigraph",
+                                                  "mod_multigraph", or
+                                                  "pdefind"
+    desc_lib   : list of str                   — operator descriptions in
+                                                  the library's own basis
+    w_true_lib : ndarray (K_lib,)              — ground-truth coefficients
+                                                  in the library's own basis
+
+    Returns
+    -------
+    Theta_eval : ndarray (n_eval, K_jet)  — pointwise spectral jet library
+    Ft_eval    : ndarray (n_eval,)        — clean time derivative
+    desc_jet   : list of K_jet str        — jet monomial descriptions
+    true_jet   : ndarray (K_jet,)         — ground truth in jet basis
+    """
+    f0 = snaps_eval[0]
+
+    # Collect needed jet monomials from all three library types so the
+    # jet basis can represent every library's operators.
+    _, desc_mg = build_multigraph_library(f0, L, L, max_p=2, max_n=3)
+    _, desc_mod = build_mod_multigraph_library(f0, L, L, max_p=2, max_n=3)
+    _, desc_pdefind = build_pdefind_library(f0, L, L, max_order=4, max_poly=3)
+    desc_jet = collect_needed_jet_monomials(
+        desc_mg=desc_mg, desc_pdefind=desc_pdefind, desc_mod_mg=desc_mod,
+        ndim=ndim,
+    )
+
+    # Build Theta on clean data, subsampled to ~MAX_ROWS points total
+    f_snaps, ft_snaps, _, _ = make_regression_data(
+        snaps_eval, times, n_per_snap=1, seed=0,
+    )
+    n_snaps = len(f_snaps)
+    per_snap = max(1, MAX_ROWS // n_snaps)
+    rng = np.random.default_rng(42)
+
+    rows_theta, rows_ft = [], []
+    with derivatives.use_backend("spectral"):
+        for s in range(n_snaps):
+            T, _ = build_polyjet_from_descriptions(f_snaps[s], L, L, desc_jet)
+            take = min(per_snap, T.shape[0])
+            sel = rng.choice(T.shape[0], size=take, replace=False)
+            rows_theta.append(T[sel])
+            rows_ft.append(ft_snaps[s].ravel()[sel])
+
+    Theta_eval = np.vstack(rows_theta)[:MAX_ROWS]
+    Ft_eval = np.concatenate(rows_ft)[:MAX_ROWS]
+
+    # Ground truth in jet basis
+    if library == "multigraph":
+        true_jet = map_multigraph_to_jet(w_true_lib, desc_lib, desc_jet,
+                                          ndim=ndim)
+    elif library == "mod_multigraph":
+        true_jet = map_mod_multigraph_to_jet(w_true_lib, desc_lib, desc_jet,
+                                              ndim=ndim)
+    elif library == "pdefind":
+        true_jet = np.zeros(len(desc_jet))
+        for j, (name, coeff) in enumerate(zip(desc_lib, w_true_lib)):
+            if abs(coeff) < 1e-12:
+                continue
+            if name in desc_jet:
+                true_jet[desc_jet.index(name)] += coeff
+    else:
+        raise ValueError(f"Unknown library: {library}")
+
+    return Theta_eval, Ft_eval, desc_jet, true_jet
+
+
+def load_clean(ndim):
+    """Load the clean (noise=0) dataset for evaluation."""
+    return load(ndim, 0.0)
 
 
 def dataset_path(ndim, noise):
@@ -232,8 +362,16 @@ def run_cell(library, ndim, noise, lam, d_tol, max_rows, timeout_s,
         w = TrainSTRidge(G, b, lam=lam, d_tol=d_tol)
         fit_time = time.time() - t0
 
-        true_dict = {d: w_true[i] for i, d in enumerate(desc) if w_true[i] != 0.0}
-        ev = evaluate_native(w, desc, true_dict)
+        # ── Jet-based evaluation (pointwise, spectral, clean data) ───
+        snaps_eval, _, _, _ = load_clean(ndim)
+        Theta_eval, Ft_eval, desc_jet, true_jet = build_eval_jet(
+            snaps_eval, times, L, ndim, library, desc, w_true,
+        )
+        ev = evaluate_unified(
+            w, library, desc, desc_jet,
+            Theta_eval, Ft_eval, true_jet,
+            ndim=ndim,
+        )
 
         # Unthresholded least squares on the *true* support: if this is
         # accurate then the library and the weak form are fine at this
@@ -247,7 +385,8 @@ def run_cell(library, ndim, noise, lam, d_tol, max_rows, timeout_s,
             n_cols=len(desc), n_rows=G.shape[0], n_snapshots=n_use,
             t_first=f"{window[0]:.2f}", t_last=f"{window[1]:.2f}",
             n_active=ev["n_active"], fp=ev["fp"], fn=ev["fn"],
-            exact_recovery=ev["exact_recovery"], E_coeff=f"{ev['E_coeff']:.6f}",
+            exact_recovery=ev["exact_recovery"],
+            E_coeff=f"{ev['E_coeff']:.6f}",
             E_coeff_ls=f"{E_ls:.6f}",
             build_time_s=f"{build_time:.2f}", fit_time_s=f"{fit_time:.3f}",
             total_time_s=f"{time.time() - t_start:.2f}",
@@ -265,16 +404,33 @@ def calibrate(ndim, noises, libraries, max_rows, normalize=True):
     """Rank (lam, d_tol) on the study's exact configuration at one dimension."""
     print(f"Calibrating (lam, d_tol) at ndim={ndim} on {len(libraries)} libraries, "
           f"{len(noises)} noise levels\n")
-    # Build each (library, noise) once; the grid only changes the regression.
+
+    # Load clean data once — evaluation is against clean data regardless
+    # of which noise level was used for regression.
+    snaps_eval, times_eval, L_eval, _eps_eval = load_clean(ndim)
+
+    # Build each (library, noise) regression matrix once; the grid only
+    # changes the regression fit.
     built = {}
+    eval_info = {}  # per-library: (Theta_eval, Ft_eval, desc_jet, true_jet)
     for library in libraries:
+        # Build eval Theta once per library (clean data, independent of noise)
         for noise in noises:
             snaps, times, L, eps = load(ndim, noise)
-            G, b, desc, _, _ = build_weak(library, snaps, times, L, ndim, max_rows)
+            G, b, desc, _, _ = build_weak(
+                library, snaps, times, L, ndim, max_rows)
             if normalize:
                 G, b = normalize_system(G, b)
-            built[(library, noise)] = (G, b, desc,
-                                       truth_vector(library, desc, ndim, eps))
+            w_true = truth_vector(library, desc, ndim, eps)
+            built[(library, noise)] = (G, b, desc, w_true)
+
+            # Build eval info once per library (same for all noise levels)
+            if library not in eval_info:
+                Theta_eval, Ft_eval, desc_jet, true_jet = build_eval_jet(
+                    snaps_eval, times_eval, L_eval, ndim,
+                    library, desc, w_true,
+                )
+                eval_info[library] = (desc_jet, Theta_eval, Ft_eval, true_jet)
 
     scores = []
     for lam in CAL_LAMS:
@@ -282,9 +438,12 @@ def calibrate(ndim, noises, libraries, max_rows, normalize=True):
             n_exact, E_sum, n = 0, 0.0, 0
             for (library, noise), (G, b, desc, w_true) in built.items():
                 w = TrainSTRidge(G, b, lam=lam, d_tol=d_tol)
-                true_dict = {d: w_true[i] for i, d in enumerate(desc)
-                             if w_true[i] != 0.0}
-                ev = evaluate_native(w, desc, true_dict)
+                desc_jet, Theta_eval, Ft_eval, true_jet = eval_info[library]
+                ev = evaluate_unified(
+                    w, library, desc, desc_jet,
+                    Theta_eval, Ft_eval, true_jet,
+                    ndim=ndim,
+                )
                 n_exact += ev["exact_recovery"]
                 E_sum += ev["E_coeff"]
                 n += 1

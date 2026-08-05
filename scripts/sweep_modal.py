@@ -132,11 +132,11 @@ def sweep_one_shard(
 
 @app.local_entrypoint()
 def main(
-    equations: str = "ac",
-    noise: str = "0.0",
-    libraries: str = "multigraph,pdefind,wsindy",
-    algorithms: str = "stridge",
-    methods: str = "pointwise",
+    equations: str = "ac,sh,pme,ch,ks_cell,ks_wchaos,ks_chaos",
+    noise: str = "0.0,0.02,0.05",
+    libraries: str = "multigraph,mod_multigraph,pdefind,wsindy,polyjet",
+    algorithms: str = "stridge,rfe,mstls",
+    methods: str = "pointwise,weak_direct,weak_ibp",
     backends: str = "spectral,polynomial",
     name: str = "",
 ):

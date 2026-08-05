@@ -381,17 +381,22 @@ def main():
                       f"Skipping.", flush=True)
                 continue
 
-            # ── Load clean counterpart for evaluation ────────────────────
+            # ── Load clean counterpart for evaluation (mandatory) ───────
+            # Evaluation always uses pointwise spectral derivatives on clean
+            # data, regardless of the regression method or dataset noise level.
             clean_path = os.path.join(
                 os.path.dirname(npz_path),
                 f"{eq_name}_clean.npz",
             )
-            if os.path.exists(clean_path):
-                snapshots_clean_eval = np.load(clean_path)["snapshots"]
-                print(f"    clean eval: {os.path.basename(clean_path)}")
-            else:
-                print(f"    WARNING: clean counterpart missing: {clean_path}")
-                snapshots_clean_eval = None
+            if not os.path.exists(clean_path):
+                raise FileNotFoundError(
+                    f"Clean evaluation data required but not found: "
+                    f"{clean_path}.  Generate it with "
+                    f"`python scripts/generate_data.py --equations "
+                    f"{eq_name}`."
+                )
+            snapshots_clean_eval = np.load(clean_path)["snapshots"]
+            print(f"    clean eval: {os.path.basename(clean_path)}")
 
             noise_label = obs_noise
             print(f"  eq={eq_name}  noise={noise_label:.3f}  "
@@ -466,21 +471,15 @@ def main():
 
             M_ws_to_jet = build_wsindy_to_jet_map(desc_ws, desc_jet)
 
-            # ── Per-backend evaluation Theta ─────────────────────────────
-            eval_snaps = (
-                snapshots_clean_eval
-                if snapshots_clean_eval is not None
-                else snapshots_orig
+            # ── Build evaluation Theta (pointwise, spectral) ────────────
+            # Always use pointwise formulation + spectral derivatives on
+            # clean data.  The polynomial jet basis is the universal
+            # comparison space.
+            Theta_eval, Ft_eval = build_eval_theta_jet(
+                snapshots_clean_eval, times, Lx, Ly,
+                skip_fraction=skip_frac, seed=0, backend="spectral",
+                jet_monomials=desc_jet,
             )
-            eval_thetas = {}
-            for b in backends:
-                Tj, Ftj = build_eval_theta_jet(
-                    eval_snaps, times, Lx, Ly,
-                    skip_fraction=skip_frac, seed=0, backend=b,
-                    jet_monomials=desc_jet,
-                )
-                eval_thetas[b] = (Tj, Ftj)
-            Theta_eval, Ft_eval = eval_thetas[backends[0]]
             n_active_true = int(np.sum(np.abs(true_jet) > 1e-10))
             print(f"    eval Theta: {Theta_eval.shape}  "
                   f"active_true={n_active_true}", flush=True)
@@ -541,7 +540,7 @@ def main():
 
                                 eval_result = evaluate_unified(
                                     w, library, desc, desc_jet,
-                                    *eval_thetas[backend], true_jet,
+                                    Theta_eval, Ft_eval, true_jet,
                                     M_ws_to_jet=M_ws_to_jet,
                                 )
                                 dt_ms = (time.time() - t_row) * 1000
@@ -587,7 +586,7 @@ def main():
 
                             eval_result = evaluate_unified(
                                 w, library, desc, desc_jet,
-                                *eval_thetas[backend], true_jet,
+                                Theta_eval, Ft_eval, true_jet,
                                 M_ws_to_jet=M_ws_to_jet,
                             )
                             dt_ms = (time.time() - t_row) * 1000
