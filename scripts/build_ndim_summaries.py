@@ -143,7 +143,7 @@ def build_summary(best, eq):
         cols_by_ndim.setdefault(ndim, {})[lib] = r.get("n_cols", "?")
     for ndim in ndims:
         parts.append(f"| {ndim} | " + " | ".join(
-            str(cols_by_ndim.get(ndim, {}).get(l, "?")) for l in LIB_ORDER) + " |")
+            str(cols_by_ndim.get(ndim, {}).get(l, "--")) for l in LIB_ORDER) + " |")
 
     # Headline numbers
     ok = [r for k, r in eq_rows.items()]
@@ -165,18 +165,25 @@ def build_summary(best, eq):
                      for r in ok if int(r["ndim"]) == top
                      and r["library"] == "mod_multigraph"), default=0)
 
+    # PDE-FIND is intentionally skipped for equations it cannot represent
+    # (e.g. PME), so its aggregates may be absent → render as "--".
+    pf_build_s = (f"{pf_build / 60:.0f} min ({pf_build / max(mg_build, 1):.1f}x)"
+                  if pf_build > 0 else "--")
+    pf_rss_s = (f"{pf_rss:.1f} GB ({pf_rss / max(mg_rss, 0.1):.1f}x)"
+                if pf_rss > 0 else "--")
+
     parts += [
         "",
         "## Headline numbers",
         "",
         f"- At ndim={top} the equivariant bases stay at **20 columns** against "
-        f"PDE-FIND's **{cols.get('pdefind', '?')}** and "
+        f"PDE-FIND's **{cols.get('pdefind', '--')}** and "
         f"WSINDy's **{cols.get('wsindy', '?')}**.",
         f"- Build time at ndim={top}: multigraph {mg_build / 60:.0f} min, "
         f"mod. multigraph {mgm_build / 60:.0f} min, "
-        f"PDE-FIND {pf_build / 60:.0f} min ({pf_build / max(mg_build, 1):.1f}x).",
+        f"PDE-FIND {pf_build_s}.",
         f"- Peak memory at ndim={top}: multigraph {mg_rss:.1f} GB, "
-        f"PDE-FIND {pf_rss:.1f} GB ({pf_rss / max(mg_rss, 0.1):.1f}x).",
+        f"PDE-FIND {pf_rss_s}.",
         "",
         "## Exact recovery",
         "",
@@ -236,8 +243,8 @@ def main():
         if md is None:
             print(f"  {eq}: no data, skipping")
             continue
-        label = EQ_LABEL.get(eq, eq).lower().replace(" ", "_")
-        out_path = os.path.join(args.out_dir, f"{label}_dimension_scaling.md")
+        # Use the short equation key (ac/sh/pme/ch) for the output filename.
+        out_path = os.path.join(args.out_dir, f"{eq}_dimension_scaling.md")
         with open(out_path, "w") as fh:
             fh.write(md)
         print(f"  {eq} → {out_path}")

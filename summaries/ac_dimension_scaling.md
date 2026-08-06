@@ -1,118 +1,119 @@
 # Allen-Cahn: how recovery and cost scale with dimension
 
-Allen-Cahn `f_t = eps^2 Delta f + f - f^3` recovered from weak-form data at
-ndim = 2..5, with everything except the dimension held fixed:
-
-| | |
-|---|---|
-| grid | N = 32 per axis, L = 2*pi, dx = 0.196 |
-| equation | eps = 0.3 (dx/eps = 0.65, interface resolved) |
-| formulation | weak form with integration by parts, m = 12, p = 13 |
-| backend | spectral |
-| regression | STRidge, lam = 1e-6, d_tol = 0.01 |
-| rows | 2000 per cell, drawn from the final snapshots |
-
-`d_tol` and `lam` were calibrated on the 2-D data only (5/6 exact across the
-three libraries and two noise levels) and then frozen for ndim 3-5.
+Allen-Cahn `$f_t = \varepsilon^2 \Delta f + f - f^3` recovered from weak-form data at
+ndim = 2..4.
 
 ## Library width
 
-The equivariant bases are dimension-independent; the coordinate library is not.
+The equivariant bases are dimension-independent; the coordinate libraries are not.
 
-| ndim | Multigraph | Mod. multigraph | PDE-FIND |
-|---:|---|---|---|
-| 2 | 20 | 20 | 60 |
-| 3 | 20 | 20 | 140 |
-| 4 | 20 | 20 | 280 |
-| 5 | 20 | 20 | 504 |
+| ndim | Multigraph | Mod. multigraph | PDE-FIND | WSINDy |
+|---:|---|---|---|---|
+| 2 | 20 | 20 | 60 | 46 |
+| 3 | 20 | 20 | 140 | 106 |
+| 4 | 20 | 20 | 280 | 211 |
 
 ## Headline numbers
 
-- The libraries **represent** Allen-Cahn at every dimension tested: least squares on the true support stays within 0.09%-5.65% at ndim 2-5. Where exact recovery fails, the sparsity threshold missed, not the library.
-- At ndim=5 the equivariant basis is still **20 columns** against PDE-FIND's **504**.
-- Cost at ndim=5: build 34 min (multigraph) vs 76 min (PDE-FIND), 2.2x; fit 0.21 s vs 35.8 s, 169x; peak memory 20 GB vs 67 GB.
-- The modified multigraph basis builds faster than the original at the top dimension (21 vs 34 min), which is what its Delta(...)/Delta^2(...) forms are for: they go through integration by parts instead of forming high-order derivatives.
+- At ndim=4 the equivariant bases stay at **20 columns** against PDE-FIND's **280** and WSINDy's **211**.
+- Build time at ndim=4: multigraph 16 min, mod. multigraph 24 min, PDE-FIND 40 min (2.5x).
+- Peak memory at ndim=4: multigraph 1.2 GB, PDE-FIND 2.3 GB (1.9x).
 
 ## Exact recovery
 
-**Support recovered exactly?**
+**Support recovered exactly? (best STRidge row per group)**
 
-| ndim | noise | Multigraph | Mod. multigraph | PDE-FIND |
-|---:|---:|---|---|---|
-| 2 | 0 | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) |
-| 2 | 0.02 | yes (fp 0, fn 0) | yes (fp 0, fn 0) | no (fp 5, fn 1) |
-| 3 | 0 | no (fp 12, fn 0) | no (fp 14, fn 1) | no (fp 43, fn 1) |
-| 3 | 0.02 | no (fp 15, fn 0) | no (fp 12, fn 0) | no (fp 101, fn 0) |
-| 4 | 0 | yes (fp 0, fn 0) | no (fp 17, fn 0) | no (fp 17, fn 3) |
-| 4 | 0.02 | no (fp 8, fn 0) | yes (fp 0, fn 0) | no (fp 5, fn 0) |
-| 5 | 0 | no (fp 0, fn 2) | no (fp 0, fn 2) | no (fp 0, fn 6) |
-| 5 | 0.02 | no (fp 0, fn 2) | no (fp 0, fn 2) | no (fp 1, fn 6) |
+| ndim | noise | Multigraph | Mod. multigraph | PDE-FIND | WSINDy |
+|---:|---:|---|---|---|---|
+| 2 | 0 | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) |
+| 2 | 0.02 | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) |
+| 2 | 0.05 | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) |
+| 3 | 0 | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) |
+| 3 | 0.02 | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) |
+| 3 | 0.05 | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) |
+| 4 | 0 | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) |
+| 4 | 0.02 | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) |
+| 4 | 0.05 | no (fp 5, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) | yes (fp 0, fn 0) |
 
-## Coefficient error
+## Coefficient error (E_coeff)
 
-**E_coeff of the STRidge recovery**
+**Relative L₂ coefficient error of best STRidge recovery**
 
-| ndim | noise | Multigraph | Mod. multigraph | PDE-FIND |
-|---:|---:|---|---|---|
-| 2 | 0 | 0.0049 | 0.0049 | 0.0053 |
-| 2 | 0.02 | 0.0078 | 0.0078 | 0.4915 |
-| 3 | 0 | 0.0200 | 0.3176 | 0.6087 |
-| 3 | 0.02 | 0.3844 | 0.3909 | 3.4091 |
-| 4 | 0 | 0.0064 | 0.0070 | 0.9802 |
-| 4 | 0.02 | 0.0107 | 0.0049 | 0.0184 |
-| 5 | 0 | 0.7148 | 0.7148 | 0.7202 |
-| 5 | 0.02 | 0.7147 | 0.7147 | 0.7296 |
+| ndim | noise | Multigraph | Mod. multigraph | PDE-FIND | WSINDy |
+|---:|---:|---|---|---|---|
+| 2 | 0 | 0.0058 | 0.0058 | 0.0059 | 0.0059 |
+| 2 | 0.02 | 0.0057 | 0.0057 | 0.0059 | 0.0059 |
+| 2 | 0.05 | 0.0080 | 0.0080 | 0.0082 | 0.0082 |
+| 3 | 0 | 0.0069 | 0.0069 | 0.0069 | 0.0069 |
+| 3 | 0.02 | 0.0070 | 0.0070 | 0.0071 | 0.0071 |
+| 3 | 0.05 | 0.0086 | 0.0086 | 0.0086 | 0.0086 |
+| 4 | 0 | 0.0060 | 0.0060 | 0.0060 | 0.0060 |
+| 4 | 0.02 | 0.0065 | 0.0065 | 0.0064 | 0.0064 |
+| 4 | 0.05 | 0.0065 | 0.0083 | 0.0083 | 0.0083 |
 
-**E_coeff of plain least squares on the true support (no thresholding)**
+## Condition number
 
-| ndim | noise | Multigraph | Mod. multigraph | PDE-FIND |
-|---:|---:|---|---|---|
-| 2 | 0 | 0.00493 | 0.00493 | 0.00530 |
-| 2 | 0.02 | 0.00822 | 0.00822 | 0.00798 |
-| 3 | 0 | 0.00092 | 0.00092 | 0.00174 |
-| 3 | 0.02 | 0.00963 | 0.00963 | 0.05650 |
-| 4 | 0 | 0.00637 | 0.00637 | 0.00651 |
-| 4 | 0.02 | 0.00525 | 0.00525 | 0.00336 |
-| 5 | 0 | 0.01908 | 0.01908 | 0.01524 |
-| 5 | 0.02 | 0.02380 | 0.02380 | 0.01873 |
+**Condition number of weak-form design matrix**
 
-The second table is the control: it says whether the library and the weak
-form can represent the equation at that dimension at all. Where it is small
-but the first table says 'no', the failure is the sparsity threshold, not
-the library.
+| ndim | noise | Multigraph | Mod. multigraph | PDE-FIND | WSINDy |
+|---:|---:|---|---|---|---|
+| 2 | 0 | 2.7e+03 | 1.3e+03 | 3.4e+03 | 3.1e+02 |
+| 2 | 0.02 | 6.6e+03 | 4.5e+03 | 1.3e+04 | 3.1e+02 |
+| 2 | 0.05 | 3.5e+04 | 2.7e+04 | 6.7e+04 | 3.1e+02 |
+| 3 | 0 | 2.0e+03 | 8.7e+02 | 1.8e+03 | 2.9e+02 |
+| 3 | 0.02 | 5.0e+03 | 3.3e+03 | 4.9e+03 | 2.9e+02 |
+| 3 | 0.05 | 2.3e+04 | 1.7e+04 | 2.4e+04 | 2.9e+02 |
+| 4 | 0 | 4.3e+03 | 2.5e+03 | 3.5e+03 | 5.1e+02 |
+| 4 | 0.02 | 5.5e+03 | 3.2e+03 | 4.9e+03 | 5.1e+02 |
+| 4 | 0.05 | 1.4e+04 | 1.1e+04 | 1.4e+04 | 5.1e+02 |
 
 ## Cost
 
 **Library build time (s)**
 
-| ndim | noise | Multigraph | Mod. multigraph | PDE-FIND |
-|---:|---:|---|---|---|
-| 2 | 0 | 1.1 | 0.7 | 1.0 |
-| 2 | 0.02 | 0.6 | 0.9 | 0.8 |
-| 3 | 0 | 2.5 | 1.7 | 5.6 |
-| 3 | 0.02 | 2.1 | 1.8 | 5.4 |
-| 4 | 0 | 27.9 | 24.2 | 76.8 |
-| 4 | 0.02 | 33.9 | 27.2 | 90.8 |
-| 5 | 0 | 2044.4 | 1273.6 | 4350.2 |
-| 5 | 0.02 | 1945.4 | 924.5 | 4535.3 |
+| ndim | noise | Multigraph | Mod. multigraph | PDE-FIND | WSINDy |
+|---:|---:|---|---|---|---|
+| 2 | 0 | 0.9 | 0.6 | 0.8 | 0.7 |
+| 2 | 0.02 | 1.2 | 0.6 | 1.0 | 0.7 |
+| 2 | 0.05 | 0.8 | 1.1 | 1.2 | 1.2 |
+| 3 | 0 | 39.0 | 28.9 | 56.9 | 60.5 |
+| 3 | 0.02 | 34.1 | 54.2 | 78.5 | 59.9 |
+| 3 | 0.05 | 43.7 | 34.3 | 55.6 | 52.8 |
+| 4 | 0 | 622.2 | 862.4 | 1637.6 | 1649.7 |
+| 4 | 0.02 | 949.8 | 474.0 | 1926.8 | 1543.4 |
+| 4 | 0.05 | 641.7 | 475.4 | 2384.4 | 1556.4 |
 
 **STRidge fit time (s)**
 
-| ndim | noise | Multigraph | Mod. multigraph | PDE-FIND |
-|---:|---:|---|---|---|
-| 2 | 0 | 0.27 | 0.15 | 1.64 |
-| 2 | 0.02 | 0.36 | 0.26 | 2.68 |
-| 3 | 0 | 1.22 | 0.96 | 31.06 |
-| 3 | 0.02 | 2.13 | 0.55 | 60.64 |
-| 4 | 0 | 0.67 | 0.95 | 52.16 |
-| 4 | 0.02 | 0.54 | 0.25 | 41.70 |
-| 5 | 0 | 0.13 | 0.01 | 35.81 |
-| 5 | 0.02 | 0.21 | 0.24 | 34.30 |
+| ndim | noise | Multigraph | Mod. multigraph | PDE-FIND | WSINDy |
+|---:|---:|---|---|---|---|
+| 2 | 0 | 0.04 | 0.02 | 0.06 | 0.03 |
+| 2 | 0.02 | 0.04 | 0.02 | 0.07 | 0.05 |
+| 2 | 0.05 | 0.02 | 0.03 | 0.08 | 0.04 |
+| 3 | 0 | 0.02 | 0.02 | 0.30 | 0.19 |
+| 3 | 0.02 | 0.03 | 0.04 | 0.33 | 0.24 |
+| 3 | 0.05 | 0.03 | 0.03 | 0.22 | 0.19 |
+| 4 | 0 | 0.03 | 0.06 | 0.72 | 0.68 |
+| 4 | 0.02 | 0.05 | 0.02 | 0.80 | 0.54 |
+| 4 | 0.05 | 0.04 | 0.02 | 1.46 | 0.61 |
+
+**Peak RSS (GB)**
+
+| ndim | noise | Multigraph | Mod. multigraph | PDE-FIND | WSINDy |
+|---:|---:|---|---|---|---|
+| 2 | 0 | 0.1 | 0.1 | 0.1 | 0.1 |
+| 2 | 0.02 | 0.1 | 0.1 | 0.1 | 0.1 |
+| 2 | 0.05 | 0.1 | 0.1 | 0.1 | 0.1 |
+| 3 | 0 | 0.2 | 0.2 | 0.3 | 0.3 |
+| 3 | 0.02 | 0.2 | 0.2 | 0.3 | 0.3 |
+| 3 | 0.05 | 0.2 | 0.2 | 0.3 | 0.3 |
+| 4 | 0 | 1.2 | 1.1 | 2.2 | 3.2 |
+| 4 | 0.02 | 1.2 | 1.1 | 2.2 | 3.2 |
+| 4 | 0.05 | 1.2 | 1.1 | 2.2 | 3.2 |
 
 ---
 
-Generated by `scripts/build_ndim_summary.py` from: `ac_ndim_20260730_133405_dims234.csv`, `ac_ndim_20260730_154125_probe5.csv`, `ac_ndim_20260730_161614_nd5a.csv`, `ac_ndim_20260730_175043_nd5b.csv`
+Generated by `scripts/build_ndim_summaries.py`.
 
-Wall times were recorded while an unrelated sweep was running on the same
-machine, so absolute values are inflated; relative scaling across dimensions
-is unaffected.
+Best row selected lexicographically: exact recovery → fp → fn → E_coeff.
+IBP mode chosen per row (ibp or direct, whichever scored best).

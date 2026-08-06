@@ -54,10 +54,13 @@ RESOURCES = {
     (3, "pdefind"):        (512,  1200),
     (3, "wsindy"):         (512,  1200),
     # 4D: multigraph ~1.2 GB → 2048; pdefind ~2.3 GB → 4096; wsindy ~3.2 GB → 4096
+    # 4D pdefind/wsindy build of Θ dominates (ac/nd4 pdefind build ≈ 2400 s for
+    # 41 snaps; sh/nd4 has 89 snaps → ≈ 2.3× rows). Bumped 5400 → 18000 after
+    # 7 shards timed out at the 5400 s limit on 2026-08-06.
     (4, "multigraph"):     (2048,  5400),
     (4, "mod_multigraph"): (2048,  5400),
-    (4, "pdefind"):        (4096,  5400),
-    (4, "wsindy"):         (4096,  5400),
+    (4, "pdefind"):        (4096, 18000),
+    (4, "wsindy"):         (4096, 18000),
     # 5D: conservative extrapolation
     (5, "multigraph"):     (4096, 14400),
     (5, "mod_multigraph"): (4096, 14400),
@@ -160,9 +163,9 @@ def w512(equation, ndim, noise, library, extra_args):
 def w2048(equation, ndim, noise, library, extra_args):
     return _run_shard(equation, ndim, noise, library, extra_args, "m2048", 5400)
 
-@app.function(image=image, timeout=5400, cpu=1.0, memory=4096, volumes={"/results": volume})
+@app.function(image=image, timeout=18000, cpu=1.0, memory=4096, volumes={"/results": volume})
 def w4096(equation, ndim, noise, library, extra_args):
-    return _run_shard(equation, ndim, noise, library, extra_args, "m4096", 5400)
+    return _run_shard(equation, ndim, noise, library, extra_args, "m4096", 18000)
 
 
 def _get_worker(ndim, library):
@@ -184,6 +187,7 @@ def main(
     algorithms: str = "stride,rfe",
     ibp: str = "both",
     name: str = "",
+    no_merge: bool = False,
 ):
     """Modal-parallelised N-D sweep.
 
@@ -277,45 +281,50 @@ def main(
             print(f"     {eq}/nd{nd}/{lib}")
 
     # ── Merge all CSVs ────────────────────────────────────────────────
-    os.makedirs(RESULTS_DIR, exist_ok=True)
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    stem = f"sweep_nd_{name}_{timestamp}" if name else f"sweep_nd_{timestamp}"
-    out_path = os.path.join(RESULTS_DIR, f"{stem}.csv")
+    # The local entrypoint container does NOT mount the Volume, so any
+    # merged CSV written here goes to ephemeral storage. For persistent
+    # results use merge_results (which mounts /results). --no-merge skips
+    # this entirely (used for partial re-runs of timed-out shards).
+    if not no_merge:
+        os.makedirs(RESULTS_DIR, exist_ok=True)
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        stem = f"sweep_nd_{name}_{timestamp}" if name else f"sweep_nd_{timestamp}"
+        out_path = os.path.join(RESULTS_DIR, f"{stem}.csv")
 
-    total_rows = 0
-    with open(out_path, "w", newline="") as fout:
-        for idx, (eq, csv_str, _to) in enumerate(all_results):
-            reader = csv.reader(io.StringIO(csv_str))
-            try:
-                header = next(reader)
-            except StopIteration:
-                continue
-            if idx == 0 or total_rows == 0:
-                writer = csv.writer(fout)
-                writer.writerow(header)
-            for row in reader:
-                if row:  # skip empty lines
-                    writer.writerow(row)
-                    total_rows += 1
+        total_rows = 0
+        with open(out_path, "w", newline="") as fout:
+            for idx, (eq, csv_str, _to) in enumerate(all_results):
+                reader = csv.reader(io.StringIO(csv_str))
+                try:
+                    header = next(reader)
+                except StopIteration:
+                    continue
+                if idx == 0 or total_rows == 0:
+                    writer = csv.writer(fout)
+                    writer.writerow(header)
+                for row in reader:
+                    if row:  # skip empty lines
+                        writer.writerow(row)
+                        total_rows += 1
 
-    print(f"\n  Merged: {total_rows} rows → {os.path.basename(out_path)}")
+        print(f"\n  Merged: {total_rows} rows → {os.path.basename(out_path)}")
 
-    # ── Write log ─────────────────────────────────────────────────────
-    log_path = out_path.replace(".csv", ".log")
-    with open(log_path, "w") as log:
-        log.write(f"Modal N-D sweep\n")
-        log.write(f"Timestamp: {timestamp}\n")
-        log.write(f"Equations: {eq_list}\n")
-        log.write(f"Dimensions: {ndim_list}\n")
-        log.write(f"Noise levels: {noise_list}\n")
-        log.write(f"Libraries: {lib_list}\n")
-        log.write(f"Algorithms: {algo_list}\n")
-        log.write(f"IBP: {ibp}\n")
-        log.write(f"Total shards: {len(shards)}\n")
-        log.write(f"Wall time: {elapsed:.1f}s ({elapsed/60:.1f} min)\n")
-        for (nd, lib), (mem, timeout) in sorted(RESOURCES.items()):
-            log.write(f"  ndim={nd} {lib}: memory={mem}MB timeout={timeout}s\n")
-    print(f"  Log → {os.path.basename(log_path)}")
+        # ── Write log ─────────────────────────────────────────────────
+        log_path = out_path.replace(".csv", ".log")
+        with open(log_path, "w") as log:
+            log.write(f"Modal N-D sweep\n")
+            log.write(f"Timestamp: {timestamp}\n")
+            log.write(f"Equations: {eq_list}\n")
+            log.write(f"Dimensions: {ndim_list}\n")
+            log.write(f"Noise levels: {noise_list}\n")
+            log.write(f"Libraries: {lib_list}\n")
+            log.write(f"Algorithms: {algo_list}\n")
+            log.write(f"IBP: {ibp}\n")
+            log.write(f"Total shards: {len(shards)}\n")
+            log.write(f"Wall time: {elapsed:.1f}s ({elapsed/60:.1f} min)\n")
+            for (nd, lib), (mem, timeout) in sorted(RESOURCES.items()):
+                log.write(f"  ndim={nd} {lib}: memory={mem}MB timeout={timeout}s\n")
+        print(f"  Log → {os.path.basename(log_path)}")
     print(f"  Wall time: {elapsed:.1f}s ({elapsed/60:.1f} min)")
 
 
