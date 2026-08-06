@@ -71,6 +71,9 @@ import modal
 
 app = modal.App("pdedisc-sweep-nd")
 
+# Persistent volume for sweep results (survives local disconnects)
+volume = modal.Volume.from_name("pdedisc-sweep-results", create_if_missing=True)
+
 image = (
     modal.Image.debian_slim()
     .pip_install("numpy")
@@ -129,6 +132,15 @@ def _run_shard(equation, ndim, noise, library, extra_args, label, timeout_s):
 
     with open(out_path, "r") as f:
         csv_content = f.read()
+
+    # Persist CSV to Modal Volume so results survive local disconnects
+    vol_path = f"/results/sweep_nd_{equation}_nd{ndim}_n{noise}_{library}.csv"
+    try:
+        with open(vol_path, "w") as vf:
+            vf.write(csv_content)
+    except Exception as e:
+        print(f"  {tag} WARNING: failed to write to Volume: {e}", flush=True)
+
     n_lines = csv_content.count("\n")
     print(f"{tag} Done: {n_lines} lines in {dt:.0f}s", flush=True)
     return equation, csv_content, False
@@ -136,19 +148,19 @@ def _run_shard(equation, ndim, noise, library, extra_args, label, timeout_s):
 
 # ── Modal functions at global scope (one per memory tier) ──────────────
 
-@app.function(image=image, timeout=600,  cpu=1.0, memory=256)
+@app.function(image=image, timeout=600,  cpu=1.0, memory=256,  volumes={"/results": volume})
 def w256(equation, ndim, noise, library, extra_args):
     return _run_shard(equation, ndim, noise, library, extra_args, "m256", 600)
 
-@app.function(image=image, timeout=1200, cpu=1.0, memory=512)
+@app.function(image=image, timeout=1200, cpu=1.0, memory=512,  volumes={"/results": volume})
 def w512(equation, ndim, noise, library, extra_args):
     return _run_shard(equation, ndim, noise, library, extra_args, "m512", 1200)
 
-@app.function(image=image, timeout=5400, cpu=1.0, memory=2048)
+@app.function(image=image, timeout=5400, cpu=1.0, memory=2048, volumes={"/results": volume})
 def w2048(equation, ndim, noise, library, extra_args):
     return _run_shard(equation, ndim, noise, library, extra_args, "m2048", 5400)
 
-@app.function(image=image, timeout=5400, cpu=1.0, memory=4096)
+@app.function(image=image, timeout=5400, cpu=1.0, memory=4096, volumes={"/results": volume})
 def w4096(equation, ndim, noise, library, extra_args):
     return _run_shard(equation, ndim, noise, library, extra_args, "m4096", 5400)
 
@@ -167,7 +179,7 @@ def _get_worker(ndim, library):
 def main(
     equations: str = "ac,sh,pme,ch",
     ndim: str = "2,3,4,5",
-    noise: str = "0.0,0.01",
+    noise: str = "0.0,0.02,0.05",
     libraries: str = "multigraph,mod_multigraph,pdefind,wsindy",
     algorithms: str = "stride,rfe",
     ibp: str = "both",
@@ -196,6 +208,9 @@ def main(
     import itertools
 
     shards = list(itertools.product(eq_list, ndim_list, noise_list, lib_list))
+    # PDE-FIND cannot represent PME (products of derivatives) — skip.
+    shards = [(e, n, no, l) for e, n, no, l in shards
+              if not (e == "pme" and l == "pdefind")]
     eqs, ndims, noises, libs = zip(*shards)
 
     # ── Resource summary ──────────────────────────────────────────────
@@ -302,3 +317,68 @@ def main(
             log.write(f"  ndim={nd} {lib}: memory={mem}MB timeout={timeout}s\n")
     print(f"  Log → {os.path.basename(log_path)}")
     print(f"  Wall time: {elapsed:.1f}s ({elapsed/60:.1f} min)")
+
+
+# ── Merge-only function (callable independently after detached run) ─────
+
+@app.function(image=image, timeout=600, cpu=1.0, memory=1024,
+              volumes={"/results": volume})
+def merge_results(name: str = "", results_dir: str = "/results"):
+    """Merge all per-shard CSVs from the Volume into one result file."""
+    import datetime
+    import glob
+
+    os.makedirs(RESULTS_DIR_LOCAL := "/results", exist_ok=True)
+
+    csv_files = sorted(glob.glob(f"{results_dir}/sweep_nd_*.csv"))
+    if not csv_files:
+        print("No CSV files found on Volume. The sweep may not have completed.")
+        return
+
+    print(f"Found {len(csv_files)} per-shard CSV files on Volume")
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    stem = f"sweep_nd_{name}_{timestamp}" if name else f"sweep_nd_{timestamp}"
+    merged_path = f"{results_dir}/{stem}.csv"
+
+    total_rows = 0
+    with open(merged_path, "w", newline="") as fout:
+        writer = None
+        for i, fpath in enumerate(csv_files):
+            with open(fpath, "r") as fin:
+                reader = csv.reader(fin)
+                try:
+                    header = next(reader)
+                except StopIteration:
+                    continue
+                if writer is None:
+                    writer = csv.writer(fout)
+                    writer.writerow(header)
+                for row in reader:
+                    if row:
+                        writer.writerow(row)
+                        total_rows += 1
+
+    print(f"Merged {total_rows} rows from {len(csv_files)} files → {os.path.basename(merged_path)}")
+
+    # Write log
+    log_path = merged_path.replace(".csv", ".log")
+    with open(log_path, "w") as log:
+        log.write(f"Modal N-D sweep merge\n")
+        log.write(f"Timestamp: {timestamp}\n")
+        log.write(f"Name: {name}\n")
+        log.write(f"Shard files: {len(csv_files)}\n")
+        log.write(f"Total rows: {total_rows}\n")
+        log.write(f"Source files:\n")
+        for fpath in csv_files:
+            log.write(f"  {os.path.basename(fpath)}\n")
+    print(f"Log → {os.path.basename(log_path)}")
+
+    # Commit volume changes
+    try:
+        volume.commit()
+        print("Volume committed.")
+    except Exception as e:
+        print(f"Volume commit note: {e}")
+
+    return merged_path

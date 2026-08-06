@@ -49,7 +49,7 @@ def _rhs_sh(f, L, r):
 EQUATION_CONFIGS = {
     "ac": {
         "sim_fn": allen_cahn_nd,
-        "name": "allen_cahn",
+        "name": "ac",
         "L": 2 * np.pi,
         "eps": 0.15,            # used for PDE residual check
         "sim_kwargs": {"eps": 0.15},
@@ -57,7 +57,7 @@ EQUATION_CONFIGS = {
     },
     "ch": {
         "sim_fn": cahn_hilliard_nd,
-        "name": "cahn_hilliard",
+        "name": "ch",
         "L": 8 * np.pi,
         "eps": 0.2,
         "sim_kwargs": {"eps": 0.2},
@@ -65,15 +65,15 @@ EQUATION_CONFIGS = {
     },
     "sh": {
         "sim_fn": swift_hohenberg_nd,
-        "name": "swift_hohenberg",
+        "name": "sh",
         "L": 8 * np.pi,
         "eps": 0.3,             # used as 'r' for PDE residual check
-        "sim_kwargs": {"r": 0.3},
+        "sim_kwargs": {"r": 0.3, "T_end": 50.0, "save_every": 5},
         "rhs": _rhs_sh,
     },
     "pme": {
         "sim_fn": porous_medium_nd,
-        "name": "porous_medium",
+        "name": "pme",
         "L": 6 * np.pi,
         "eps": None,            # PME has no interface parameter
         "sim_kwargs": {},

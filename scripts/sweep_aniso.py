@@ -85,6 +85,8 @@ REPRESENTABLE_LIBRARIES = {
     "sh":  {"multigraph", "mod_multigraph", "pdefind", "wsindy", "polyjet"},
     "ch":  {"multigraph", "mod_multigraph", "wsindy", "polyjet"},
     "pme": {"multigraph", "mod_multigraph", "wsindy", "polyjet"},
+    "ks_cell":   {"multigraph", "mod_multigraph", "polyjet"},
+    "ks_wchaos": {"multigraph", "mod_multigraph", "polyjet"},
 }
 # KS regimes have no anisotropic datasets.
 ALL_LIBRARIES = ["multigraph", "mod_multigraph", "pdefind", "polyjet", "wsindy"]
@@ -95,6 +97,8 @@ _EQ_TO_FILENAME = {
     "sh":       {"swift_hohenberg", "sh"},
     "ch":       {"cahn_hilliard", "ch"},
     "pme":      {"porous_medium", "pme"},
+    "ks_cell":   {"ks_cellular", "ks_cell"},
+    "ks_wchaos": {"ks_weak_chaotic", "ks_wchaos"},
 }
 
 

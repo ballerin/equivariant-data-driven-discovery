@@ -37,7 +37,7 @@ power relative to isotropic).
 | Axial decay | $\propto \exp(-x^2/2s^2)$ | Reflection only |
 | Axial growth | $\propto 1 + (1 - \exp(-x^2/2s^2))$ | Reflection only |
 
-Sweep configuration: 4 libraries (Multigraphs, PolyJet, PDE-FIND, WSINDy),
+Sweep configuration: 3 libraries (Multigraphs, PolyJet, WSINDy),
 2 algorithm(s) (RFE, STRidge),
 2 method(s) (weak (no IBP), weak (IBP)),
 2 backend(s) (Polynomial stencils, Spectral derivatives),
@@ -99,40 +99,40 @@ Sweep configuration: 4 libraries (Multigraphs, PolyJet, PDE-FIND, WSINDy),
 
 | Rank | Library + Algorithm            | Configuration                   | fp/fn | E_coeff | Time (s) | vs. best  |
 |:-----|:-------------------------------|:--------------------------------|:------|:--------|:---------|:----------|
-| 1    | Modified Multigraphs + STRidge | spectral, weak (no IBP), m=8    | 0/0 ✓ | 0.0001  | 0.1      | —         |
+| 1    | Modified Multigraphs + STRidge | spectral, weak (no IBP), m=8    | 0/0 ✓ | 0.0001  | 0.2      | —         |
 | 2    | Modified Multigraphs + RFE     | spectral, weak (no IBP), m=8    | 0/0 ✓ | 0.0002  | 0.0      | +115.4%   |
-| 3    | Multigraphs + STRidge          | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0011  | 0.1      | +1174.2%  |
-| 4    | WSINDy + RFE                   | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0018  | 0.0      | +1944.8%  |
-| 5    | WSINDy + STRidge               | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0035  | 0.2      | +3873.0%  |
-| 6    | Multigraphs + RFE              | polynomial, weak (no IBP), m=8  | 0/0 ✓ | 0.0040  | 0.0      | +4438.3%  |
-| 7    | PolyJet + STRidge              | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0104  | 0.4      | +11772.6% |
-| 8    | PolyJet + RFE                  | spectral, weak (no IBP), m=8    | 0/1   | 0.2978  | 0.0      | ✗         |
+| 3    | Multigraphs + STRidge          | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0011  | 0.1      | +1174.3%  |
+| 4    | WSINDy + RFE                   | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0018  | 0.1      | +1944.8%  |
+| 5    | WSINDy + STRidge               | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0035  | 0.2      | +3873.4%  |
+| 6    | Multigraphs + RFE              | polynomial, weak (no IBP), m=8  | 0/0 ✓ | 0.0040  | 0.0      | +4438.4%  |
+| 7    | PolyJet + STRidge              | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0104  | 0.7      | +11772.6% |
+| 8    | PolyJet + RFE                  | spectral, weak (no IBP), m=8    | 0/1   | 0.2978  | 0.1      | ✗         |
 
 ### 2% — Radial decay
 
 | Rank | Library + Algorithm            | Configuration                   | fp/fn | E_coeff | Time (s) | vs. best |
 |:-----|:-------------------------------|:--------------------------------|:------|:--------|:---------|:---------|
-| 1    | Modified Multigraphs + STRidge | polynomial, weak (IBP), m=12    | 0/0 ✓ | 0.0011  | 0.1      | —        |
+| 1    | Modified Multigraphs + STRidge | spectral, weak (IBP), m=12      | 0/0 ✓ | 0.0011  | 0.1      | —        |
 | 2    | Multigraphs + STRidge          | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0014  | 0.1      | +26.9%   |
 | 3    | Modified Multigraphs + RFE     | spectral, weak (IBP), m=12      | 0/0 ✓ | 0.0022  | 0.0      | +107.7%  |
 | 4    | WSINDy + RFE                   | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0024  | 0.0      | +118.5%  |
 | 5    | WSINDy + STRidge               | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0040  | 0.2      | +269.4%  |
 | 6    | Multigraphs + RFE              | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0095  | 0.0      | +784.6%  |
-| 7    | PolyJet + STRidge              | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0157  | 0.4      | +1355.2% |
-| 8    | PolyJet + RFE                  | spectral, weak (no IBP), m=8    | 0/1   | 0.2980  | 0.0      | ✗        |
+| 7    | PolyJet + STRidge              | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0157  | 0.7      | +1355.2% |
+| 8    | PolyJet + RFE                  | spectral, weak (no IBP), m=8    | 0/1   | 0.2980  | 0.1      | ✗        |
 
 ### 2% — Axial growth
 
 | Rank | Library + Algorithm            | Configuration                   | fp/fn | E_coeff | Time (s) | vs. best |
 |:-----|:-------------------------------|:--------------------------------|:------|:--------|:---------|:---------|
 | 1    | Modified Multigraphs + STRidge | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0001  | 0.1      | —        |
-| 2    | Multigraphs + STRidge          | polynomial, weak (IBP), m=12    | 0/0 ✓ | 0.0009  | 0.1      | +753.3%  |
+| 2    | Multigraphs + STRidge          | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0009  | 0.1      | +753.3%  |
 | 3    | Modified Multigraphs + RFE     | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0011  | 0.0      | +935.8%  |
 | 4    | WSINDy + STRidge               | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0015  | 0.2      | +1354.1% |
 | 5    | WSINDy + RFE                   | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0015  | 0.0      | +1397.3% |
-| 6    | Multigraphs + RFE              | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0024  | 0.0      | +2279.6% |
-| 7    | PolyJet + STRidge              | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0052  | 0.5      | +5046.9% |
-| 8    | PolyJet + RFE                  | polynomial, weak (no IBP), m=8  | 0/1   | 0.2976  | 0.0      | ✗        |
+| 6    | Multigraphs + RFE              | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0024  | 0.0      | +2279.7% |
+| 7    | PolyJet + STRidge              | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0052  | 0.5      | +5040.6% |
+| 8    | PolyJet + RFE                  | polynomial, weak (no IBP), m=8  | 0/1   | 0.2974  | 0.1      | ✗        |
 
 ### 2% — Radial growth
 
@@ -143,9 +143,9 @@ Sweep configuration: 4 libraries (Multigraphs, PolyJet, PDE-FIND, WSINDy),
 | 3    | Modified Multigraphs + RFE     | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0011  | 0.0      | +488.8%  |
 | 4    | WSINDy + RFE                   | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0014  | 0.0      | +618.3%  |
 | 5    | WSINDy + STRidge               | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0017  | 0.2      | +763.7%  |
-| 6    | Multigraphs + RFE              | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0022  | 0.0      | +1027.4% |
-| 7    | PolyJet + STRidge              | polynomial, weak (no IBP), m=8  | 0/0 ✓ | 0.0056  | 0.7      | +2801.8% |
-| 8    | PolyJet + RFE                  | polynomial, weak (no IBP), m=8  | 0/1   | 0.2976  | 0.1      | ✗        |
+| 6    | Multigraphs + RFE              | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0022  | 0.0      | +1027.5% |
+| 7    | PolyJet + STRidge              | polynomial, weak (no IBP), m=8  | 0/0 ✓ | 0.0056  | 0.8      | +2800.3% |
+| 8    | PolyJet + RFE                  | polynomial, weak (no IBP), m=8  | 0/1   | 0.2974  | 0.1      | ✗        |
 
 ### 5% — Axial decay
 
@@ -154,9 +154,9 @@ Sweep configuration: 4 libraries (Multigraphs, PolyJet, PDE-FIND, WSINDy),
 | 1    | Modified Multigraphs + STRidge | spectral, weak (IBP), m=8       | 0/0 ✓ | 0.0021  | 0.1      | —        |
 | 2    | Modified Multigraphs + RFE     | spectral, weak (IBP), m=8       | 0/0 ✓ | 0.0024  | 0.0      | +10.8%   |
 | 3    | WSINDy + STRidge               | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0090  | 0.2      | +321.5%  |
-| 4    | Multigraphs + STRidge          | polynomial, weak (no IBP), m=8  | 0/0 ✓ | 0.0112  | 0.1      | +426.0%  |
-| 5    | PolyJet + STRidge              | spectral, weak (no IBP), m=12   | 1/0   | 0.0298  | 0.6      | ✗        |
-| 6    | WSINDy + RFE                   | polynomial, weak (no IBP), m=8  | 0/2   | 0.5773  | 0.0      | ✗        |
+| 4    | Multigraphs + STRidge          | polynomial, weak (no IBP), m=8  | 0/0 ✓ | 0.0113  | 0.1      | +426.1%  |
+| 5    | PolyJet + STRidge              | spectral, weak (no IBP), m=12   | 1/0   | 0.0298  | 0.7      | ✗        |
+| 6    | WSINDy + RFE                   | spectral, weak (no IBP), m=8    | 0/2   | 0.5774  | 0.0      | ✗        |
 | 7    | Multigraphs + RFE              | spectral, weak (no IBP), m=8    | 6/2   | 0.6270  | 0.0      | ✗        |
 | 8    | PolyJet + RFE                  | spectral, weak (no IBP), m=8    | 2/3   | 0.6545  | 0.1      | ✗        |
 
@@ -165,25 +165,25 @@ Sweep configuration: 4 libraries (Multigraphs, PolyJet, PDE-FIND, WSINDy),
 | Rank | Library + Algorithm            | Configuration                   | fp/fn | E_coeff | Time (s) | vs. best |
 |:-----|:-------------------------------|:--------------------------------|:------|:--------|:---------|:---------|
 | 1    | Modified Multigraphs + STRidge | polynomial, weak (IBP), m=8     | 0/0 ✓ | 0.0013  | 0.2      | —        |
-| 2    | WSINDy + STRidge               | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0107  | 0.2      | +700.9%  |
-| 3    | Multigraphs + STRidge          | polynomial, weak (no IBP), m=8  | 0/0 ✓ | 0.0208  | 0.1      | +1450.6% |
+| 2    | WSINDy + STRidge               | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0107  | 0.2      | +701.0%  |
+| 3    | Multigraphs + STRidge          | polynomial, weak (no IBP), m=8  | 0/0 ✓ | 0.0208  | 0.1      | +1450.8% |
 | 4    | Modified Multigraphs + RFE     | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0474  | 0.0      | +3437.1% |
-| 5    | PolyJet + STRidge              | spectral, weak (no IBP), m=12   | 1/0   | 0.0455  | 0.4      | ✗        |
+| 5    | PolyJet + STRidge              | spectral, weak (no IBP), m=12   | 1/0   | 0.0455  | 0.5      | ✗        |
 | 6    | Multigraphs + RFE              | spectral, weak (no IBP), m=12   | 6/0   | 0.0359  | 0.0      | ✗        |
-| 7    | WSINDy + RFE                   | polynomial, weak (no IBP), m=8  | 0/2   | 0.5773  | 0.0      | ✗        |
-| 8    | PolyJet + RFE                  | spectral, weak (no IBP), m=8    | 4/3   | 0.6400  | 0.0      | ✗        |
+| 7    | WSINDy + RFE                   | spectral, weak (no IBP), m=8    | 0/2   | 0.5774  | 0.0      | ✗        |
+| 8    | PolyJet + RFE                  | spectral, weak (no IBP), m=8    | 4/3   | 0.6400  | 0.1      | ✗        |
 
 ### 5% — Axial growth
 
 | Rank | Library + Algorithm            | Configuration                   | fp/fn | E_coeff | Time (s) | vs. best |
 |:-----|:-------------------------------|:--------------------------------|:------|:--------|:---------|:---------|
-| 1    | Modified Multigraphs + RFE     | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0001  | 0.0      | —        |
+| 1    | Modified Multigraphs + RFE     | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0001  | 0.1      | —        |
 | 2    | Modified Multigraphs + STRidge | spectral, weak (no IBP), m=8    | 0/0 ✓ | 0.0004  | 0.1      | +522.1%  |
-| 3    | Multigraphs + STRidge          | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0008  | 0.1      | +1253.3% |
+| 3    | Multigraphs + STRidge          | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0008  | 0.1      | +1253.4% |
 | 4    | WSINDy + RFE                   | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0028  | 0.0      | +4535.2% |
-| 5    | WSINDy + STRidge               | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0037  | 0.2      | +5931.1% |
+| 5    | WSINDy + STRidge               | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0037  | 0.2      | +5931.7% |
 | 6    | Multigraphs + RFE              | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0043  | 0.0      | +6939.8% |
-| 7    | PolyJet + STRidge              | spectral, weak (no IBP), m=8    | 1/0   | 0.0156  | 0.6      | ✗        |
+| 7    | PolyJet + STRidge              | spectral, weak (no IBP), m=8    | 1/0   | 0.0156  | 0.7      | ✗        |
 | 8    | PolyJet + RFE                  | spectral, weak (no IBP), m=8    | 0/1   | 0.2981  | 0.1      | ✗        |
 
 ### 5% — Radial growth
@@ -195,8 +195,8 @@ Sweep configuration: 4 libraries (Multigraphs, PolyJet, PDE-FIND, WSINDy),
 | 3    | Modified Multigraphs + RFE     | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0011  | 0.0      | +220.7%  |
 | 4    | WSINDy + RFE                   | spectral, weak (no IBP), m=12   | 0/0 ✓ | 0.0025  | 0.0      | +630.8%  |
 | 5    | Multigraphs + RFE              | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0036  | 0.0      | +959.0%  |
-| 6    | WSINDy + STRidge               | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0040  | 0.2      | +1099.7% |
-| 7    | PolyJet + STRidge              | spectral, weak (no IBP), m=8    | 0/0 ✓ | 0.0128  | 0.6      | +3696.4% |
+| 6    | WSINDy + STRidge               | polynomial, weak (no IBP), m=12 | 0/0 ✓ | 0.0040  | 0.2      | +1099.8% |
+| 7    | PolyJet + STRidge              | spectral, weak (no IBP), m=8    | 0/0 ✓ | 0.0128  | 0.7      | +3696.4% |
 | 8    | PolyJet + RFE                  | spectral, weak (no IBP), m=8    | 0/1   | 0.2983  | 0.1      | ✗        |
 
 
@@ -214,52 +214,52 @@ Sweep configuration: 4 libraries (Multigraphs, PolyJet, PDE-FIND, WSINDy),
 | WSINDy      | 2%    | STRidge   | 12 | 1.0       | Radial decay  | 0/0   | 2        | 0.0040  | 0.2      | 🟢      |
 | WSINDy      | 2%    | STRidge   | 12 | 0.1       | Axial growth  | 0/0   | 2        | 0.0015  | 0.2      | 🟢      |
 | WSINDy      | 2%    | STRidge   | 12 | 0.01      | Radial growth | 0/0   | 2        | 0.0017  | 0.3      | 🟢      |
-| WSINDy      | 5%    | RFE       | 8  | 0.0       | Axial decay   | 0/2   | 1        | 0.5773  | 0.0      | 🔴      |
-| WSINDy      | 5%    | RFE       | 8  | 0.0       | Radial decay  | 0/2   | 1        | 0.5773  | 0.0      | 🔴      |
+| WSINDy      | 5%    | RFE       | 8  | 0.0       | Axial decay   | 0/2   | 1        | 0.5774  | 0.0      | 🔴      |
+| WSINDy      | 5%    | RFE       | 8  | 0.0       | Radial decay  | 0/2   | 1        | 0.5774  | 0.0      | 🔴      |
 | WSINDy      | 5%    | RFE       | 12 | 0.0       | Axial growth  | 0/0   | 2        | 0.0028  | 0.0      | 🟢      |
 | WSINDy      | 5%    | RFE       | 12 | 0.0       | Radial growth | 0/0   | 2        | 0.0025  | 0.0      | 🟢      |
 | WSINDy      | 5%    | STRidge   | 12 | 1.0       | Axial decay   | 0/0   | 2        | 0.0090  | 0.2      | 🟢      |
 | WSINDy      | 5%    | STRidge   | 12 | 1.0       | Radial decay  | 0/0   | 2        | 0.0107  | 0.2      | 🟢      |
 | WSINDy      | 5%    | STRidge   | 12 | 1.0       | Axial growth  | 0/0   | 2        | 0.0037  | 0.2      | 🟢      |
 | WSINDy      | 5%    | STRidge   | 12 | 1.0       | Radial growth | 0/0   | 2        | 0.0040  | 0.2      | 🟢      |
-| PolyJet     | 2%    | RFE       | 8  | 0.0       | Axial decay   | 1/3   | 2        | 0.3701  | 0.1      | 🔴      |
-| PolyJet     | 2%    | RFE       | 8  | 0.0       | Radial decay  | 1/4   | 1        | 0.6272  | 0.0      | 🔴      |
-| PolyJet     | 2%    | RFE       | 8  | 0.0       | Axial growth  | 0/1   | 3        | 0.2976  | 0.0      | 🔴      |
-| PolyJet     | 2%    | RFE       | 8  | 0.0       | Radial growth | 0/1   | 3        | 0.2976  | 0.1      | 🔴      |
-| PolyJet     | 2%    | STRidge   | 12 | 0.1       | Axial decay   | 14/0  | 18       | 0.0708  | 0.5      | 🔴      |
-| PolyJet     | 2%    | STRidge   | 8  | 0.01      | Radial decay  | 21/0  | 25       | 0.0825  | 0.8      | 🔴      |
+| PolyJet     | 2%    | RFE       | 8  | 0.0       | Axial decay   | 1/3   | 2        | 0.3702  | 0.1      | 🔴      |
+| PolyJet     | 2%    | RFE       | 8  | 0.0       | Radial decay  | 1/4   | 1        | 0.6275  | 0.1      | 🔴      |
+| PolyJet     | 2%    | RFE       | 8  | 0.0       | Axial growth  | 0/1   | 3        | 0.2974  | 0.1      | 🔴      |
+| PolyJet     | 2%    | RFE       | 8  | 0.0       | Radial growth | 0/1   | 3        | 0.2974  | 0.1      | 🔴      |
+| PolyJet     | 2%    | STRidge   | 12 | 0.1       | Axial decay   | 14/0  | 18       | 0.0833  | 0.6      | 🔴      |
+| PolyJet     | 2%    | STRidge   | 8  | 0.01      | Radial decay  | 21/0  | 25       | 0.0824  | 0.9      | 🔴      |
 | PolyJet     | 2%    | STRidge   | 12 | 1.0       | Axial growth  | 0/0   | 4        | 0.0052  | 0.5      | 🟢      |
-| PolyJet     | 2%    | STRidge   | 8  | 0.1       | Radial growth | 0/0   | 4        | 0.0056  | 0.7      | 🟢      |
-| PolyJet     | 5%    | RFE       | 8  | 0.0       | Axial decay   | 2/4   | 2        | 0.2599  | 0.1      | 🔴      |
-| PolyJet     | 5%    | RFE       | 12 | 0.0       | Radial decay  | 2/4   | 2        | 0.2644  | 0.0      | 🔴      |
-| PolyJet     | 5%    | RFE       | 12 | 0.0       | Axial growth  | 0/1   | 3        | 0.3040  | 0.0      | 🔴      |
+| PolyJet     | 2%    | STRidge   | 8  | 0.1       | Radial growth | 0/0   | 4        | 0.0056  | 0.8      | 🟢      |
+| PolyJet     | 5%    | RFE       | 8  | 0.0       | Axial decay   | 2/4   | 2        | 0.2594  | 0.1      | 🔴      |
+| PolyJet     | 5%    | RFE       | 12 | 0.0       | Radial decay  | 2/4   | 2        | 0.2639  | 0.1      | 🔴      |
+| PolyJet     | 5%    | RFE       | 12 | 0.0       | Axial growth  | 0/1   | 3        | 0.3037  | 0.1      | 🔴      |
 | PolyJet     | 5%    | RFE       | 8  | 0.0       | Radial growth | 0/3   | 1        | 0.6696  | 0.1      | 🔴      |
-| PolyJet     | 5%    | STRidge   | 8  | 1.0       | Axial decay   | 2/0   | 6        | 0.0424  | 0.6      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 8  | 1.0       | Axial decay   | 2/0   | 6        | 0.0424  | 0.5      | 🔴      |
 | PolyJet     | 5%    | STRidge   | 8  | 1.0       | Radial decay  | 1/0   | 5        | 0.0555  | 0.6      | 🔴      |
-| PolyJet     | 5%    | STRidge   | 8  | 0.01      | Axial growth  | 20/0  | 24       | 0.0463  | 0.9      | 🔴      |
-| PolyJet     | 5%    | STRidge   | 8  | 0.1       | Radial growth | 14/0  | 18       | 0.0308  | 0.7      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 8  | 0.01      | Axial growth  | 20/0  | 24       | 0.0466  | 0.9      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 8  | 0.1       | Radial growth | 14/0  | 18       | 0.0309  | 0.7      | 🔴      |
 | Multigraphs | 2%    | RFE       | 8  | 0.0       | Axial decay   | 0/0   | 1        | 0.0033  | 0.0      | 🟢      |
-| Multigraphs | 2%    | RFE       | 8  | 0.0       | Radial decay  | 3/2   | 2        | 0.2695  | 0.0      | 🔴      |
+| Multigraphs | 2%    | RFE       | 8  | 0.0       | Radial decay  | 3/2   | 2        | 0.2702  | 0.0      | 🔴      |
 | Multigraphs | 2%    | RFE       | 12 | 0.0       | Axial growth  | 0/0   | 1        | 0.0016  | 0.0      | 🟢      |
 | Multigraphs | 2%    | RFE       | 12 | 0.0       | Radial growth | 0/0   | 1        | 0.0014  | 0.0      | 🟢      |
 | Multigraphs | 2%    | STRidge   | 12 | 0.1       | Axial decay   | 0/0   | 1        | 0.0007  | 0.1      | 🟢      |
 | Multigraphs | 2%    | STRidge   | 12 | 10.0      | Radial decay  | 0/0   | 1        | 0.0014  | 0.1      | 🟢      |
 | Multigraphs | 2%    | STRidge   | 12 | 0.1       | Axial growth  | 0/0   | 1        | 0.0004  | 0.1      | 🟢      |
 | Multigraphs | 2%    | STRidge   | 12 | 0.1       | Radial growth | 0/0   | 1        | 0.0004  | 0.1      | 🟢      |
-| Multigraphs | 5%    | RFE       | 8  | 0.0       | Axial decay   | 4/4   | 2        | 0.5509  | 0.0      | 🔴      |
-| Multigraphs | 5%    | RFE       | 12 | 0.0       | Radial decay  | 2/4   | 2        | 0.4418  | 0.0      | 🔴      |
+| Multigraphs | 5%    | RFE       | 8  | 0.0       | Axial decay   | 4/4   | 2        | 0.5519  | 0.0      | 🔴      |
+| Multigraphs | 5%    | RFE       | 12 | 0.0       | Radial decay  | 2/4   | 2        | 0.4416  | 0.0      | 🔴      |
 | Multigraphs | 5%    | RFE       | 12 | 0.0       | Axial growth  | 0/0   | 1        | 0.0037  | 0.0      | 🟢      |
 | Multigraphs | 5%    | RFE       | 12 | 0.0       | Radial growth | 0/0   | 1        | 0.0030  | 0.0      | 🟢      |
-| Multigraphs | 5%    | STRidge   | 8  | 0.1       | Axial decay   | 0/0   | 1        | 0.0075  | 0.1      | 🟢      |
+| Multigraphs | 5%    | STRidge   | 8  | 0.1       | Axial decay   | 0/0   | 1        | 0.0075  | 0.2      | 🟢      |
 | Multigraphs | 5%    | STRidge   | 8  | 0.1       | Radial decay  | 0/0   | 2        | 0.0208  | 0.1      | 🟢      |
-| Multigraphs | 5%    | STRidge   | 12 | 0.1       | Axial growth  | 0/0   | 1        | 0.0008  | 0.1      | 🟢      |
+| Multigraphs | 5%    | STRidge   | 12 | 0.1       | Axial growth  | 0/0   | 1        | 0.0008  | 0.2      | 🟢      |
 | Multigraphs | 5%    | STRidge   | 12 | 1.0       | Radial growth | 0/0   | 2        | 0.0006  | 0.1      | 🟢      |
 
 ### weak (no IBP) — Spectral derivatives
 
 | Library     | Noise | Algorithm | m  | d_tol/lam | Profile       | fp/fn | n_active | E_coeff | Time (s) | Exact? |
 |:------------|:------|:----------|:---|:----------|:--------------|:------|:---------|:--------|:---------|:-------|
-| WSINDy      | 2%    | RFE       | 12 | 0.0       | Axial decay   | 0/0   | 2        | 0.0018  | 0.0      | 🟢      |
+| WSINDy      | 2%    | RFE       | 12 | 0.0       | Axial decay   | 0/0   | 2        | 0.0018  | 0.1      | 🟢      |
 | WSINDy      | 2%    | RFE       | 12 | 0.0       | Radial decay  | 0/0   | 2        | 0.0024  | 0.0      | 🟢      |
 | WSINDy      | 2%    | RFE       | 12 | 0.0       | Axial growth  | 0/0   | 2        | 0.0015  | 0.0      | 🟢      |
 | WSINDy      | 2%    | RFE       | 12 | 0.0       | Radial growth | 0/0   | 2        | 0.0014  | 0.0      | 🟢      |
@@ -274,34 +274,34 @@ Sweep configuration: 4 libraries (Multigraphs, PolyJet, PDE-FIND, WSINDy),
 | WSINDy      | 5%    | STRidge   | 12 | 1.0       | Axial decay   | 0/0   | 2        | 0.0090  | 0.2      | 🟢      |
 | WSINDy      | 5%    | STRidge   | 12 | 1.0       | Radial decay  | 0/0   | 2        | 0.0108  | 0.2      | 🟢      |
 | WSINDy      | 5%    | STRidge   | 12 | 1.0       | Axial growth  | 0/0   | 2        | 0.0037  | 0.2      | 🟢      |
-| WSINDy      | 5%    | STRidge   | 12 | 1.0       | Radial growth | 0/0   | 2        | 0.0041  | 0.2      | 🟢      |
-| PolyJet     | 2%    | RFE       | 8  | 0.0       | Axial decay   | 0/1   | 3        | 0.2978  | 0.0      | 🔴      |
-| PolyJet     | 2%    | RFE       | 8  | 0.0       | Radial decay  | 0/1   | 3        | 0.2980  | 0.0      | 🔴      |
-| PolyJet     | 2%    | RFE       | 8  | 0.0       | Axial growth  | 0/1   | 3        | 0.2977  | 0.0      | 🔴      |
+| WSINDy      | 5%    | STRidge   | 12 | 1.0       | Radial growth | 0/0   | 2        | 0.0041  | 0.1      | 🟢      |
+| PolyJet     | 2%    | RFE       | 8  | 0.0       | Axial decay   | 0/1   | 3        | 0.2978  | 0.1      | 🔴      |
+| PolyJet     | 2%    | RFE       | 8  | 0.0       | Radial decay  | 0/1   | 3        | 0.2980  | 0.1      | 🔴      |
+| PolyJet     | 2%    | RFE       | 8  | 0.0       | Axial growth  | 0/1   | 3        | 0.2977  | 0.1      | 🔴      |
 | PolyJet     | 2%    | RFE       | 8  | 0.0       | Radial growth | 0/1   | 3        | 0.2977  | 0.1      | 🔴      |
-| PolyJet     | 2%    | STRidge   | 12 | 10.0      | Axial decay   | 0/0   | 4        | 0.0104  | 0.4      | 🟢      |
-| PolyJet     | 2%    | STRidge   | 12 | 10.0      | Radial decay  | 0/0   | 4        | 0.0157  | 0.4      | 🟢      |
-| PolyJet     | 2%    | STRidge   | 8  | 0.1       | Axial growth  | 0/0   | 4        | 0.0057  | 0.6      | 🟢      |
-| PolyJet     | 2%    | STRidge   | 8  | 0.1       | Radial growth | 0/0   | 4        | 0.0056  | 0.7      | 🟢      |
+| PolyJet     | 2%    | STRidge   | 12 | 10.0      | Axial decay   | 0/0   | 4        | 0.0104  | 0.7      | 🟢      |
+| PolyJet     | 2%    | STRidge   | 12 | 10.0      | Radial decay  | 0/0   | 4        | 0.0157  | 0.7      | 🟢      |
+| PolyJet     | 2%    | STRidge   | 8  | 0.1       | Axial growth  | 0/0   | 4        | 0.0057  | 1.2      | 🟢      |
+| PolyJet     | 2%    | STRidge   | 8  | 0.1       | Radial growth | 0/0   | 4        | 0.0056  | 1.1      | 🟢      |
 | PolyJet     | 5%    | RFE       | 8  | 0.0       | Axial decay   | 2/3   | 3        | 0.6545  | 0.1      | 🔴      |
-| PolyJet     | 5%    | RFE       | 8  | 0.0       | Radial decay  | 4/3   | 5        | 0.6400  | 0.0      | 🔴      |
+| PolyJet     | 5%    | RFE       | 8  | 0.0       | Radial decay  | 4/3   | 5        | 0.6400  | 0.1      | 🔴      |
 | PolyJet     | 5%    | RFE       | 8  | 0.0       | Axial growth  | 0/1   | 3        | 0.2981  | 0.1      | 🔴      |
 | PolyJet     | 5%    | RFE       | 8  | 0.0       | Radial growth | 0/1   | 3        | 0.2983  | 0.1      | 🔴      |
-| PolyJet     | 5%    | STRidge   | 12 | 0.1       | Axial decay   | 1/0   | 5        | 0.0298  | 0.6      | 🔴      |
-| PolyJet     | 5%    | STRidge   | 12 | 1.0       | Radial decay  | 1/0   | 5        | 0.0455  | 0.4      | 🔴      |
-| PolyJet     | 5%    | STRidge   | 8  | 0.1       | Axial growth  | 1/0   | 5        | 0.0156  | 0.6      | 🔴      |
-| PolyJet     | 5%    | STRidge   | 8  | 0.1       | Radial growth | 0/0   | 4        | 0.0128  | 0.6      | 🟢      |
+| PolyJet     | 5%    | STRidge   | 12 | 0.1       | Axial decay   | 1/0   | 5        | 0.0298  | 0.7      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 12 | 1.0       | Radial decay  | 1/0   | 5        | 0.0455  | 0.5      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 8  | 0.1       | Axial growth  | 1/0   | 5        | 0.0156  | 0.7      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 8  | 0.1       | Radial growth | 0/0   | 4        | 0.0128  | 0.7      | 🟢      |
 | Multigraphs | 2%    | RFE       | 8  | 0.0       | Axial decay   | 0/0   | 1        | 0.0002  | 0.0      | 🟢      |
 | Multigraphs | 2%    | RFE       | 8  | 0.0       | Radial decay  | 0/0   | 1        | 0.0035  | 0.0      | 🟢      |
 | Multigraphs | 2%    | RFE       | 12 | 0.0       | Axial growth  | 0/0   | 1        | 0.0011  | 0.0      | 🟢      |
 | Multigraphs | 2%    | RFE       | 12 | 0.0       | Radial growth | 0/0   | 1        | 0.0011  | 0.0      | 🟢      |
-| Multigraphs | 2%    | STRidge   | 8  | 0.1       | Axial decay   | 0/0   | 1        | 0.0001  | 0.1      | 🟢      |
+| Multigraphs | 2%    | STRidge   | 8  | 0.1       | Axial decay   | 0/0   | 1        | 0.0001  | 0.2      | 🟢      |
 | Multigraphs | 2%    | STRidge   | 8  | 10.0      | Radial decay  | 0/0   | 1        | 0.0031  | 0.1      | 🟢      |
 | Multigraphs | 2%    | STRidge   | 12 | 0.1       | Axial growth  | 0/0   | 1        | 0.0001  | 0.1      | 🟢      |
 | Multigraphs | 2%    | STRidge   | 12 | 0.1       | Radial growth | 0/0   | 1        | 0.0002  | 0.1      | 🟢      |
-| Multigraphs | 5%    | RFE       | 8  | 0.0       | Axial decay   | 0/0   | 1        | 0.0146  | 0.0      | 🟢      |
+| Multigraphs | 5%    | RFE       | 8  | 0.0       | Axial decay   | 0/0   | 1        | 0.0146  | 0.1      | 🟢      |
 | Multigraphs | 5%    | RFE       | 12 | 0.0       | Radial decay  | 0/0   | 1        | 0.0474  | 0.0      | 🟢      |
-| Multigraphs | 5%    | RFE       | 12 | 0.0       | Axial growth  | 0/0   | 1        | 0.0001  | 0.0      | 🟢      |
+| Multigraphs | 5%    | RFE       | 12 | 0.0       | Axial growth  | 0/0   | 1        | 0.0001  | 0.1      | 🟢      |
 | Multigraphs | 5%    | RFE       | 12 | 0.0       | Radial growth | 0/0   | 1        | 0.0011  | 0.0      | 🟢      |
 | Multigraphs | 5%    | STRidge   | 8  | 10.0      | Axial decay   | 0/0   | 1        | 0.0150  | 0.1      | 🟢      |
 | Multigraphs | 5%    | STRidge   | 12 | 0.1       | Radial decay  | 0/0   | 1        | 0.0555  | 0.1      | 🟢      |
@@ -317,55 +317,55 @@ Sweep configuration: 4 libraries (Multigraphs, PolyJet, PDE-FIND, WSINDy),
 | WSINDy      | 2%    | RFE       | 12 | 0.0       | Axial growth  | 0/0   | 2        | 0.0015  | 0.0      | 🟢      |
 | WSINDy      | 2%    | RFE       | 12 | 0.0       | Radial growth | 0/0   | 2        | 0.0014  | 0.0      | 🟢      |
 | WSINDy      | 2%    | STRidge   | 12 | 1.0       | Axial decay   | 0/0   | 2        | 0.0035  | 0.2      | 🟢      |
-| WSINDy      | 2%    | STRidge   | 12 | 1.0       | Radial decay  | 0/0   | 2        | 0.0040  | 0.2      | 🟢      |
+| WSINDy      | 2%    | STRidge   | 12 | 1.0       | Radial decay  | 0/0   | 2        | 0.0040  | 0.1      | 🟢      |
 | WSINDy      | 2%    | STRidge   | 12 | 0.1       | Axial growth  | 0/0   | 2        | 0.0015  | 0.2      | 🟢      |
 | WSINDy      | 2%    | STRidge   | 12 | 0.1       | Radial growth | 0/0   | 2        | 0.0017  | 0.2      | 🟢      |
-| WSINDy      | 5%    | RFE       | 8  | 0.0       | Axial decay   | 0/2   | 1        | 0.5773  | 0.0      | 🔴      |
-| WSINDy      | 5%    | RFE       | 8  | 0.0       | Radial decay  | 0/2   | 1        | 0.5773  | 0.0      | 🔴      |
+| WSINDy      | 5%    | RFE       | 8  | 0.0       | Axial decay   | 0/2   | 1        | 0.5774  | 0.0      | 🔴      |
+| WSINDy      | 5%    | RFE       | 8  | 0.0       | Radial decay  | 0/2   | 1        | 0.5774  | 0.0      | 🔴      |
 | WSINDy      | 5%    | RFE       | 12 | 0.0       | Axial growth  | 0/0   | 2        | 0.0028  | 0.0      | 🟢      |
 | WSINDy      | 5%    | RFE       | 12 | 0.0       | Radial growth | 0/0   | 2        | 0.0025  | 0.0      | 🟢      |
 | WSINDy      | 5%    | STRidge   | 12 | 1.0       | Axial decay   | 0/0   | 2        | 0.0090  | 0.2      | 🟢      |
 | WSINDy      | 5%    | STRidge   | 12 | 1.0       | Radial decay  | 0/0   | 2        | 0.0107  | 0.2      | 🟢      |
 | WSINDy      | 5%    | STRidge   | 12 | 1.0       | Axial growth  | 0/0   | 2        | 0.0037  | 0.2      | 🟢      |
-| WSINDy      | 5%    | STRidge   | 12 | 1.0       | Radial growth | 0/0   | 2        | 0.0040  | 0.2      | 🟢      |
-| PolyJet     | 2%    | RFE       | 12 | 0.0       | Axial decay   | 0/2   | 2        | 0.3545  | 0.0      | 🔴      |
-| PolyJet     | 2%    | RFE       | 8  | 0.0       | Radial decay  | 1/4   | 1        | 0.6272  | 0.0      | 🔴      |
-| PolyJet     | 2%    | RFE       | 8  | 0.0       | Axial growth  | 0/1   | 3        | 0.2976  | 0.1      | 🔴      |
-| PolyJet     | 2%    | RFE       | 8  | 0.0       | Radial growth | 0/1   | 3        | 0.2976  | 0.1      | 🔴      |
-| PolyJet     | 2%    | STRidge   | 12 | 0.1       | Axial decay   | 12/0  | 16       | 0.0325  | 0.5      | 🔴      |
-| PolyJet     | 2%    | STRidge   | 8  | 0.01      | Radial decay  | 21/0  | 25       | 0.0825  | 0.9      | 🔴      |
+| WSINDy      | 5%    | STRidge   | 12 | 1.0       | Radial growth | 0/0   | 2        | 0.0040  | 0.1      | 🟢      |
+| PolyJet     | 2%    | RFE       | 12 | 0.0       | Axial decay   | 0/2   | 2        | 0.3545  | 0.1      | 🔴      |
+| PolyJet     | 2%    | RFE       | 8  | 0.0       | Radial decay  | 1/4   | 1        | 0.6275  | 0.1      | 🔴      |
+| PolyJet     | 2%    | RFE       | 8  | 0.0       | Axial growth  | 0/1   | 3        | 0.2974  | 0.1      | 🔴      |
+| PolyJet     | 2%    | RFE       | 8  | 0.0       | Radial growth | 0/1   | 3        | 0.2974  | 0.1      | 🔴      |
+| PolyJet     | 2%    | STRidge   | 12 | 0.1       | Axial decay   | 12/0  | 16       | 0.0328  | 0.6      | 🔴      |
+| PolyJet     | 2%    | STRidge   | 8  | 0.01      | Radial decay  | 21/0  | 25       | 0.0824  | 1.0      | 🔴      |
 | PolyJet     | 2%    | STRidge   | 12 | 1.0       | Axial growth  | 0/0   | 4        | 0.0052  | 0.5      | 🟢      |
-| PolyJet     | 2%    | STRidge   | 8  | 1.0       | Radial growth | 0/0   | 4        | 0.0056  | 0.5      | 🟢      |
-| PolyJet     | 5%    | RFE       | 8  | 0.0       | Axial decay   | 2/4   | 2        | 0.2599  | 0.1      | 🔴      |
-| PolyJet     | 5%    | RFE       | 12 | 0.0       | Radial decay  | 2/4   | 2        | 0.2644  | 0.0      | 🔴      |
-| PolyJet     | 5%    | RFE       | 12 | 0.0       | Axial growth  | 0/1   | 3        | 0.3040  | 0.0      | 🔴      |
-| PolyJet     | 5%    | RFE       | 8  | 0.0       | Radial growth | 0/3   | 1        | 0.6696  | 0.0      | 🔴      |
-| PolyJet     | 5%    | STRidge   | 8  | 0.1       | Axial decay   | 10/0  | 14       | 0.1363  | 0.7      | 🔴      |
+| PolyJet     | 2%    | STRidge   | 8  | 1.0       | Radial growth | 0/0   | 4        | 0.0056  | 0.6      | 🟢      |
+| PolyJet     | 5%    | RFE       | 8  | 0.0       | Axial decay   | 2/4   | 2        | 0.2594  | 0.1      | 🔴      |
+| PolyJet     | 5%    | RFE       | 12 | 0.0       | Radial decay  | 2/4   | 2        | 0.2639  | 0.1      | 🔴      |
+| PolyJet     | 5%    | RFE       | 12 | 0.0       | Axial growth  | 0/1   | 3        | 0.3037  | 0.1      | 🔴      |
+| PolyJet     | 5%    | RFE       | 8  | 0.0       | Radial growth | 0/3   | 1        | 0.6696  | 0.1      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 8  | 0.1       | Axial decay   | 10/0  | 14       | 0.1434  | 0.8      | 🔴      |
 | PolyJet     | 5%    | STRidge   | 8  | 1.0       | Radial decay  | 1/0   | 5        | 0.0555  | 0.6      | 🔴      |
-| PolyJet     | 5%    | STRidge   | 8  | 0.1       | Axial growth  | 4/0   | 8        | 0.0215  | 0.6      | 🔴      |
-| PolyJet     | 5%    | STRidge   | 8  | 0.1       | Radial growth | 14/0  | 18       | 0.0308  | 0.7      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 8  | 0.1       | Axial growth  | 4/0   | 8        | 0.0217  | 0.7      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 8  | 0.1       | Radial growth | 14/0  | 18       | 0.0309  | 0.7      | 🔴      |
 | Multigraphs | 2%    | RFE       | 12 | 0.0       | Axial decay   | 0/0   | 1        | 0.0017  | 0.0      | 🟢      |
-| Multigraphs | 2%    | RFE       | 8  | 0.0       | Radial decay  | 3/2   | 2        | 0.2695  | 0.0      | 🔴      |
+| Multigraphs | 2%    | RFE       | 8  | 0.0       | Radial decay  | 3/2   | 2        | 0.2702  | 0.0      | 🔴      |
 | Multigraphs | 2%    | RFE       | 12 | 0.0       | Axial growth  | 0/0   | 1        | 0.0014  | 0.0      | 🟢      |
 | Multigraphs | 2%    | RFE       | 12 | 0.0       | Radial growth | 0/0   | 1        | 0.0012  | 0.0      | 🟢      |
 | Multigraphs | 2%    | STRidge   | 12 | 1.0       | Axial decay   | 0/0   | 1        | 0.0003  | 0.1      | 🟢      |
 | Multigraphs | 2%    | STRidge   | 12 | 1.0       | Radial decay  | 0/0   | 1        | 0.0011  | 0.1      | 🟢      |
 | Multigraphs | 2%    | STRidge   | 12 | 1.0       | Axial growth  | 0/0   | 1        | 0.0002  | 0.1      | 🟢      |
 | Multigraphs | 2%    | STRidge   | 12 | 0.1       | Radial growth | 0/0   | 1        | 0.0003  | 0.1      | 🟢      |
-| Multigraphs | 5%    | RFE       | 12 | 0.0       | Axial decay   | 2/4   | 2        | 0.2640  | 0.0      | 🔴      |
-| Multigraphs | 5%    | RFE       | 12 | 0.0       | Radial decay  | 2/4   | 2        | 0.4418  | 0.0      | 🔴      |
+| Multigraphs | 5%    | RFE       | 12 | 0.0       | Axial decay   | 2/4   | 2        | 0.2635  | 0.0      | 🔴      |
+| Multigraphs | 5%    | RFE       | 12 | 0.0       | Radial decay  | 2/4   | 2        | 0.4416  | 0.0      | 🔴      |
 | Multigraphs | 5%    | RFE       | 12 | 0.0       | Axial growth  | 0/0   | 1        | 0.0022  | 0.0      | 🟢      |
 | Multigraphs | 5%    | RFE       | 12 | 0.0       | Radial growth | 0/0   | 1        | 0.0020  | 0.0      | 🟢      |
 | Multigraphs | 5%    | STRidge   | 12 | 10.0      | Axial decay   | 0/0   | 1        | 0.0026  | 0.1      | 🟢      |
 | Multigraphs | 5%    | STRidge   | 8  | 0.1       | Radial decay  | 0/0   | 1        | 0.0013  | 0.2      | 🟢      |
 | Multigraphs | 5%    | STRidge   | 12 | 1.0       | Axial growth  | 0/0   | 1        | 0.0006  | 0.1      | 🟢      |
-| Multigraphs | 5%    | STRidge   | 12 | 0.1       | Radial growth | 0/0   | 1        | 0.0004  | 0.1      | 🟢      |
+| Multigraphs | 5%    | STRidge   | 12 | 0.1       | Radial growth | 0/0   | 1        | 0.0004  | 0.2      | 🟢      |
 
 ### weak (IBP) — Spectral derivatives
 
 | Library     | Noise | Algorithm | m  | d_tol/lam | Profile       | fp/fn | n_active | E_coeff | Time (s) | Exact? |
 |:------------|:------|:----------|:---|:----------|:--------------|:------|:---------|:--------|:---------|:-------|
-| WSINDy      | 2%    | RFE       | 12 | 0.0       | Axial decay   | 0/0   | 2        | 0.0018  | 0.0      | 🟢      |
+| WSINDy      | 2%    | RFE       | 12 | 0.0       | Axial decay   | 0/0   | 2        | 0.0018  | 0.1      | 🟢      |
 | WSINDy      | 2%    | RFE       | 12 | 0.0       | Radial decay  | 0/0   | 2        | 0.0024  | 0.0      | 🟢      |
 | WSINDy      | 2%    | RFE       | 12 | 0.0       | Axial growth  | 0/0   | 2        | 0.0015  | 0.0      | 🟢      |
 | WSINDy      | 2%    | RFE       | 12 | 0.0       | Radial growth | 0/0   | 2        | 0.0014  | 0.0      | 🟢      |
@@ -380,23 +380,23 @@ Sweep configuration: 4 libraries (Multigraphs, PolyJet, PDE-FIND, WSINDy),
 | WSINDy      | 5%    | STRidge   | 12 | 1.0       | Axial decay   | 0/0   | 2        | 0.0090  | 0.2      | 🟢      |
 | WSINDy      | 5%    | STRidge   | 12 | 1.0       | Radial decay  | 0/0   | 2        | 0.0108  | 0.2      | 🟢      |
 | WSINDy      | 5%    | STRidge   | 12 | 1.0       | Axial growth  | 0/0   | 2        | 0.0037  | 0.2      | 🟢      |
-| WSINDy      | 5%    | STRidge   | 12 | 1.0       | Radial growth | 0/0   | 2        | 0.0041  | 0.2      | 🟢      |
-| PolyJet     | 2%    | RFE       | 8  | 0.0       | Axial decay   | 0/1   | 3        | 0.2978  | 0.0      | 🔴      |
+| WSINDy      | 5%    | STRidge   | 12 | 1.0       | Radial growth | 0/0   | 2        | 0.0041  | 0.1      | 🟢      |
+| PolyJet     | 2%    | RFE       | 8  | 0.0       | Axial decay   | 0/1   | 3        | 0.2978  | 0.1      | 🔴      |
 | PolyJet     | 2%    | RFE       | 8  | 0.0       | Radial decay  | 0/1   | 3        | 0.2980  | 0.1      | 🔴      |
-| PolyJet     | 2%    | RFE       | 8  | 0.0       | Axial growth  | 0/1   | 3        | 0.2977  | 0.0      | 🔴      |
+| PolyJet     | 2%    | RFE       | 8  | 0.0       | Axial growth  | 0/1   | 3        | 0.2977  | 0.1      | 🔴      |
 | PolyJet     | 2%    | RFE       | 8  | 0.0       | Radial growth | 0/1   | 3        | 0.2977  | 0.1      | 🔴      |
-| PolyJet     | 2%    | STRidge   | 12 | 10.0      | Axial decay   | 0/0   | 4        | 0.0104  | 0.4      | 🟢      |
-| PolyJet     | 2%    | STRidge   | 12 | 10.0      | Radial decay  | 0/0   | 4        | 0.0157  | 0.4      | 🟢      |
-| PolyJet     | 2%    | STRidge   | 8  | 0.1       | Axial growth  | 0/0   | 4        | 0.0057  | 0.6      | 🟢      |
-| PolyJet     | 2%    | STRidge   | 8  | 0.1       | Radial growth | 0/0   | 4        | 0.0056  | 0.7      | 🟢      |
+| PolyJet     | 2%    | STRidge   | 12 | 10.0      | Axial decay   | 0/0   | 4        | 0.0104  | 0.6      | 🟢      |
+| PolyJet     | 2%    | STRidge   | 12 | 10.0      | Radial decay  | 0/0   | 4        | 0.0157  | 0.7      | 🟢      |
+| PolyJet     | 2%    | STRidge   | 8  | 0.1       | Axial growth  | 0/0   | 4        | 0.0057  | 1.1      | 🟢      |
+| PolyJet     | 2%    | STRidge   | 8  | 0.1       | Radial growth | 0/0   | 4        | 0.0056  | 1.0      | 🟢      |
 | PolyJet     | 5%    | RFE       | 8  | 0.0       | Axial decay   | 2/3   | 3        | 0.6545  | 0.1      | 🔴      |
-| PolyJet     | 5%    | RFE       | 8  | 0.0       | Radial decay  | 4/3   | 5        | 0.6400  | 0.0      | 🔴      |
+| PolyJet     | 5%    | RFE       | 8  | 0.0       | Radial decay  | 4/3   | 5        | 0.6400  | 0.1      | 🔴      |
 | PolyJet     | 5%    | RFE       | 8  | 0.0       | Axial growth  | 0/1   | 3        | 0.2981  | 0.1      | 🔴      |
 | PolyJet     | 5%    | RFE       | 8  | 0.0       | Radial growth | 0/1   | 3        | 0.2983  | 0.1      | 🔴      |
-| PolyJet     | 5%    | STRidge   | 12 | 0.1       | Axial decay   | 1/0   | 5        | 0.0298  | 0.6      | 🔴      |
-| PolyJet     | 5%    | STRidge   | 12 | 1.0       | Radial decay  | 1/0   | 5        | 0.0455  | 0.4      | 🔴      |
-| PolyJet     | 5%    | STRidge   | 8  | 0.1       | Axial growth  | 1/0   | 5        | 0.0156  | 0.6      | 🔴      |
-| PolyJet     | 5%    | STRidge   | 8  | 0.1       | Radial growth | 0/0   | 4        | 0.0128  | 0.6      | 🟢      |
+| PolyJet     | 5%    | STRidge   | 12 | 0.1       | Axial decay   | 1/0   | 5        | 0.0298  | 0.7      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 12 | 1.0       | Radial decay  | 1/0   | 5        | 0.0455  | 0.5      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 8  | 0.1       | Axial growth  | 1/0   | 5        | 0.0156  | 0.7      | 🔴      |
+| PolyJet     | 5%    | STRidge   | 8  | 0.1       | Radial growth | 0/0   | 4        | 0.0128  | 0.7      | 🟢      |
 | Multigraphs | 2%    | RFE       | 12 | 0.0       | Axial decay   | 0/0   | 1        | 0.0017  | 0.0      | 🟢      |
 | Multigraphs | 2%    | RFE       | 12 | 0.0       | Radial decay  | 0/0   | 1        | 0.0022  | 0.0      | 🟢      |
 | Multigraphs | 2%    | RFE       | 12 | 0.0       | Axial growth  | 0/0   | 1        | 0.0014  | 0.0      | 🟢      |
@@ -407,15 +407,14 @@ Sweep configuration: 4 libraries (Multigraphs, PolyJet, PDE-FIND, WSINDy),
 | Multigraphs | 2%    | STRidge   | 12 | 0.1       | Radial growth | 0/0   | 1        | 0.0003  | 0.1      | 🟢      |
 | Multigraphs | 5%    | RFE       | 8  | 0.0       | Axial decay   | 0/0   | 1        | 0.0024  | 0.0      | 🟢      |
 | Multigraphs | 5%    | RFE       | 12 | 0.0       | Radial decay  | 6/0   | 4        | 0.0359  | 0.0      | 🔴      |
-| Multigraphs | 5%    | RFE       | 12 | 0.0       | Axial growth  | 0/0   | 1        | 0.0022  | 0.0      | 🟢      |
+| Multigraphs | 5%    | RFE       | 12 | 0.0       | Axial growth  | 0/0   | 1        | 0.0022  | 0.1      | 🟢      |
 | Multigraphs | 5%    | RFE       | 12 | 0.0       | Radial growth | 0/0   | 1        | 0.0020  | 0.0      | 🟢      |
 | Multigraphs | 5%    | STRidge   | 8  | 1.0       | Axial decay   | 0/0   | 1        | 0.0021  | 0.1      | 🟢      |
 | Multigraphs | 5%    | STRidge   | 8  | 1.0       | Radial decay  | 0/0   | 1        | 0.0013  | 0.1      | 🟢      |
-| Multigraphs | 5%    | STRidge   | 12 | 1.0       | Axial growth  | 0/0   | 1        | 0.0006  | 0.1      | 🟢      |
+| Multigraphs | 5%    | STRidge   | 12 | 0.1       | Axial growth  | 0/0   | 1        | 0.0006  | 0.1      | 🟢      |
 | Multigraphs | 5%    | STRidge   | 12 | 0.1       | Radial growth | 0/0   | 1        | 0.0004  | 0.1      | 🟢      |
 
 
 ---
-*Source: `sweep_aniso_20260803_194535_full_local.csv`*
+*Source: `sweep_aniso_default_pme_20260805_215410.csv`*
 
-*Run: 775.9 min (Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz), OMP_NUM_THREADS=1*

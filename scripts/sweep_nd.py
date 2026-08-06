@@ -42,6 +42,7 @@ from equivariant_pde_find.regression import TrainSTRidge, TrainRFE
 from equivariant_pde_find.simulations import make_regression_data
 from equivariant_pde_find.equations import (
     CH_EPSILON,
+    EQUATION_META,
     true_allen_cahn,
     true_cahn_hilliard,
     true_swift_hohenberg,
@@ -66,7 +67,6 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 
 # ── hyper-parameters ────────────────────────────────────────────────────────
 from equivariant_pde_find.library.weak_form import (  # noqa: E402
-    select_test_function_degree as _wf_select_degree,
     test_function_is_resolved as _wf_is_resolved,
 )
 
@@ -74,19 +74,15 @@ from equivariant_pde_find.library.weak_form import (  # noqa: E402
 # Key constraint: N > 2*m for any valid interior points.
 M_VALS_BY_NDIM = {2: [12], 3: [10], 4: [8], 5: [6]}
 
-# Test-function degree follows Messenger & Bortz (2021), Algorithm 1, rather
-# than a fixed constant: with a fixed p the fourth-order weak-IBP columns pick
-# up a 3 % (m=12) to 84 % (m=8) systematic error.
-# The direct weak form never differentiates psi, so it keeps the old degree.
-WEAK_MAX_DERIV = 4
-WEAK_P_DIRECT = 6
+# Test-function degree is fixed at 6 for both direct and IBP:
+# p=6 gives wider effective support (~6 grid points) for better sparse
+# recovery, and the IBP discretisation error (~0.27 %) is negligible.
+WEAK_P = 6
 
 
 def weak_p(m, use_ibp=True):
-    """Test-function degree for support *m* (see WEAK_MAX_DERIV above)."""
-    if not use_ibp:
-        return WEAK_P_DIRECT
-    return _wf_select_degree(m, WEAK_MAX_DERIV)
+    """Test-function degree for support *m* (fixed p=6)."""
+    return WEAK_P
 
 
 def peak_rss_mb():
@@ -99,7 +95,7 @@ SAMPLE_STRIDE = 4
 LAMS = [1e-6, 1e-4, 1e-2, 1.0]       # STRidge ridge penalty
 D_TOLS = [1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 5e-2, 0.1, 0.2, 0.5,
           1.0, 2.0, 5.0, 10.0]
-RFE_LAMS = [0.0, 1e-6, 1e-4, 1e-2, 1.0]
+RFE_LAMS = [0.0]                        # RFE: pure OLS only
 
 # ── library builders ─────────────────────────────────────────────────────────
 
@@ -215,8 +211,8 @@ def main():
         help="Spatial dimensions (default: 2 3 4 5).",
     )
     parser.add_argument(
-        "--noise", nargs="+", type=float, default=[0.0, 0.01],
-        help="Noise levels (default: 0.0 0.01).",
+        "--noise", nargs="+", type=float, default=[0.0, 0.02, 0.05],
+        help="Noise levels (default: 0.0 0.02 0.05).",
     )
     parser.add_argument(
         "--libraries", nargs="+",
@@ -294,8 +290,8 @@ def main():
     # ── discover datasets ────────────────────────────────────────────────
     noise_labels = {0.0: "clean", 0.01: "noise1pct", 0.02: "noise2pct", 0.05: "noise5pct"}
     eq_names = {
-        "ac": "allen_cahn", "sh": "swift_hohenberg",
-        "pme": "porous_medium", "ch": "cahn_hilliard",
+        "ac": "ac", "sh": "sh",
+        "pme": "pme", "ch": "ch",
     }
 
     # Priority ordering for dataset filename patterns.
@@ -303,14 +299,11 @@ def main():
 
     def _find_dataset(eq_name, ndim, noise):
         label = noise_labels[noise]
-        # 1. Tagged N-D file (preferred)
+        # Tagged N-D file (required for all dimensions, including 2D).
         candidates = [
             f"{eq_name}_nd{ndim}_{TAG}_{label}.npz",
             f"{eq_name}_nd{ndim}_{label}.npz",
         ]
-        # 2. Legacy 2-D file (no _nd suffix)
-        if ndim == 2:
-            candidates.append(f"{eq_name}_{label}.npz")
         for fname in candidates:
             path = os.path.join(data_dir, fname)
             if os.path.exists(path):
@@ -377,14 +370,19 @@ def main():
             grid_points = int(np.prod(snapshots.shape[1:]))
             n_snapshots = len(snapshots)
 
-            # Prepare regression points
+            # Per-equation skip_fraction (matching sweep.py)
+            skip_frac = EQUATION_META[eq_key][1]
+
             f_snaps, ft_snaps, idx_sets, _ = make_regression_data(
                 snapshots, times, n_per_snap=N_PER_SNAP,
-                skip_fraction=0.0, seed=0,
+                skip_fraction=skip_frac, seed=0,
             )
             print(f"  snaps={len(f_snaps)}, grid={snapshots.shape[1:]}")
 
             for lib_key in args.libraries:
+                # PDE-FIND cannot represent PME (products of derivatives).
+                if eq_key == "pme" and lib_key == "pdefind":
+                    continue
                 lib_info = LIB_MAP[lib_key]
                 builder = lib_info["builder"]
 

@@ -95,7 +95,7 @@ EQUATIONS = [
 
 ANISOTROPIC_NOISE_LEVELS = [0.02, 0.05]        # clean data is the same regardless
 ANISOTROPIC_NOISE_LABELS = {0.02: "noise2pct", 0.05: "noise5pct"}
-ANISOTROPIC_EQUATIONS = ["ac", "sh", "pme", "ch"]
+ANISOTROPIC_EQUATIONS = ["ac", "sh", "pme", "ch", "ks_cell", "ks_wchaos"]
 
 ANISOTROPIC_PROFILES = [
     dict(profile_type="gaussian_decay", direction="radial", label="radial_decay"),
