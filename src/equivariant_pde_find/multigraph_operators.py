@@ -96,7 +96,7 @@ from .jet_algebra import JetExpr
 # --- p = 0 ---
 
 
-def _op_const(f, Lx, Ly, Lz=None):
+def _op_const(f, Lx, Ly, Lz=None, cache=None):
     """
     p=0, k=0. Empty graph: the constant 1.
 
@@ -105,7 +105,7 @@ def _op_const(f, Lx, Ly, Lz=None):
     return np.ones_like(f)
 
 
-def _op_identity(f, Lx, Ly, Lz=None):
+def _op_identity(f, Lx, Ly, Lz=None, cache=None):
     """
     p=0, k=1. Single isolated vertex: f.
 
@@ -120,12 +120,17 @@ def _op_identity(f, Lx, Ly, Lz=None):
 # -----------------------------------------------------------------------
 
 
-def _evaluate_jet_expr(expr, f, Lx, Ly, Lz):
-    """Numerically evaluate a JetExpr for field f (any ndim)."""
+def _evaluate_jet_expr(expr, f, Lx, Ly, Lz, cache=None):
+    """Numerically evaluate a JetExpr for field f (any ndim).
+
+    If *cache* is provided (a dict), derivative computations are shared
+    across calls.  Otherwise a local cache is created.
+    """
     from . import derivatives
 
     Ls = derivatives.axis_lengths(f, Lx, Ly, Lz)
-    cache = {}
+    if cache is None:
+        cache = {}
 
     def get(multi_index):
         if multi_index not in cache:
@@ -145,10 +150,10 @@ def _evaluate_jet_expr(expr, f, Lx, Ly, Lz):
 
 def _make_symbolic_op(sym_fn):
     """Wrap a symbolic formula ``sym_fn(ndim) -> JetExpr`` as a numeric
-    operator function ``op(f, Lx, Ly, Lz=None) -> ndarray``."""
+    operator function ``op(f, Lx, Ly, Lz=None, cache=None) -> ndarray``."""
 
-    def op(f, Lx, Ly, Lz=None, _sym=sym_fn):
-        return _evaluate_jet_expr(_sym(f.ndim), f, Lx, Ly, Lz)
+    def op(f, Lx, Ly, Lz=None, cache=None, _sym=sym_fn):
+        return _evaluate_jet_expr(_sym(f.ndim), f, Lx, Ly, Lz, cache=cache)
 
     return op
 
@@ -563,7 +568,7 @@ def _require_ndim_2_or_3(func, desc):
     instead of a confusing shape/unpack error from the underlying
     2-D/3-D-hardcoded implementation."""
 
-    def wrapped(f, Lx, Ly, Lz=None, _fn=func, _desc=desc):
+    def wrapped(f, Lx, Ly, Lz=None, cache=None, _fn=func, _desc=desc):
         if f.ndim not in (2, 3):
             raise NotImplementedError(
                 f"multigraph operator {_desc!r} (p=3) is only implemented for "
@@ -610,8 +615,8 @@ def _make_desc(base_desc, p, m):
 def _make_func(base_func, m):
     """Wrap base_func with an f^m polynomial factor (m >= 1)."""
 
-    def wrapped(f, Lx, Ly, Lz=None, _bf=base_func, _m=m):
-        return f**_m * _bf(f, Lx, Ly, Lz)
+    def wrapped(f, Lx, Ly, Lz=None, cache=None, _bf=base_func, _m=m):
+        return f**_m * _bf(f, Lx, Ly, Lz, cache=cache)
 
     return wrapped
 
@@ -682,8 +687,8 @@ def _all_base_operators(max_p, max_n):
                     new_base_func = fn
                     new_base_desc = desc
                 else:
-                    def new_base_func(f, Lx, Ly, Lz=None, _a=_cf, _b=_fn):
-                        return _a(f, Lx, Ly, Lz) * _b(f, Lx, Ly, Lz)
+                    def new_base_func(f, Lx, Ly, Lz=None, cache=None, _a=_cf, _b=_fn):
+                        return _a(f, Lx, Ly, Lz, cache=cache) * _b(f, Lx, Ly, Lz, cache=cache)
 
                     new_base_desc = base_desc + "·" + desc
                 recurse(
@@ -773,8 +778,8 @@ _MOD_MULTIGRAPH_SPEC = [
     (_op_identity,       "f",               0, 1),
     # Pure polynomials: use direct f^m, not _make_func(_op_identity, m)
     # because _make_func multiplies the base result (f) by f^m, giving f^(m+1).
-    (lambda f, Lx, Ly, Lz=None: f**2, "f²",          0, 2),
-    (lambda f, Lx, Ly, Lz=None: f**3, "f³",          0, 3),
+    (lambda f, Lx, Ly, Lz=None, cache=None: f**2, "f²",          0, 2),
+    (lambda f, Lx, Ly, Lz=None, cache=None: f**3, "f³",          0, 3),
     # --- p=1 ---
     (_op_Delta,          "Δf",              1, 1),
     (_op_Delta_f2,       "Δf²",             1, 2),   # ← replacement
@@ -787,15 +792,15 @@ _MOD_MULTIGRAPH_SPEC = [
     (_op_Delta_grad_sq,  "Δ‖∇f‖²",         2, 2),   # ← replacement
     (_op_hess_norm_sq,   "‖∇²f‖²",         2, 2),
     # (Δf)²: use _op_Delta square wrapped - note: original basis calls this "Δf·Δf"
-    (lambda f, Lx, Ly, Lz=None: laplacian(f, Lx, Ly, Lz)**2, "Δf·Δf", 2, 2),
+    (lambda f, Lx, Ly, Lz=None, cache=None: laplacian(f, Lx, Ly, Lz)**2, "Δf·Δf", 2, 2),
     (_op_Delta2_f3,      "Δ²f³",            2, 3),   # ← replacement
     (_op_Delta_f_grad_sq,"Δ(f·‖∇f‖²)",      2, 3),   # ← replacement
     (_make_func(_op_hess_norm_sq, 1), "f·‖∇²f‖²", 2, 3),
     # f·(Δf)²: f * Δf² - original calls this "f·Δf·Δf"
-    (lambda f, Lx, Ly, Lz=None: f * laplacian(f, Lx, Ly, Lz)**2, "f·Δf·Δf", 2, 3),
+    (lambda f, Lx, Ly, Lz=None, cache=None: f * laplacian(f, Lx, Ly, Lz)**2, "f·Δf·Δf", 2, 3),
     (_op_hess_grad_grad, "∇²f(∇f,∇f)",      2, 3),
     # ‖∇f‖²·Δf = ‖∇f‖² * Δf
-    (lambda f, Lx, Ly, Lz=None: (_op_grad_sq(f, Lx, Ly, Lz) * laplacian(f, Lx, Ly, Lz)),
+    (lambda f, Lx, Ly, Lz=None, cache=None: (_op_grad_sq(f, Lx, Ly, Lz) * laplacian(f, Lx, Ly, Lz)),
      "‖∇f‖²·Δf", 2, 3),
 ]
 

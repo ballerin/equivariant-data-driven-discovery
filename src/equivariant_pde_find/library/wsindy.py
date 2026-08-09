@@ -95,13 +95,16 @@ def _build_wsindy_weak(f, Lx, Ly, max_order=4, max_poly=3,
 
     Mirrors ``_build_wsindy_pointwise`` but convolves each column with the
     polynomial-bump test function ψ.  When ``use_ibp=True``, integration by
-    parts is applied to linear terms (q=1), moving the derivative onto the
-    test function:
+    parts moves the derivative onto the test function for *every* monomial
+    power q, so f^q is never differentiated numerically:
 
-        ∫ ψ · ∂^α f  =  (-1)^{|α|} ∫ ∂^α ψ · f
+        ∫ ψ · ∂^α(f^q)  =  (-1)^{|α|} ∫ ∂^α ψ · f^q
 
-    For nonlinear terms (q >= 2), the pointwise derivative is computed
-    using the active backend, then convolved with ψ (direct path).
+    This is the formulation of Messenger & Bortz (arXiv:2007.02848), whose
+    Gram matrix (their eq. 3.3) is ⟨(-1)^{|α|} ∂^α ψ, f_j(U)⟩ with the
+    nonlinearity f_j evaluated pointwise on the raw data.  Applying IBP only
+    to q=1 would leave the q >= 2 columns differentiating the data, which
+    the weak form exists to avoid.
 
     Parameters
     ----------
@@ -110,7 +113,7 @@ def _build_wsindy_weak(f, Lx, Ly, max_order=4, max_poly=3,
     max_order : int — highest derivative order (default 4)
     max_poly  : int — highest monomial power q (default 3)
     m, p : int — test function parameters
-    use_ibp : bool — enable IBP for q=1 columns
+    use_ibp : bool — enable IBP for all ∂^α(f^q) columns
 
     Returns
     -------
@@ -136,14 +139,15 @@ def _build_wsindy_weak(f, Lx, Ly, max_order=4, max_poly=3,
     for q in range(1, max_poly + 1):
         f_pow = f**q
 
-        if use_ibp and q == 1:
+        if use_ibp:
             deriv_map = {}
         else:
             deriv_map = compute_derivs_nd(f_pow, Ls, nonzero_indices, method, zero_value="f")
 
         for mi in nonzero_indices:
-            if use_ibp and q == 1:
-                # IBP: move partial^mi entirely onto the test function.
+            if use_ibp:
+                # IBP: move partial^mi entirely onto the test function, so
+                # the derivative acts on psi and f^q is left untouched.
                 kernel_list = []
                 for axis, a in enumerate(mi):
                     if a == 0:
@@ -151,7 +155,7 @@ def _build_wsindy_weak(f, Lx, Ly, max_order=4, max_poly=3,
                     else:
                         dx_a = (Ls[axis] / f.shape[axis]) ** a
                         kernel_list.append(_test_function_deriv_1d(m, p, a) / dx_a)
-                col_weak = weak_convolution(f, kernel_list)
+                col_weak = weak_convolution(f_pow, kernel_list)
             else:
                 col_weak = weak_convolution(deriv_map[mi], [kernel] * ndim)
 

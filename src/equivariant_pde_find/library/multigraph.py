@@ -31,8 +31,9 @@ def _build_multigraph_pointwise(f, Lx, Ly, max_p=2, max_n=3, Lz=None):
     """
     ops = get_operators(max_p, max_n)
     cols, descs = [], []
+    cache = {}  # shared derivative cache across all operators
     for op, name in ops:
-        cols.append(op(f, Lx, Ly, Lz).ravel())
+        cols.append(op(f, Lx, Ly, Lz, cache=cache).ravel())
         descs.append(name)
     return np.column_stack(cols), descs
 
