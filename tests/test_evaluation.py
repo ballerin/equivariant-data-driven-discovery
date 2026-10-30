@@ -590,3 +590,61 @@ class TestSpectralDefaultEvaluation:
             f"Spectral E_coeff ({result_spec['E_coeff']:.6e}) and polynomial "
             f"E_coeff ({result_poly['E_coeff']:.6e}) should differ"
         )
+
+
+# ---------------------------------------------------------------------------
+# FactoredEval — QR stand-in for a large evaluation (Theta, Ft)
+# ---------------------------------------------------------------------------
+
+from equivariant_pde_find.evaluation import FactoredEval                             # noqa: E402
+
+
+def _ill_conditioned_pair(n, K, seed=0):
+    rng = np.random.default_rng(seed)
+    Theta = rng.standard_normal((n, K)) * np.logspace(0, 6, K)
+    Theta[:, K // 2] = 3.0 * Theta[:, 0] + 1e-6 * rng.standard_normal(n)
+    true = np.zeros(K)
+    true[[1, 5, K // 2]] = [1.0, -0.5, 2.0]
+    Ft = Theta @ true
+    Ft = Ft + 0.01 * np.linalg.norm(Ft) / np.sqrt(n) * rng.standard_normal(n)
+    return Theta, Ft, true
+
+
+@pytest.mark.parametrize("n,K,chunk_rows", [(5000, 40, 1 << 18), (5000, 40, 700),
+                                            (30, 40, 8)])
+def test_factored_eval_matches_dense(n, K, chunk_rows):
+    """Same metrics as the dense evaluation, to round-off; structural metrics
+    exactly.  Covers several chunk sizes, including fewer rows than columns."""
+    Theta, Ft, true = _ill_conditioned_pair(n, K)
+    fe = FactoredEval(Theta, Ft, chunk_rows=chunk_rows)
+    assert fe.shape == (n, K)
+    rng = np.random.default_rng(1)
+    candidates = [true.copy(), true + 1e-8 * np.eye(K)[3],
+                  true * (1 + 1e-3 * rng.standard_normal(K)),
+                  rng.standard_normal(K) * (rng.random(K) < 0.2)]
+    for w in candidates:
+        dense = evaluate_from_theta(w, true, Theta, Ft)
+        fact = evaluate_from_theta(w, true, fe, None)
+        assert dense.keys() == fact.keys()
+        for key in ("fp", "fn", "exact_recovery", "n_active", "n_samples",
+                    "max_coeff_err"):
+            assert dense[key] == fact[key], key
+        for key in ("E_coeff", "E_data"):
+            assert fact[key] == pytest.approx(dense[key], rel=1e-9, abs=1e-15), key
+        assert evaluate_standard(w, fe, None)["E_fit"] == pytest.approx(
+            evaluate_standard(w, Theta, Ft)["E_fit"], rel=1e-9)
+
+
+def test_factored_eval_unrepresentable_truth_branch():
+    Theta, Ft, _ = _ill_conditioned_pair(400, 12)
+    w = np.random.default_rng(2).standard_normal(12)
+    zero_truth = np.zeros(12)
+    dense = evaluate_from_theta(w, zero_truth, Theta, Ft)
+    fact = evaluate_from_theta(w, zero_truth, FactoredEval(Theta, Ft), None)
+    assert fact["E_fit"] == pytest.approx(dense["E_fit"], rel=1e-9)
+    assert fact["n_samples"] == dense["n_samples"] == 400
+
+
+def test_factored_eval_rejects_mismatched_lengths():
+    with pytest.raises(ValueError):
+        FactoredEval(np.ones((10, 3)), np.ones(9))

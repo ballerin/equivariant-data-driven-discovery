@@ -27,7 +27,9 @@ SRC_DIR = os.path.join(CODE_DIR, "src")
 sys.path.insert(0, SRC_DIR)
 
 from equivariant_pde_find.equations import normalize_eq_name  # noqa: E402
-from equivariant_pde_find.summary_metadata import EQUATION_META, get_meta  # noqa: E402
+from equivariant_pde_find.summary_metadata import (  # noqa: E402
+    EQUATION_META, get_meta, normalize_sweep_row,
+)
 from equivariant_pde_find.markdown_tables import build_ablation_latex  # noqa: E402
 
 # ── library name normalization (same as build_summary.py) ──────────────
@@ -47,6 +49,7 @@ def build_latex_document(csv_paths, equation=None):
     for csv_path in csv_paths:
         with open(csv_path) as f:
             for row in csv.DictReader(f):
+                normalize_sweep_row(row)
                 row["equation"] = normalize_eq_name(row["equation"])
                 if row.get("library") == "equivariant":
                     row["library"] = "multigraphs"

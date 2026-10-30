@@ -17,6 +17,8 @@ evaluate_from_theta           - compute fp, fn, E_coeff, E_data from a
                                 pre-built (Theta, Ft) pair.
 evaluate_unified              - map any library's coefficients to jet space
                                 and evaluate there.
+FactoredEval                  - opt-in compact stand-in for a large
+                                evaluation (Theta, Ft) pair.
 best_of_sweep                 - lexicographic best-row selector
 
 Usage pattern
@@ -197,6 +199,62 @@ def evaluate_unified(w, library, desc_lib, desc_jet, Theta_jet, Ft,
     return evaluate_from_theta(w_jet, true_jet, Theta_jet, Ft)
 
 
+class FactoredEval:
+    """Compact stand-in for an evaluation pair ``(Theta, Ft)``.
+
+    Every metric computed from the evaluation pair is the norm of a linear
+    combination of its columns: ``||Theta v||`` or ``||Theta w - Ft||``.  With
+    the thin QR factorisation ``[Theta | Ft] = Q R``, ``Q`` has orthonormal
+    columns, so ``||[Theta | Ft] x|| = ||R x||`` for every ``x``.  Keeping only
+    the ``(K+1) x (K+1)`` triangular ``R`` makes each evaluation independent of
+    the number of rows (13M on a 256^2 x 201 grid) and frees the matrix.
+
+    Unlike the normal equations ``Theta^T Theta``, ``R`` does not square the
+    condition number, so the metrics keep their accuracy on the ill-conditioned
+    evaluation libraries.  They agree with the dense computation to round-off
+    (~1e-15 relative on test matrices with cond up to 1e14), not bitwise,
+    which is why this is opt-in
+    (``--eval-mode qr`` in the sweep scripts).  fp, fn, exact recovery and
+    n_active do not involve ``Theta`` and are unchanged.
+
+    ``R`` is built from row chunks (TSQR: ``R <- qr([R; next chunk])``), so peak
+    extra memory is one chunk rather than a second copy of ``Theta``.
+
+    Pass an instance wherever ``evaluate_from_theta``, ``evaluate_unified``,
+    ``evaluate_standard`` or ``evaluate_jet_with_truth`` take ``Theta``; their
+    ``Ft`` argument is then ignored and may be None.
+    """
+
+    def __init__(self, Theta, Ft, chunk_rows=1 << 18):
+        Theta = np.asarray(Theta, dtype=float)
+        Ft = np.asarray(Ft, dtype=float).ravel()
+        n, K = Theta.shape
+        if Ft.shape[0] != n:
+            raise ValueError(f"Ft has length {Ft.shape[0]} but Theta has {n} rows.")
+        R = np.zeros((0, K + 1))
+        for start in range(0, n, chunk_rows):
+            stop = min(start + chunk_rows, n)
+            block = np.empty((R.shape[0] + stop - start, K + 1))
+            block[:R.shape[0]] = R
+            block[R.shape[0]:, :K] = Theta[start:stop]
+            block[R.shape[0]:, K] = Ft[start:stop]
+            R = np.linalg.qr(block, mode="r")
+        self.R = R
+        self.shape = (n, K)
+
+    def theta_norm(self, v):
+        """``||Theta v||``."""
+        return float(np.linalg.norm(self.R[:, :-1] @ v))
+
+    def residual_norm(self, w):
+        """``||Theta w - Ft||``."""
+        return float(np.linalg.norm(self.R[:, :-1] @ w - self.R[:, -1]))
+
+    def ft_norm(self):
+        """``||Ft||``."""
+        return float(np.linalg.norm(self.R[:, -1]))
+
+
 def evaluate_from_theta(w, true_eq, Theta, Ft):
     """Compute recovery metrics from pre-built (Theta, Ft).
 
@@ -204,8 +262,9 @@ def evaluate_from_theta(w, true_eq, Theta, Ft):
     ----------
     w       : ndarray (K,) - recovered coefficient vector
     true_eq : ndarray (K,) - ground-truth coefficients
-    Theta   : ndarray (n, K) - pointwise equivariant library
-    Ft      : ndarray (n,)   - time derivative
+    Theta   : ndarray (n, K) - pointwise equivariant library, or a
+              ``FactoredEval`` of (Theta, Ft)
+    Ft      : ndarray (n,)   - time derivative (ignored for a ``FactoredEval``)
 
     Returns
     -------
@@ -222,10 +281,13 @@ def evaluate_from_theta(w, true_eq, Theta, Ft):
     # representable in this library.  fp/fn/E are ill-defined; fall
     # back to E_fit and report NaN for the structural metrics.
     if not active_mask.any():
-        pred = Theta @ w
-        E_fit = float(
-            np.linalg.norm(pred - Ft) / (np.linalg.norm(Ft) + 1e-30)
-        )
+        if isinstance(Theta, FactoredEval):
+            E_fit = Theta.residual_norm(w) / (Theta.ft_norm() + 1e-30)
+        else:
+            pred = Theta @ w
+            E_fit = float(
+                np.linalg.norm(pred - Ft) / (np.linalg.norm(Ft) + 1e-30)
+            )
         return dict(
             fp=float("nan"), fn=float("nan"), exact_recovery=0,
             n_active=n_active, E=float("nan"),
@@ -246,16 +308,21 @@ def evaluate_from_theta(w, true_eq, Theta, Ft):
 
     # Coefficient error E_coeff = ||Theta·(w - true)|| / ||Theta·true||
     delta = w - true_eq
-    pred_true = Theta @ true_eq
-    pred_delta = Theta @ delta
-    denom = np.linalg.norm(pred_true) + 1e-30
-    E_coeff = float(np.linalg.norm(pred_delta) / denom)
+    if isinstance(Theta, FactoredEval):
+        E_coeff = Theta.theta_norm(delta) / (Theta.theta_norm(true_eq) + 1e-30)
+        # Data-fit error E_data = ||Theta·w - Ft|| / ||Ft||
+        E_data = Theta.residual_norm(w) / (Theta.ft_norm() + 1e-30)
+    else:
+        pred_true = Theta @ true_eq
+        pred_delta = Theta @ delta
+        denom = np.linalg.norm(pred_true) + 1e-30
+        E_coeff = float(np.linalg.norm(pred_delta) / denom)
 
-    # Data-fit error E_data = ||Theta·w - Ft|| / ||Ft||
-    pred_w = Theta @ w
-    E_data = float(
-        np.linalg.norm(pred_w - Ft) / (np.linalg.norm(Ft) + 1e-30)
-    )
+        # Data-fit error E_data = ||Theta·w - Ft|| / ||Ft||
+        pred_w = Theta @ w
+        E_data = float(
+            np.linalg.norm(pred_w - Ft) / (np.linalg.norm(Ft) + 1e-30)
+        )
 
     return dict(
         fp=fp,
@@ -286,8 +353,10 @@ def evaluate_standard(w, Theta, Ft):
     Parameters
     ----------
     w     : ndarray (K_std,) - recovered coefficient vector
-    Theta : ndarray (n, K_std) - standard-library design matrix
-    Ft    : ndarray (n,) - time-derivative vector
+    Theta : ndarray (n, K_std) - standard-library design matrix, or a
+            ``FactoredEval`` of (Theta, Ft)
+    Ft    : ndarray (n,) - time-derivative vector (ignored for a
+            ``FactoredEval``)
 
     Returns
     -------
@@ -295,9 +364,12 @@ def evaluate_standard(w, Theta, Ft):
         n_active, E_fit, n_samples
     """
     n_active = int(np.sum(np.abs(w) > 1e-10))
-    pred = Theta @ w
-    denom = np.linalg.norm(Ft) + 1e-30
-    E_fit = float(np.linalg.norm(pred - Ft) / denom)
+    if isinstance(Theta, FactoredEval):
+        E_fit = Theta.residual_norm(w) / (Theta.ft_norm() + 1e-30)
+    else:
+        pred = Theta @ w
+        denom = np.linalg.norm(Ft) + 1e-30
+        E_fit = float(np.linalg.norm(pred - Ft) / denom)
     return dict(
         n_active=n_active,
         E_fit=E_fit,

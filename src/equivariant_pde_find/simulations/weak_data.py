@@ -33,7 +33,7 @@ def make_weak_regression_data(
     m=8,
     p=4,
     sample_stride=1,
-    use_ibp=False,
+    space_ibp=False,
     rescale=False,
 ):
     """Build weak-form regression matrices from a stack of snapshots.
@@ -55,8 +55,8 @@ def make_weak_regression_data(
     sample_stride : int
         If > 1, subsample the weak grid uniformly with given stride.
         idx_sets is ignored when sample_stride > 1.
-    use_ibp : bool
-        Forwarded to ``multigraph._build_multigraph_weak``.
+    space_ibp : bool
+        Forwarded to ``multigraph._build_multigraph_space_weak``.
     rescale : bool
         If True, compute scale-invariance factors and apply column/LHS
         rescaling.  The returned ``Theta_all`` and ``f_t_all`` are scaled
@@ -72,7 +72,7 @@ def make_weak_regression_data(
         ``{"col_scale": ..., "lhs_scale": ..., ...}`` if
         ``rescale=True``, else ``None``.
     """
-    from ..library.multigraph import _build_multigraph_weak
+    from ..library.multigraph import _build_multigraph_space_weak
 
     kernel = _cached_kernel_1d(m, p)
 
@@ -81,8 +81,8 @@ def make_weak_regression_data(
 
     for snap_idx in range(len(f_snaps)):
         f = f_snaps[snap_idx]
-        Theta_w, descs = _build_multigraph_weak(
-            f, Lx, Ly, max_p, max_n, m=m, p=p, use_ibp=use_ibp,
+        Theta_w, descs = _build_multigraph_space_weak(
+            f, Lx, Ly, max_p, max_n, m=m, p=p, space_ibp=space_ibp,
         )
         if descriptions is None:
             descriptions = descs
@@ -201,7 +201,7 @@ def weak_form_from_snapshots(
     skip_fraction=0.0,
     sample_stride=1,
     seed=0,
-    use_ibp=False,
+    space_ibp=False,
     rescale=False,
     auto_params=False,
 ):
@@ -223,8 +223,8 @@ def weak_form_from_snapshots(
     skip_fraction : float
     sample_stride : int
     seed : int
-    use_ibp : bool
-        Forwarded to ``multigraph._build_multigraph_weak``.
+    space_ibp : bool
+        Forwarded to ``multigraph._build_multigraph_space_weak``.
     rescale : bool
         If True, apply scale-invariance rescaling to G and b.
     auto_params : bool
@@ -260,6 +260,6 @@ def weak_form_from_snapshots(
         m=m,
         p=p,
         sample_stride=sample_stride,
-        use_ibp=use_ibp,
+        space_ibp=space_ibp,
         rescale=rescale,
     )

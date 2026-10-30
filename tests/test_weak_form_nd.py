@@ -279,7 +279,7 @@ class TestComputeMScale:
         ft = 0.3 * rng.standard_normal((N,) * ndim)
 
         G, desc = build_multigraph_library(
-            f, L, L, formulation="weak", m=m, p=p, use_ibp=True,
+            f, L, L, formulation="space_weak", m=m, p=p, space_ibp=True,
         )
         b = wf.build_weak_rhs(ft, m=m, p=p)
         M = wf.compute_m_scale(G, b)

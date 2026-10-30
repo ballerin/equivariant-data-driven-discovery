@@ -1,7 +1,7 @@
 """
 Focused sweep: compare original vs modified multigraph libraries.
 
-Uses ONLY weak-form methods (weak_direct and weak_ibp), runs STRidge for
+Uses ONLY weak-form methods (space_weak_direct and space_weak_ibp), runs STRidge for
 both libraries on all benchmark equations, and writes a CSV for later
 summary generation.
 
@@ -35,7 +35,7 @@ sys.path.insert(0, CODE_DIR)
 
 from equivariant_pde_find import derivatives  # noqa: E402
 from equivariant_pde_find.evaluation import (  # noqa: E402
-    build_eval_theta_jet, evaluate_unified,
+    build_eval_theta_jet, evaluate_unified, FactoredEval,
 )
 from equivariant_pde_find.library.conversions import (  # noqa: E402
     map_multigraph_to_jet, map_mod_multigraph_to_jet,
@@ -52,7 +52,7 @@ from equivariant_pde_find.library import (  # noqa: E402
     build_multigraph_library,
     build_mod_multigraph_library,
 )
-from equivariant_pde_find.regression import TrainSTRidge  # noqa: E402
+from equivariant_pde_find.regression import TrainSTRidge, SolverCache  # noqa: E402
 from equivariant_pde_find.simulations import make_regression_data  # noqa: E402
 from equivariant_pde_find.library.weak_form import build_weak_rhs  # noqa: E402
 
@@ -69,27 +69,27 @@ from equivariant_pde_find.library.weak_form import (  # noqa: E402
     test_function_is_resolved as _wf_is_resolved,
 )
 
-WEAK_M = [4, 8, 12]
+SPACE_M_GRID = [4, 8, 12]
 # Test-function degree follows Messenger & Bortz (2021), Algorithm 1, rather
 # than a fixed constant: with a fixed p the fourth-order weak-IBP columns pick
 # up a 3 % (m=12) to 84 % (m=8) systematic error.
 # The direct weak form never differentiates psi, so it keeps the old degree.
-WEAK_MAX_DERIV = 4
-WEAK_P_DIRECT = 6
+SPACE_MAX_DERIV = 4
+SPACE_P_DIRECT = 6
 
 
-def weak_p(m, use_ibp=True):
-    """Test-function degree for support *m* (see WEAK_MAX_DERIV above)."""
-    if not use_ibp:
-        return WEAK_P_DIRECT
-    return _wf_select_degree(m, WEAK_MAX_DERIV)
+def space_p(m, space_ibp=True):
+    """Test-function degree for support *m* (see SPACE_MAX_DERIV above)."""
+    if not space_ibp:
+        return SPACE_P_DIRECT
+    return _wf_select_degree(m, SPACE_MAX_DERIV)
 
 
-def weak_ibp_supports(m_values):
-    """Subset of *m_values* whose grid can represent psi^(WEAK_MAX_DERIV)."""
+def space_ibp_supports(m_values):
+    """Subset of *m_values* whose grid can represent psi^(SPACE_MAX_DERIV)."""
     return [m for m in m_values
-            if _wf_is_resolved(m, weak_p(m), WEAK_MAX_DERIV)]
-SAMPLE_STRIDE = 4
+            if _wf_is_resolved(m, space_p(m), SPACE_MAX_DERIV)]
+SPACE_STRIDE = 4
 
 # ── truth functions per library and equation ─────────────────────────────────
 TRUTH_FNS = {
@@ -135,8 +135,8 @@ def load_dataset(npz_path):
     return snapshots, times, Lx, Ly, N, obs_noise, eq_name
 
 
-def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
-                    m, use_ibp):
+def build_space_weak(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
+                    m, space_ibp):
     with derivatives.use_backend(backend):
         rows_G, rows_b = [], []
         for s in range(len(f_snaps)):
@@ -145,19 +145,19 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
             if library == "multigraph":
                 G, desc = build_multigraph_library(
                     f, Lx, Ly, max_p=2, max_n=3,
-                    formulation="weak", m=m, p=weak_p(m, use_ibp), use_ibp=use_ibp,
+                    formulation="space_weak", m=m, p=space_p(m, space_ibp), space_ibp=space_ibp,
                 )
             else:  # mod_multigraph
                 G, desc = build_mod_multigraph_library(
                     f, Lx, Ly, max_p=2, max_n=3,
-                    formulation="weak", m=m, p=weak_p(m, use_ibp), use_ibp=use_ibp,
+                    formulation="space_weak", m=m, p=space_p(m, space_ibp), space_ibp=space_ibp,
                 )
-            b_w = build_weak_rhs(ft, m=m, p=weak_p(m, use_ibp))
+            b_w = build_weak_rhs(ft, m=m, p=space_p(m, space_ibp))
 
             Nx, Ny = f.shape
             Nv_x, Nv_y = Nx - 2 * m, Ny - 2 * m
-            ix = np.arange(0, Nv_x, SAMPLE_STRIDE)
-            iy = np.arange(0, Nv_y, SAMPLE_STRIDE)
+            ix = np.arange(0, Nv_x, SPACE_STRIDE)
+            iy = np.arange(0, Nv_y, SPACE_STRIDE)
             IX, IY = np.meshgrid(ix, iy, indexing="ij")
             flat_idx = (IX * Nv_y + IY).ravel()
 
@@ -198,7 +198,17 @@ def main():
     parser.add_argument("--equations", nargs="+", default=None)
     parser.add_argument("--noise", nargs="+", type=float, default=None)
     parser.add_argument("--backends", nargs="+", default=BACKENDS, choices=BACKENDS)
-    parser.add_argument("--weak-m", nargs="+", type=int, default=WEAK_M)
+    parser.add_argument("--space-m", "--weak-m", dest="space_m", nargs="+",
+                        type=int, default=SPACE_M_GRID,
+                        help="Spatial test-function half-supports (--weak-m is "
+                             "the old name).")
+    parser.add_argument(
+        "--eval-mode", choices=["dense", "qr"], default="dense",
+        help="dense: score every row against the full clean evaluation "
+             "matrix (legacy).  qr: replace it by the R factor of its QR "
+             "decomposition (evaluation.FactoredEval); E_coeff agrees to "
+             "round-off, fp/fn/exact_recovery are unchanged.",
+    )
     parser.add_argument("--name", default="", help="Tag appended to output filename.")
     args = parser.parse_args()
 
@@ -222,7 +232,7 @@ def main():
         return
 
     libraries = ["multigraph", "mod_multigraph"]
-    weak_m_vals = args.weak_m
+    space_m_vals = args.space_m
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     tag = f"_{args.name}" if args.name else ""
@@ -231,7 +241,7 @@ def main():
 
     fieldnames = [
         "equation", "noise", "method", "library", "backend",
-        "weak_m", "lam", "d_tol",
+        "space_m", "lam", "d_tol",
         "n_active", "fp", "fn", "exact_recovery", "E", "cond_theta",
         "time_ms",
     ]
@@ -323,6 +333,8 @@ def main():
                     skip_fraction=skip_frac, seed=0, backend="spectral",
                     jet_monomials=desc_jet,
                 )
+                if args.eval_mode == "qr":
+                    Theta_eval, Ft_eval = FactoredEval(Theta_eval, Ft_eval), None
 
                 # Build ground truth in jet basis for each library
                 true_jet = {}
@@ -331,11 +343,11 @@ def main():
                     if lib == "multigraph":
                         _, desc_lib = build_multigraph_library(
                             f_snaps[0], Lx, Ly, max_p=2, max_n=3,
-                            formulation="weak", m=4, p=weak_p(4, False), use_ibp=False)
+                            formulation="space_weak", m=4, p=space_p(4, False), space_ibp=False)
                     else:
                         _, desc_lib = build_mod_multigraph_library(
                             f_snaps[0], Lx, Ly, max_p=2, max_n=3,
-                            formulation="weak", m=4, p=weak_p(4, False), use_ibp=False)
+                            formulation="space_weak", m=4, p=space_p(4, False), space_ibp=False)
                     if is_ch:
                         true_w = TRUTH_FNS[lib][true_fn_key](desc_lib, eps=ch_eps)
                     elif true_fn_key == "swift_hohenberg":
@@ -351,27 +363,27 @@ def main():
 
                 # Pre-build all (library, backend, m, ibp) matrices
                 prebuilt = {}
-                for lib, backend, m_val, use_ibp in itertools.product(
-                    libraries, args.backends, weak_m_vals, [False, True],
+                for lib, backend, m_val, space_ibp in itertools.product(
+                    libraries, args.backends, space_m_vals, [False, True],
                 ):
-                    # A support too small to represent psi^(WEAK_MAX_DERIV)
+                    # A support too small to represent psi^(SPACE_MAX_DERIV)
                     # cannot carry the IBP formulation at any degree; the
                     # direct weak form never differentiates psi and is fine.
-                    if use_ibp and m_val not in weak_ibp_supports([m_val]):
+                    if space_ibp and m_val not in space_ibp_supports([m_val]):
                         print(f"    Skipping: lib={{lib}} m={{m_val}} ibp=True "
                               f"(2m+1 points cannot resolve a degree-"
-                              f"{{weak_p(m_val)}} test function; ", flush=True)
+                              f"{{space_p(m_val)}} test function; ", flush=True)
                         continue
 
-                    method_key = "weak_ibp" if use_ibp else "weak_direct"
+                    method_key = "space_weak_ibp" if space_ibp else "space_weak_direct"
                     actual_key = (method_key, lib, backend, m_val)
 
                     t0 = time.time()
                     print(f"    Building: lib={lib} backend={backend} m={m_val}"
-                          f" ibp={use_ibp}", flush=True)
-                    Theta, Ft, desc = build_weak_form(
+                          f" ibp={space_ibp}", flush=True)
+                    Theta, Ft, desc = build_space_weak(
                         f_snaps, ft_snaps, idx_sets, Lx, Ly,
-                        lib, backend, m_val, use_ibp,
+                        lib, backend, m_val, space_ibp,
                     )
                     cond_val = cond_number(Theta)
                     prebuilt[actual_key] = (Theta, Ft, desc, cond_val)
@@ -381,9 +393,13 @@ def main():
                 # Sweep STRidge over all d_tol values
                 for (method_key, lib, backend, m_val), \
                     (Theta, Ft, desc, cond_val) in prebuilt.items():
+                    # Data-only STRidge work, shared across d_tol (results
+                    # are unchanged).
+                    solver_cache = SolverCache()
                     for d_tol in tqdm(D_TOLS, desc=f"  {lib} m={m_val} {method_key}", leave=False):
                         t_row = time.time()
-                        w = TrainSTRidge(Theta, Ft, 1e-6, d_tol, maxit=25, seed=0)
+                        w = TrainSTRidge(Theta, Ft, 1e-6, d_tol, maxit=25, seed=0,
+                                         cache=solver_cache)
                         eval_result = evaluate_unified(
                             w, lib, desc, desc_jet,
                             Theta_eval, Ft_eval, true_jet["multigraph"],
@@ -403,7 +419,7 @@ def main():
                             method=method_key,
                             library=lib,
                             backend=backend,
-                            weak_m=m_val,
+                            space_m=m_val,
                             lam=1e-6,
                             d_tol=d_tol,
                             n_active=eval_result.get("n_active", 0),

@@ -20,7 +20,7 @@ mkdir -p "$RESULTS_DIR"
 
 SUMMARY_FILE="$RESULTS_DIR/summary.txt"
 echo "Thread benchmark — $(date)" > "$SUMMARY_FILE"
-echo "Command: sweep.py --equations ac --noise 0.0 --methods pointwise --algorithms stride --backends spectral --libraries multigraph --no-oracle" >> "$SUMMARY_FILE"
+echo "Command: sweep.py --equations ac --noise 0.0 --methods pointwise --algorithms stridge --backends spectral --libraries multigraph --no-oracle" >> "$SUMMARY_FILE"
 echo "" >> "$SUMMARY_FILE"
 printf "%-10s %12s %12s\n" "Threads" "Wall(s)" "Rows/s" >> "$SUMMARY_FILE"
 printf "%-10s %12s %12s\n" "-------" "--------" "------" >> "$SUMMARY_FILE"
@@ -43,7 +43,7 @@ for N in "${THREAD_COUNTS[@]}"; do
         --equations ac \
         --noise 0.0 \
         --methods pointwise \
-        --algorithms stride \\
+        --algorithms stridge \\
         --backends spectral \
         --libraries multigraph \
         --no-oracle \

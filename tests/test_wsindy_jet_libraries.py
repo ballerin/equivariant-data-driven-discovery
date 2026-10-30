@@ -22,10 +22,10 @@ from equivariant_pde_find.library import (                                      
 )
 from equivariant_pde_find.library.polyjet import enumerate_jet_monomials      # noqa: E402
 from equivariant_pde_find.library.wsindy import (                               # noqa: E402
-    _build_wsindy_weak,
+    _build_wsindy_space_weak,
 )
 from equivariant_pde_find.library.polyjet import (                              # noqa: E402
-    _build_polyjet_weak,
+    _build_polyjet_space_weak,
 )
 
 
@@ -376,30 +376,30 @@ class TestJetEnumeration:
 
 
 class TestWeakWSINDyLibrary:
-    """Tests for _build_wsindy_weak."""
+    """Tests for _build_wsindy_space_weak."""
 
     def test_column_count(self):
         f, L = _make_2d_field()
-        Theta, descs = _build_wsindy_weak(f, L, L, max_order=4, max_poly=3, m=4, p=3)
+        Theta, descs = _build_wsindy_space_weak(f, L, L, max_order=4, max_poly=3, m=4, p=3)
         assert Theta.shape[1] == 46
 
     def test_output_shape(self):
         """Valid grid should be (N-2m)²."""
         f, L = _make_2d_field(N=32)
-        Theta, _ = _build_wsindy_weak(f, L, L, max_order=2, max_poly=1, m=4, p=3)
+        Theta, _ = _build_wsindy_space_weak(f, L, L, max_order=2, max_poly=1, m=4, p=3)
         expected_n = (32 - 8) ** 2  # 24² = 576
         assert Theta.shape[0] == expected_n
 
     def test_ibp_flag_accepted(self):
-        """use_ibp=True should not crash."""
+        """space_ibp=True should not crash."""
         f, L = _make_2d_field()
-        Theta, descs = _build_wsindy_weak(f, L, L, max_order=2, max_poly=1,
-                                                      m=4, p=3, use_ibp=True)
+        Theta, descs = _build_wsindy_space_weak(f, L, L, max_order=2, max_poly=1,
+                                                      m=4, p=3, space_ibp=True)
         assert Theta.shape[1] > 0
 
     def test_no_nan_or_inf(self):
         f, L = _make_2d_field()
-        Theta, _ = _build_wsindy_weak(f, L, L, max_order=4, max_poly=3, m=4, p=3)
+        Theta, _ = _build_wsindy_space_weak(f, L, L, max_order=4, max_poly=3, m=4, p=3)
         assert not np.any(np.isnan(Theta))
         assert not np.any(np.isinf(Theta))
 
@@ -410,18 +410,18 @@ class TestWeakWSINDyLibrary:
 
 
 class TestWeakPolynomialJetLibrary:
-    """Tests for _build_polyjet_weak."""
+    """Tests for _build_polyjet_space_weak."""
 
     def test_column_count(self):
         f, L = _make_2d_field()
-        Theta, descs = _build_polyjet_weak(
+        Theta, descs = _build_polyjet_space_weak(
             f, L, L, max_order=4, max_degree=3, m=4, p=3,
         )
         assert Theta.shape[1] == 105
 
     def test_output_shape(self):
         f, L = _make_2d_field(N=32)
-        Theta, _ = _build_polyjet_weak(
+        Theta, _ = _build_polyjet_space_weak(
             f, L, L, max_order=2, max_degree=1, m=4, p=3,
         )
         expected_n = (32 - 8) ** 2
@@ -429,14 +429,14 @@ class TestWeakPolynomialJetLibrary:
 
     def test_ibp_flag_accepted(self):
         f, L = _make_2d_field()
-        Theta, _ = _build_polyjet_weak(
-            f, L, L, max_order=2, max_degree=2, m=4, p=3, use_ibp=True,
+        Theta, _ = _build_polyjet_space_weak(
+            f, L, L, max_order=2, max_degree=2, m=4, p=3, space_ibp=True,
         )
         assert Theta.shape[1] > 0
 
     def test_no_nan_or_inf(self):
         f, L = _make_2d_field()
-        Theta, _ = _build_polyjet_weak(
+        Theta, _ = _build_polyjet_space_weak(
             f, L, L, max_order=2, max_degree=2, m=4, p=3,
         )
         assert not np.any(np.isnan(Theta))

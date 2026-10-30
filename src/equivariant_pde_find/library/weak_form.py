@@ -23,10 +23,81 @@ rewritten as ∂^α(f^β), so we use a **direct** approach:
 Regression is then ran by feeding G and b which replace the pointwise Θ and f_t.
 """
 
+from contextlib import contextmanager
 from functools import lru_cache
 import math
 
 import numpy as np
+
+
+# ---------------------------------------------------------------------------
+# Spatial boundary handling
+#
+# 'valid' (default, Messenger & Bortz): a test function is only centred where
+# its whole support fits inside the grid, so each spatial axis loses 2m
+# points.  'periodic': the support wraps around the domain, so every grid
+# point is a query point.  Exact for the periodic domains simulated here (the
+# integration-by-parts boundary terms cancel on a torus), and the only way to
+# keep query points when the test-function rule asks for m close to N/2.
+# Applies to every spatial weak convolution (all library builders and
+# build_weak_rhs) through weak_convolution; the time axis of a trajectory is
+# never periodic and is not affected.
+#
+# 'periodic' is the setting used for the experiments from 2026-09 on, for every
+# equation.  All simulated domains are periodic; the derivative backends
+# (spectral, and the polynomial backend's periodic stencils) already assume
+# it, so 'valid' would not make the pipeline periodicity-free; KS-cell and
+# KS-wchaos need it (the rule asks m ~ N/2); and it keeps one protocol across
+# equations and grid sizes.  The consequence is that the method as run assumes
+# periodic data, which results must state.  'valid' stays the default so that
+# earlier sweeps reproduce unchanged.
+# ---------------------------------------------------------------------------
+
+WEAK_BOUNDARIES = ("valid", "periodic")
+_weak_boundary = "valid"
+
+
+def get_weak_boundary():
+    """Name of the active spatial boundary mode ('valid' or 'periodic')."""
+    return _weak_boundary
+
+
+def set_weak_boundary(boundary):
+    """Switch the spatial boundary mode globally."""
+    global _weak_boundary
+    if boundary not in WEAK_BOUNDARIES:
+        raise ValueError(f"Unknown weak boundary {boundary!r}; expected one "
+                         f"of {WEAK_BOUNDARIES}.")
+    _weak_boundary = boundary
+
+
+@contextmanager
+def use_weak_boundary(boundary):
+    """Context manager: temporarily switch the spatial boundary mode, then
+    restore the previous one (``None`` leaves it unchanged).
+
+    Example
+    -------
+    with weak_form.use_weak_boundary("periodic"):
+        G, desc = build_multigraph_library(f, Lx, Ly, formulation="space_weak",
+                                           m=24, p=10)   # G.shape[0] == f.size
+    """
+    previous = get_weak_boundary()
+    if boundary is not None:
+        set_weak_boundary(boundary)
+    try:
+        yield
+    finally:
+        set_weak_boundary(previous)
+
+
+def weak_output_shape(shape, m, boundary=None):
+    """Spatial shape of a weak column for half-support *m*: ``N − 2m`` per
+    axis for 'valid', ``N`` for 'periodic' (``boundary=None``: active mode)."""
+    boundary = get_weak_boundary() if boundary is None else boundary
+    if boundary == "periodic":
+        return tuple(shape)
+    return tuple(n - 2 * m for n in shape)
 
 
 # ---------------------------------------------------------------------------
@@ -269,7 +340,9 @@ def weak_convolution(f, *kernels):
 
     Returns
     -------
-    ndarray, shape (N_1 - 2*m_1, ..., N_ndim - 2*m_ndim)
+    ndarray, shape (N_1 - 2*m_1, ..., N_ndim - 2*m_ndim) under the default
+    'valid' boundary; shape (N_1, ..., N_ndim), entry i centred at grid point
+    i, under 'periodic' (see :func:`use_weak_boundary`).
     """
     if len(kernels) == 1 and isinstance(kernels[0], (list, tuple)):
         kernel_list = list(kernels[0])
@@ -281,6 +354,22 @@ def weak_convolution(f, *kernels):
             f"weak_convolution: got {len(kernel_list)} kernels for a "
             f"{f.ndim}-D field; need exactly f.ndim kernels."
         )
+
+    if get_weak_boundary() == "periodic":
+        from scipy.ndimage import convolve1d
+
+        # convolve1d flips the kernel like np.convolve and centres an
+        # odd-length kernel, so entry i equals the 'valid' entry centred at i.
+        result = np.asarray(f, dtype=float)
+        for axis, kernel in enumerate(kernel_list):
+            kernel = np.ravel(kernel)
+            if kernel.size > result.shape[axis]:
+                raise ValueError(
+                    f"weak_convolution: a {kernel.size}-point kernel does not "
+                    f"fit a periodic axis of {result.shape[axis]} points."
+                )
+            result = convolve1d(result, kernel, axis=axis, mode="wrap")
+        return result
 
     result = f
     for axis, kernel in enumerate(kernel_list):
@@ -679,6 +768,151 @@ def _solve_m_from_changepoint(k_star, N, dx, tau=1e-10, tau_hat=2.0):
         f_prev = f_cur
 
     return max(2, m_lo)
+
+
+# ---------------------------------------------------------------------------
+# Messenger & Bortz (2021) test-function rule, per axis, space and time
+#
+# arXiv:2007.02848, eq. (4.3) and Appendix A; reference implementation
+# WSINDy_PDE/findcorners.m.  The functions above (estimate_critical_wavenumber,
+# _solve_m_from_changepoint, auto_test_function_params) predate this section
+# and are kept unchanged for reproducibility of earlier sweeps: they search the
+# full symmetric spectrum, use twice the paper's lower root bracket, and assume
+# a time-last (Nx, Ny, Nt) layout.  The functions below follow the paper and
+# take the axis layout explicitly.
+# ---------------------------------------------------------------------------
+
+
+def mb_critical_wavenumber(U, axis):
+    """Critical wavenumber k* along ``axis`` by the changepoint method.
+
+    Appendix A, step 1: average |F^d(U)| over all other axes, take the
+    cumulative sum H over the negative half-spectrum, and locate the corner of
+    the best two-piece linear approximation to H, measured in relative ℓ²
+    (weights 1/|H|).  Follows ``findcornerpts`` in ``findcorners.m``: each
+    piece is the line through its own range, anchored at the outer end, and
+    the returned wavenumber is the corner's distance from DC minus 3 (the
+    reference implementation's conservative offset), floored at 1.
+
+    The time axis of a trajectory is not periodic, so the FFT along it
+    carries leakage; this is exactly what the reference code does too.
+
+    Parameters
+    ----------
+    U : ndarray - data with the coordinate of interest on ``axis``
+    axis : int
+
+    Returns
+    -------
+    k_star : int (>= 1)
+    """
+    N = U.shape[axis]
+    spec = np.abs(np.fft.fftshift(np.fft.fft(U, axis=axis), axes=axis))
+    other = tuple(i for i in range(U.ndim) if i != axis % U.ndim)
+    spec = spec.mean(axis=other) if other else spec
+    H = np.cumsum(spec)[: int(math.ceil(N / 2))]
+    H = np.maximum(H, np.finfo(float).tiny)
+    NN = H.size
+    x = np.arange(NN, dtype=float)
+    if NN < 3:
+        return 1
+
+    errs = np.empty(NN - 2)
+    for k in range(1, NN - 1):           # 0-based corner index
+        H1, x1 = H[: k + 1], x[: k + 1]
+        H2, x2 = H[k:], x[k:]
+        s1 = np.ptp(H1) / np.ptp(x1)
+        s2 = np.ptp(H2) / np.ptp(x2)
+        L1 = H1.min() + s1 * (x1 - x1[0])
+        L2 = H2.max() + s2 * (x2 - x2[-1])
+        errs[k - 1] = math.sqrt(np.sum(((L1 - H1) / H1) ** 2)
+                                + np.sum(((L2 - H2) / H2) ** 2))
+    t_star = int(np.argmin(errs)) + 1    # 1-based index of the minimiser
+    return max(NN - t_star - 3, 1)
+
+
+def mb_root_m(k_star, N, tau=1e-10, tau_hat=2.0):
+    """Real root m of Appendix A's F(m), capped at N/2 − 1.
+
+        F(m) = log((2m−1)/m²)·(4π²k*²m² − 3N²τ̂²) − 2N²τ̂²·log τ
+
+    F is strictly decreasing for m above m₁ = √3·(N/2)·τ̂/(π k*), where
+    F(m₁) = −2N²τ̂² log τ > 0; the paper's upper bracket
+    m₁·√(1 − (8/√3) log τ) is used, and doubled until F changes sign in the
+    (rare) case it does not.  The root is found by bisection.
+
+    Returns a float; :func:`mb_test_function_params` rounds up after
+    averaging over axes, as ``findcorners.m`` does.
+    """
+    k_star = max(int(k_star), 1)
+
+    def F(m):
+        return (math.log((2.0 * m - 1.0) / m ** 2)
+                * (4.0 * math.pi ** 2 * k_star ** 2 * m ** 2
+                   - 3.0 * N ** 2 * tau_hat ** 2)
+                - 2.0 * N ** 2 * tau_hat ** 2 * math.log(tau))
+
+    lo = max(2.0, math.sqrt(3.0) * (N / 2.0) * tau_hat / (math.pi * k_star))
+    hi = lo * math.sqrt(1.0 - (8.0 / math.sqrt(3.0)) * math.log(tau))
+    while F(hi) > 0.0:
+        lo, hi = hi, 2.0 * hi
+    if F(lo) < 0.0:          # only possible when lo was clamped up to 2
+        return min(lo, N / 2.0 - 1.0)
+    for _ in range(200):
+        mid = 0.5 * (lo + hi)
+        if F(mid) > 0.0:
+            lo = mid
+        else:
+            hi = mid
+        if hi - lo < 1e-9:
+            break
+    return min(0.5 * (lo + hi), N / 2.0 - 1.0)
+
+
+def mb_test_function_params(U, spatial_axes, time_axis=None, alpha_x=4,
+                            alpha_t=1, tau=1e-10, tau_hat=2.0,
+                            tau_hat_t=None):
+    """(m, p) for space and time by the Messenger & Bortz rule.
+
+    For each spatial axis: k* from :func:`mb_critical_wavenumber`, then the
+    root of F; the spatial support is ``ceil(mean)`` over spatial axes, capped
+    at ``floor((min N − 1)/2)`` (Algorithm 4.1's admissibility bound).  The
+    same for time on ``time_axis``.  Degrees follow eq. (4.3):
+
+        p = max(ᾱ + 1, ⌈log τ / log(1 − (1 − 1/m)²)⌉)
+
+    Parameters
+    ----------
+    U : ndarray - the data actually regressed on (noise included)
+    spatial_axes : sequence of int
+    time_axis : int or None - skip the temporal parameters when None
+    alpha_x, alpha_t : int - maximal derivative order moved onto the test
+        function along each spatial axis / along time
+    tau : float - real-space decay tolerance (paper: 1e-10)
+    tau_hat : float - Fourier-tail parameter (paper: 1 to 3)
+    tau_hat_t : float or None - separate τ̂ for time (default: ``tau_hat``)
+
+    Returns
+    -------
+    dict with keys ``m``, ``p``, ``k_x`` (list, per spatial axis) and, when
+    ``time_axis`` is given, ``m_t``, ``p_t``, ``k_t``.
+    """
+    spatial_axes = list(spatial_axes)
+    k_x = [mb_critical_wavenumber(U, a) for a in spatial_axes]
+    roots = [mb_root_m(k, U.shape[a], tau, tau_hat)
+             for k, a in zip(k_x, spatial_axes)]
+    n_min = min(U.shape[a] for a in spatial_axes)
+    m = int(min((n_min - 1) // 2, math.ceil(np.mean(roots))))
+    out = dict(m=m, p=_compute_p_from_m(m, alpha_x, tau), k_x=k_x)
+
+    if time_axis is not None:
+        Nt = U.shape[time_axis]
+        k_t = mb_critical_wavenumber(U, time_axis)
+        root_t = mb_root_m(k_t, Nt, tau,
+                           tau_hat if tau_hat_t is None else tau_hat_t)
+        m_t = int(min((Nt - 1) // 2, math.ceil(root_t)))
+        out.update(m_t=m_t, p_t=_compute_p_from_m(m_t, alpha_t, tau), k_t=k_t)
+    return out
 
 
 # ---------------------------------------------------------------------------

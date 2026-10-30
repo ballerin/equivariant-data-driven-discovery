@@ -160,8 +160,8 @@ def _build_pdefind_pointwise_1d(u, L, max_deriv=3, max_poly=3):
     return np.column_stack(cols), descs
 
 
-def _build_pdefind_weak(f, Lx, Ly, max_order=4, max_poly=3,
-                        m=8, p=4, use_ibp=False, Lz=None):
+def _build_pdefind_space_weak(f, Lx, Ly, max_order=4, max_poly=3,
+                              m=8, p=4, space_ibp=False, Lz=None):
     """Build the weak-form PDE-FIND library matrix, for any ndim.
 
     IBP is applied to pure linear terms (poly degree 0): the full
@@ -185,7 +185,7 @@ def _build_pdefind_weak(f, Lx, Ly, max_order=4, max_poly=3,
             dname = _multi_index_name(mi)
             order = sum(mi)
 
-            if use_ibp and poly_deg == 0 and order > 0:
+            if space_ibp and poly_deg == 0 and order > 0:
                 # IBP: move ∂^mi entirely onto the test function, one axis
                 # at a time (identity axes get plain φ = kernel).
                 kernel_list = []

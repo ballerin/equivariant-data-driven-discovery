@@ -75,8 +75,8 @@ class TestAllenCahn3DIntegration:
             f = f_snaps[s]
             ft = ft_snaps[s]
             G, desc = build_multigraph_library(
-                f, L, L, max_p=2, max_n=3, formulation="weak",
-                m=m, p=p, use_ibp=True, Lz=L,
+                f, L, L, max_p=2, max_n=3, formulation="space_weak",
+                m=m, p=p, space_ibp=True, Lz=L,
             )
             b_w = wf.build_weak_rhs(ft, kernel_x=kernel, kernel_y=kernel, m=m, p=p)
             idx = idx_sets[s] % len(b_w)  # clip to valid interior
@@ -119,8 +119,8 @@ class TestAllenCahn3DIntegration:
             f = f_snaps[s]
             ft = ft_snaps[s]
             G, desc = build_mod_multigraph_library(
-                f, L, L, max_p=2, max_n=3, formulation="weak",
-                m=m, p=p, use_ibp=True, Lz=L,
+                f, L, L, max_p=2, max_n=3, formulation="space_weak",
+                m=m, p=p, space_ibp=True, Lz=L,
             )
             b_w = wf.build_weak_rhs(ft, kernel_x=kernel, kernel_y=kernel, m=m, p=p)
             idx = idx_sets[s] % len(b_w)
@@ -160,8 +160,8 @@ class TestAllenCahn3DIntegration:
             f = f_snaps[s]
             ft = ft_snaps[s]
             G, desc = build_pdefind_library(
-                f, L, L, max_order=4, max_poly=3, formulation="weak",
-                m=m, p=p, use_ibp=True, Lz=L,
+                f, L, L, max_order=4, max_poly=3, formulation="space_weak",
+                m=m, p=p, space_ibp=True, Lz=L,
             )
             b_w = wf.build_weak_rhs(ft, kernel_x=kernel, kernel_y=kernel, m=m, p=p)
             idx = idx_sets[s] % len(b_w)

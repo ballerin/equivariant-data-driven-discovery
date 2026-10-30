@@ -210,12 +210,12 @@ def enumerate_jet_monomials(jet_vars, max_order, max_degree):
     return results
 
 
-def _build_polyjet_weak(f, Lx, Ly, max_order=4, max_degree=3,
-                        m=8, p=4, use_ibp=False, Lz=None):
+def _build_polyjet_space_weak(f, Lx, Ly, max_order=4, max_degree=3,
+                              m=8, p=4, space_ibp=False, Lz=None):
     """Build the weak-form polynomial jet library, for any ndim.
 
     Computes each jet monomial pointwise and convolves with ψ.  When
-    ``use_ibp=True``, IBP is applied to single-derivative terms of the
+    ``space_ibp=True``, IBP is applied to single-derivative terms of the
     form ∂^α f (i.e., degree-1 monomials with order > 0), moving the full
     multi-index derivative onto the test function.
 
@@ -226,7 +226,7 @@ def _build_polyjet_weak(f, Lx, Ly, max_order=4, max_degree=3,
     max_order  : int — maximum total differential order (default 4)
     max_degree : int — maximum total polynomial degree (default 3)
     m, p : int — test function parameters
-    use_ibp : bool — enable IBP for single-derivative columns
+    space_ibp : bool — enable IBP for single-derivative columns
 
     Returns
     -------
@@ -251,7 +251,7 @@ def _build_polyjet_weak(f, Lx, Ly, max_order=4, max_degree=3,
     for exponents, deg, order in monomials:
         non_one_terms = [(k, v) for k, v in exponents.items() if v > 0]
         is_single_deriv = (
-            use_ibp
+            space_ibp
             and len(non_one_terms) == 1
             and sum(non_one_terms[0][0]) > 0
             and non_one_terms[0][1] == 1

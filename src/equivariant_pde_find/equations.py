@@ -451,6 +451,26 @@ EQUATION_META = {
     "ks_chaos":  (true_ks,                0.3,  None),
 }
 
+# Libraries whose span contains each equation's right-hand side, keyed by the
+# canonical short name.  Both multigraph bases and the polynomial jet span every
+# equation here.  PDE-FIND (f^p·∂^α f) cannot write products of derivatives:
+# f·‖∇f‖² (CH, PME) or ‖∇f‖² (KS).  WSINDy (∂^α(f^q)) writes the CH and PME
+# right-hand sides in divergence form, Δ(f³) and Δ(f³)/3, but not ‖∇f‖² (KS).
+# Checked by least squares of the true right-hand side on each pointwise library
+# (clean data/large snapshots): PDE-FIND leaves a relative residual of 0.02-0.6
+# on CH, PME and KS, WSINDy 0.009-0.39 on KS.  WSINDy's pointwise residual on CH
+# is also large, but only because a spectral Δ of the aliased f³ differs from the
+# product rule; in the weak form with IBP no derivative of f³ is taken.
+REPRESENTABLE_LIBRARIES = {
+    "ac":        {"multigraph", "mod_multigraph", "pdefind", "wsindy", "polyjet"},
+    "sh":        {"multigraph", "mod_multigraph", "pdefind", "wsindy", "polyjet"},
+    "ch":        {"multigraph", "mod_multigraph", "wsindy", "polyjet"},
+    "pme":       {"multigraph", "mod_multigraph", "wsindy", "polyjet"},
+    "ks_cell":   {"multigraph", "mod_multigraph", "polyjet"},
+    "ks_wchaos": {"multigraph", "mod_multigraph", "polyjet"},
+    "ks_chaos":  {"multigraph", "mod_multigraph", "polyjet"},
+}
+
 # Mapping from any variant (old long name, new short name) → canonical key.
 _EQ_NAME_ALIASES = {
     "allen_cahn": "ac",

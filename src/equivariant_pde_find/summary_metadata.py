@@ -18,11 +18,56 @@ LIB_NAMES = {
     "wsindy": "WSINDy",
 }
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Method ids and sweep-CSV column names
+#
+# A method id says where the test function lives — nowhere (pointwise), in
+# space, in time, or in both — and, for methods that are weak in space, how
+# spatial derivatives are handled: ``direct`` computes them on the data (the
+# spectral / polynomial backend) and integrates the resulting column, ``ibp``
+# moves them onto the test function.  Whether the *time* derivative is
+# integrated by parts is recorded separately, in the ``time_ibp`` column.
+# ═══════════════════════════════════════════════════════════════════════════
+
 METHOD_MAP = {
     "pointwise": "pointwise",
-    "weak_direct": "weak (no IBP)",
-    "weak_ibp": "weak (IBP)",
+    "space_weak_direct": "space-weak (no IBP)",
+    "space_weak_ibp": "space-weak (IBP)",
+    "time_weak": "time-weak",
+    "spacetime_weak_direct": "space-time weak (no spatial IBP)",
+    "spacetime_weak_ibp": "space-time weak (spatial IBP)",
 }
+
+# Names written before the time-weak extension (2026-09); every CSV in
+# results/ up to then uses them.
+METHOD_ALIASES = {
+    "weak_direct": "space_weak_direct",
+    "weak_ibp": "space_weak_ibp",
+}
+COLUMN_ALIASES = {
+    "weak_m": "space_m",        # sweep.py, sweep_aniso.py, ... (spatial m)
+    "use_ibp": "space_ibp",     # sweep_nd.py ("ibp" / "direct")
+}
+
+
+def canonical_method(name):
+    """Current method id for *name* (old ids are translated)."""
+    return METHOD_ALIASES.get(name, name)
+
+
+def normalize_sweep_row(row):
+    """Translate old method ids and column names of one sweep-CSV row (a
+    dict, modified in place and returned), so readers handle CSVs written
+    before and after the 2026-09 renaming alike.  Method ids are looked up in
+    the ``method`` column and in the collinearity diagnostics' ``formulation``
+    column."""
+    for old, new in COLUMN_ALIASES.items():
+        if old in row and new not in row:
+            row[new] = row.pop(old)
+    for key in ("method", "formulation"):
+        if key in row:
+            row[key] = canonical_method(row[key])
+    return row
 
 # TODO: this can be done programmatically
 NOISE_LABELS = {

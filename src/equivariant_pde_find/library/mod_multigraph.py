@@ -37,8 +37,8 @@ def _build_mod_multigraph_pointwise(f, Lx, Ly, max_p=2, max_n=3, Lz=None):
     return np.column_stack(cols), descs
 
 
-def _build_mod_multigraph_weak(f, Lx, Ly, max_p=2, max_n=3,
-                               m=8, p=4, use_ibp=False, Lz=None):
+def _build_mod_multigraph_space_weak(f, Lx, Ly, max_p=2, max_n=3,
+                                     m=8, p=4, space_ibp=False, Lz=None):
     """Build the weak-form **modified multigraph** library matrix.
 
     Supports any ndim (see _build_mod_multigraph_pointwise).
@@ -49,7 +49,7 @@ def _build_mod_multigraph_weak(f, Lx, Ly, max_p=2, max_n=3,
     Lx, Ly, Lz : float
     max_p, max_n : int
     m, p : int — test function parameters
-    use_ibp : bool
+    space_ibp : bool
     """
     from ..multigraph_operators import get_mod_multigraph_operators
     from .weak_form import (
@@ -61,7 +61,7 @@ def _build_mod_multigraph_weak(f, Lx, Ly, max_p=2, max_n=3,
 
     cols = []
     for func, desc in ops:
-        ibp_info = _is_laplacian_of(desc) if use_ibp else None
+        ibp_info = _is_laplacian_of(desc) if space_ibp else None
         if ibp_info is not None:
             op_type, inner_func = ibp_info
             inner_field = inner_func(f, Lx, Ly, Lz)

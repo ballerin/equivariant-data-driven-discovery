@@ -111,7 +111,7 @@ def test_weak_convolution_linearity(test_field):
 def test_weak_library_shape(test_field):
     f, _, L, N = test_field
     m, p = 6, 4
-    Theta_w, descs = library.build_multigraph_library(f, L, L, max_p=2, max_n=3, m=m, p=p, formulation="weak")
+    Theta_w, descs = library.build_multigraph_library(f, L, L, max_p=2, max_n=3, m=m, p=p, formulation="space_weak")
     Nv = (N - 2 * m) ** 2
     assert Theta_w.shape == (Nv, 20)
     assert len(descs) == 20
@@ -207,10 +207,10 @@ def test_weak_form_reduces_noise_amplification():
     # Weak form on noisy data
     m, p = 6, 4
     Theta_weak_noisy, _ = library.build_multigraph_library(
-        f_noisy, L, L, max_p=2, max_n=3, m=m, p=p, formulation="weak"
+        f_noisy, L, L, max_p=2, max_n=3, m=m, p=p, formulation="space_weak"
     )
     Theta_weak_clean, _ = library.build_multigraph_library(
-        f_clean, L, L, max_p=2, max_n=3, m=m, p=p, formulation="weak"
+        f_clean, L, L, max_p=2, max_n=3, m=m, p=p, formulation="space_weak"
     )
 
     # Compare relative error (noisy vs clean) for the bilaplacian column
@@ -350,12 +350,12 @@ def test_ibp_beats_direct_on_noisy_data():
 
 
 def test_build_weak_multigraph_library_ibp_flag(test_field):
-    """use_ibp=True produces a valid library where Δf/Δ²f differ from direct."""
+    """space_ibp=True produces a valid library where Δf/Δ²f differ from direct."""
     f, _, L, N = test_field
     m, p = 6, 4
 
-    Theta_ibp, descs = library.build_multigraph_library(f, L, L, m=m, p=p, use_ibp=True, formulation="weak")
-    Theta_direct, descs2 = library.build_multigraph_library(f, L, L, m=m, p=p, use_ibp=False, formulation="weak")
+    Theta_ibp, descs = library.build_multigraph_library(f, L, L, m=m, p=p, space_ibp=True, formulation="space_weak")
+    Theta_direct, descs2 = library.build_multigraph_library(f, L, L, m=m, p=p, space_ibp=False, formulation="space_weak")
 
     assert descs == descs2
     assert Theta_ibp.shape == Theta_direct.shape
@@ -381,13 +381,13 @@ def test_build_weak_multigraph_library_ibp_flag(test_field):
 
 
 def test_ibp_flag_off_by_default(test_field):
-    """use_ibp defaults to False — the library must match the direct path."""
+    """space_ibp defaults to False — the library must match the direct path."""
     f, _, L, N = test_field
     m, p = 6, 4
 
-    Theta_default, descs = library.build_multigraph_library(f, L, L, m=m, p=p, formulation="weak")
+    Theta_default, descs = library.build_multigraph_library(f, L, L, m=m, p=p, formulation="space_weak")
     Theta_explicit_off, descs2 = library.build_multigraph_library(
-        f, L, L, m=m, p=p, use_ibp=False, formulation="weak"
+        f, L, L, m=m, p=p, space_ibp=False, formulation="space_weak"
     )
 
     assert descs == descs2
@@ -395,22 +395,22 @@ def test_ibp_flag_off_by_default(test_field):
     for j in range(len(descs)):
         np.testing.assert_array_equal(
             Theta_default[:, j], Theta_explicit_off[:, j],
-            err_msg=f"Column '{descs[j]}' differs between default and use_ibp=False."
+            err_msg=f"Column '{descs[j]}' differs between default and space_ibp=False."
         )
 
 
 def test_make_weak_regression_data_ibp_plumbing(test_field):
-    """make_weak_regression_data forwards use_ibp correctly."""
+    """make_weak_regression_data forwards space_ibp correctly."""
     f, ft, L, N = test_field
     f_snaps = np.array([f, f])
     ft_snaps = np.array([ft, ft])
     idx_sets = [np.arange(30) for _ in range(2)]
 
     Theta_ibp, b_ibp, descs, _rinfo = make_weak_regression_data(
-        f_snaps, ft_snaps, idx_sets, L, L, m=6, p=4, sample_stride=0, use_ibp=True,
+        f_snaps, ft_snaps, idx_sets, L, L, m=6, p=4, sample_stride=0, space_ibp=True,
     )
     Theta_dir, b_dir, descs2, _rinfo2 = make_weak_regression_data(
-        f_snaps, ft_snaps, idx_sets, L, L, m=6, p=4, sample_stride=0, use_ibp=False,
+        f_snaps, ft_snaps, idx_sets, L, L, m=6, p=4, sample_stride=0, space_ibp=False,
     )
 
     assert descs == descs2
@@ -605,10 +605,10 @@ def test_wsindy_ibp_positive_correlation_all_orders():
 
     for m, p in [(6, 4), (8, 4), (12, 6)]:
         G_dir, descs = library.build_wsindy_library(
-            f, L, L, m=m, p=p, use_ibp=False, formulation="weak",
+            f, L, L, m=m, p=p, space_ibp=False, formulation="space_weak",
         )
         G_ibp, _ = library.build_wsindy_library(
-            f, L, L, m=m, p=p, use_ibp=True, formulation="weak",
+            f, L, L, m=m, p=p, space_ibp=True, formulation="space_weak",
         )
         for j, desc in enumerate(descs):
             if not desc.startswith("f_{"):
@@ -633,10 +633,10 @@ def test_standard_ibp_positive_correlation_all_orders():
 
     for m, p in [(6, 4), (8, 4), (12, 6)]:
         G_dir, descs = library.build_pdefind_library(
-            f, L, L, m=m, p=p, use_ibp=False, formulation="weak",
+            f, L, L, m=m, p=p, space_ibp=False, formulation="space_weak",
         )
         G_ibp, _ = library.build_pdefind_library(
-            f, L, L, m=m, p=p, use_ibp=True, formulation="weak",
+            f, L, L, m=m, p=p, space_ibp=True, formulation="space_weak",
         )
         for j, desc in enumerate(descs):
             # IBP applies to pure linear differential columns: f_x, f_xx, …
@@ -670,10 +670,10 @@ def test_wsindy_ibp_accuracy_by_order():
 
     m, p = 8, 4
     G_dir, descs = library.build_wsindy_library(
-        f, L, L, m=m, p=p, use_ibp=False, formulation="weak",
+        f, L, L, m=m, p=p, space_ibp=False, formulation="space_weak",
     )
     G_ibp, _ = library.build_wsindy_library(
-        f, L, L, m=m, p=p, use_ibp=True, formulation="weak",
+        f, L, L, m=m, p=p, space_ibp=True, formulation="space_weak",
     )
 
     # Relative error thresholds by order (m=8, p=4)
@@ -811,12 +811,12 @@ def test_equivariant_ibp_kernel_consistency_with_wsindy():
     m, p = 8, 4
 
     # Equivariant: build full library, extract the Δf column
-    G_eq, descs_eq = library.build_multigraph_library(f, L, L, m=m, p=p, use_ibp=True, formulation="weak")
+    G_eq, descs_eq = library.build_multigraph_library(f, L, L, m=m, p=p, space_ibp=True, formulation="space_weak")
     col_delta = G_eq[:, descs_eq.index("Δf")]
 
     # WSINDy: the IBP f_xx + f_yy should equal the equivariant Δf column
     # (since Δf = f_xx + f_yy)
-    G_ws, descs_ws = library.build_wsindy_library(f, L, L, m=m, p=p, use_ibp=True, formulation="weak")
+    G_ws, descs_ws = library.build_wsindy_library(f, L, L, m=m, p=p, space_ibp=True, formulation="space_weak")
     col_fxx = G_ws[:, descs_ws.index("f_{xx}")]
     col_fyy = G_ws[:, descs_ws.index("f_{yy}")]
     col_laplacian_from_wsindy = col_fxx + col_fyy

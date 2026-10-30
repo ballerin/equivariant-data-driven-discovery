@@ -89,12 +89,12 @@ def _build_wsindy_pointwise(f, Lx, Ly, max_order=4, max_poly=3, Lz=None):
     return np.column_stack(cols), descs
 
 
-def _build_wsindy_weak(f, Lx, Ly, max_order=4, max_poly=3,
-                       m=8, p=4, use_ibp=False, Lz=None):
+def _build_wsindy_space_weak(f, Lx, Ly, max_order=4, max_poly=3,
+                             m=8, p=4, space_ibp=False, Lz=None):
     """Build the weak-form WSINDy library: ψ ∗ ∂^α(f^q), for any ndim.
 
     Mirrors ``_build_wsindy_pointwise`` but convolves each column with the
-    polynomial-bump test function ψ.  When ``use_ibp=True``, integration by
+    polynomial-bump test function ψ.  When ``space_ibp=True``, integration by
     parts moves the derivative onto the test function for *every* monomial
     power q, so f^q is never differentiated numerically:
 
@@ -113,7 +113,7 @@ def _build_wsindy_weak(f, Lx, Ly, max_order=4, max_poly=3,
     max_order : int — highest derivative order (default 4)
     max_poly  : int — highest monomial power q (default 3)
     m, p : int — test function parameters
-    use_ibp : bool — enable IBP for all ∂^α(f^q) columns
+    space_ibp : bool — enable IBP for all ∂^α(f^q) columns
 
     Returns
     -------
@@ -139,13 +139,13 @@ def _build_wsindy_weak(f, Lx, Ly, max_order=4, max_poly=3,
     for q in range(1, max_poly + 1):
         f_pow = f**q
 
-        if use_ibp:
+        if space_ibp:
             deriv_map = {}
         else:
             deriv_map = compute_derivs_nd(f_pow, Ls, nonzero_indices, method, zero_value="f")
 
         for mi in nonzero_indices:
-            if use_ibp:
+            if space_ibp:
                 # IBP: move partial^mi entirely onto the test function, so
                 # the derivative acts on psi and f^q is left untouched.
                 kernel_list = []

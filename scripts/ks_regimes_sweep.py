@@ -48,7 +48,7 @@ sys.path.insert(0, CODE_DIR)
 
 from equivariant_pde_find import derivatives  # noqa: E402
 from equivariant_pde_find.library import build_multigraph_library, build_pdefind_library  # noqa: E402
-from equivariant_pde_find.regression import TrainSTRidge, TrainSR3  # noqa: E402
+from equivariant_pde_find.regression import TrainSTRidge, TrainSR3, SolverCache  # noqa: E402
 from equivariant_pde_find.simulations import kuramoto_sivashinsky, make_regression_data  # noqa: E402
 from equivariant_pde_find.equations import true_ks  # noqa: E402
 
@@ -195,10 +195,14 @@ def build_matrices(snapshots, times, n_per_snap, L, skip_fraction):
     return mats, Ft, desc_eq, desc_std
 
 
-def sweep_one(Theta, Ft, true_eq, lam, d_tol, algorithm="stridge"):
-    """Run regression and return (n_active, fp, fn, exact_recovery, max_coeff_err)."""
+def sweep_one(Theta, Ft, true_eq, lam, d_tol, algorithm="stridge", cache=None):
+    """Run regression and return (n_active, fp, fn, exact_recovery, max_coeff_err).
+
+    ``cache`` is a ``regression.SolverCache`` reused by STRidge across calls on
+    the same (Theta, Ft); results are unchanged."""
     act = np.abs(true_eq) > 1e-10
-    w   = TrainSR3(Theta, Ft, lam, d_tol) if algorithm == "sr3" else TrainSTRidge(Theta, Ft, lam, d_tol)
+    w   = (TrainSR3(Theta, Ft, lam, d_tol) if algorithm == "sr3"
+           else TrainSTRidge(Theta, Ft, lam, d_tol, cache=cache))
     nz  = int(np.count_nonzero(np.abs(w) > 1e-10))
     fp  = int(np.sum((np.abs(w) > 1e-10) & ~act))
     fn  = int(np.sum((np.abs(w) < 1e-10) &  act))
@@ -319,6 +323,9 @@ def main():
             print(f"  Running {n_combos} (backend, {lam_label}, d_tol) combos "
                   f"[algorithm={args.algorithm}]...", flush=True)
 
+            # One SolverCache for this L: entries are keyed by matrix, so the
+            # (lam, d_tol) grid reuses each matrix's data-only STRidge work.
+            solver_cache = SolverCache()
             pbar = tqdm(combos, desc=f"  {name}", unit="combo", ncols=90, leave=True)
             t_combo_start = time.time()
             for i, (backend, lam, d_tol) in enumerate(pbar):
@@ -332,7 +339,8 @@ def main():
                 Theta_std = mats[(backend, "pdefind")]
 
                 nz, fp, fn, exact, err = sweep_one(
-                    Theta_eq, Ft, true_eq, lam, d_tol, algorithm=args.algorithm
+                    Theta_eq, Ft, true_eq, lam, d_tol, algorithm=args.algorithm,
+                    cache=solver_cache,
                 )
                 writer.writerow(dict(
                     regime=name, L_over_pi=L_over_pi, N_unstable=N_u,
@@ -343,7 +351,8 @@ def main():
 
                 # standard library — no ground truth mapping; fp/fn are nan
                 nz_s, _, _, _, _ = sweep_one(
-                    Theta_std, Ft, true_std, lam, d_tol, algorithm=args.algorithm
+                    Theta_std, Ft, true_std, lam, d_tol, algorithm=args.algorithm,
+                    cache=solver_cache,
                 )
                 writer.writerow(dict(
                     regime=name, L_over_pi=L_over_pi, N_unstable=N_u,

@@ -8,8 +8,8 @@ equivariant library and the best non-equivariant one.
 
 The point of this module is that the notebooks must reproduce the numbers in
 ``results/sweep_paper_v2_*.csv`` rather than approximate them, so the design
-matrices are built by calling ``scripts/sweep.py`` directly (same ``WEAK_P``,
-same ``SAMPLE_STRIDE``, same query-point RNG) and the metrics come from the
+matrices are built by calling ``scripts/sweep.py`` directly (same ``SPACE_P_FIXED``,
+same ``SPACE_STRIDE``, same query-point RNG) and the metrics come from the
 same polynomial-jet evaluation space.
 
 This lives in ``notebooks/`` rather than in the package because it imports
@@ -73,8 +73,8 @@ LIBRARY_LABEL = {
 }
 METHOD_LABEL = {
     "pointwise": "pointwise",
-    "weak_direct": "weak (direct)",
-    "weak_ibp": "weak (IBP)",
+    "space_weak_direct": "space-weak (direct)",
+    "space_weak_ibp": "space-weak (IBP)",
 }
 ALGORITHM_LABEL = {"stridge": "STRidge", "rfe": "RFE", "mstls": "MSTLS"}
 
@@ -315,18 +315,18 @@ def regression_data(snapshots, times, eq, n_per_snap=N_PER_SNAP, seed=0):
 def build_design(f_snaps, ft_snaps, idx_sets, Lx, Ly, cfg):
     """Design matrix (Theta, Ft) for one frozen configuration.
 
-    Delegates to ``sweep.build_pointwise`` / ``sweep.build_weak_form`` so the
+    Delegates to ``sweep.build_pointwise`` / ``sweep.build_space_weak`` so the
     result is identical to the sweep's, including the weak test-function
-    degree ``sweep.WEAK_P`` and query-point stride ``sweep.SAMPLE_STRIDE``.
+    degree ``sweep.SPACE_P_FIXED`` and query-point stride ``sweep.SPACE_STRIDE``.
     """
     method = cfg["method"]
     if method == "pointwise":
         return sweep.build_pointwise(
             f_snaps, ft_snaps, idx_sets, Lx, Ly, cfg["library"], cfg["backend"],
         )
-    return sweep.build_weak_form(
+    return sweep.build_space_weak(
         f_snaps, ft_snaps, idx_sets, Lx, Ly, cfg["library"], cfg["backend"],
-        cfg["m"], use_ibp=(method == "weak_ibp"),
+        cfg["m"], space_ibp=(method == "space_weak_ibp"),
     )
 
 
@@ -359,7 +359,7 @@ def describe(cfg):
         f"{cfg['backend']} derivatives",
     ]
     if cfg["method"] != "pointwise":
-        bits.append(f"m={cfg['m']}, p={sweep.WEAK_P}")
+        bits.append(f"m={cfg['m']}, p={sweep.SPACE_P_FIXED}")
     if cfg["algorithm"] == "stridge":
         bits.append(f"λ={cfg['lam']:g}, d_tol={cfg['d_tol']:g}")
     elif cfg["algorithm"] == "rfe":

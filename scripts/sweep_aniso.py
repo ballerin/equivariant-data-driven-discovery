@@ -6,7 +6,7 @@ Compares equivariant vs non-equivariant libraries under space-dependent
 loaded for evaluation only — no clean sweep rows.
 
 Restrictions (vs the canonical ``sweep.py``):
-    - Methods: ``weak_direct`` and ``weak_ibp`` only (no pointwise)
+    - Methods: ``space_weak_direct`` and ``space_weak_ibp`` only (no pointwise)
     - Algorithms: ``stridge`` and ``rfe`` only (no MSTLS, brute, oracle)
     - Noise: 2 % and 5 % anisotropic datasets only
     - Libraries: only those whose column space contains the ground truth
@@ -20,8 +20,8 @@ Usage
     # Full sweep (all equations, all representable libraries, both backends)
     python scripts/sweep_aniso.py
 
-    # Restrict to specific libraries and weak-m values
-    python scripts/sweep_aniso.py --libraries multigraph,pdefind --weak-m 8,12
+    # Restrict to specific libraries and spatial test-function half-supports
+    python scripts/sweep_aniso.py --libraries multigraph pdefind --space-m 8 12
 
     # With custom RFE ridge regularisation
     python scripts/sweep_aniso.py --rfe-lam 0.0,0.01,0.1
@@ -47,14 +47,14 @@ sys.path.insert(0, CODE_DIR)
 
 from equivariant_pde_find import derivatives  # noqa: E402
 from equivariant_pde_find.evaluation import (  # noqa: E402
-    build_eval_theta_jet, evaluate_unified,
+    build_eval_theta_jet, evaluate_unified, FactoredEval,
 )
 from equivariant_pde_find.library.conversions import (  # noqa: E402
     build_wsindy_to_jet_map, _MULTIGRAPH_TO_JET_DECOMPOSITION,
     collect_needed_jet_monomials,
 )
 from equivariant_pde_find.equations import (  # noqa: E402
-    normalize_eq_name, EQUATION_META, CH_EPSILON,
+    normalize_eq_name, EQUATION_META, CH_EPSILON, REPRESENTABLE_LIBRARIES,
 )
 from equivariant_pde_find.library import (  # noqa: E402
     build_multigraph_library, build_pdefind_library,
@@ -62,7 +62,9 @@ from equivariant_pde_find.library import (  # noqa: E402
     build_mod_multigraph_library,
 )
 from equivariant_pde_find.library import weak_form as wf  # noqa: E402
-from equivariant_pde_find.regression import TrainSTRidge, TrainRFE  # noqa: E402
+from equivariant_pde_find.regression import (  # noqa: E402
+    TrainSTRidge, TrainRFE, SolverCache,
+)
 from equivariant_pde_find.simulations import make_regression_data  # noqa: E402
 from equivariant_pde_find.utils import spectral_lowpass  # noqa: E402
 
@@ -74,20 +76,13 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 LAMS = [1e-6, 1e-4, 1e-2, 1.0]            # STRidge ridge penalty
 RFE_LAMS_DEFAULT = [0.0]                    # RFE ridge (0 = pure OLS)
 D_TOLS = [1e-3, 1e-2, 0.1, 1.0, 10.0]     # STRidge threshold sweep
-WEAK_M = [4, 8, 12]                         # test-function half-supports
-WEAK_P = 6                                   # test-function degree (direct & IBP)
-SAMPLE_STRIDE = 4                            # weak-form query-point stride
+SPACE_M_GRID = [4, 8, 12]                         # test-function half-supports
+SPACE_P_FIXED = 6                                   # test-function degree (direct & IBP)
+SPACE_STRIDE = 4                            # weak-form query-point stride
 
-# Both multigraph bases are always swept together.  Keys are the canonical
-# short equation name as returned by ``normalize_eq_name``.
-REPRESENTABLE_LIBRARIES = {
-    "ac":  {"multigraph", "mod_multigraph", "pdefind", "wsindy", "polyjet"},
-    "sh":  {"multigraph", "mod_multigraph", "pdefind", "wsindy", "polyjet"},
-    "ch":  {"multigraph", "mod_multigraph", "wsindy", "polyjet"},
-    "pme": {"multigraph", "mod_multigraph", "wsindy", "polyjet"},
-    "ks_cell":   {"multigraph", "mod_multigraph", "polyjet"},
-    "ks_wchaos": {"multigraph", "mod_multigraph", "polyjet"},
-}
+# REPRESENTABLE_LIBRARIES (equations.py) lists, per canonical equation name,
+# the libraries that can represent it; both multigraph bases are always swept
+# together.
 # KS regimes have no anisotropic datasets.
 ALL_LIBRARIES = ["multigraph", "mod_multigraph", "pdefind", "polyjet", "wsindy"]
 
@@ -150,20 +145,20 @@ def _get_meta(name):
     raise KeyError(f"No metadata for equation: {name}")
 
 
-def weak_p(m, use_ibp=True):
+def space_p(m, space_ibp=True):
     """Test-function degree for support *m*.
 
     Returns a fixed p=6 for both direct and IBP weak forms.  See the
     discussion in sweep.py for the quadrature-accuracy vs sparse-recovery
     trade-off.
     """
-    return WEAK_P
+    return SPACE_P_FIXED
 
 
-def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
-                    m, use_ibp):
+def build_space_weak(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
+                    m, space_ibp):
     """Build weak-form (G, b) for a given library and backend."""
-    p = weak_p(m, use_ibp)
+    p = space_p(m, space_ibp)
     with derivatives.use_backend(backend):
         rows_G, rows_b = [], []
         for s in range(len(f_snaps)):
@@ -172,36 +167,36 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
             if library == "multigraph":
                 G, desc = build_multigraph_library(
                     f, Lx, Ly, max_p=2, max_n=3,
-                    formulation="weak", m=m, p=p,
-                    use_ibp=use_ibp,
+                    formulation="space_weak", m=m, p=p,
+                    space_ibp=space_ibp,
                 )
             elif library == "mod_multigraph":
                 G, desc = build_mod_multigraph_library(
                     f, Lx, Ly, max_p=2, max_n=3,
-                    formulation="weak", m=m, p=p,
-                    use_ibp=use_ibp,
+                    formulation="space_weak", m=m, p=p,
+                    space_ibp=space_ibp,
                 )
             elif library == "polyjet":
                 G, desc = build_polyjet_library(
                     f, Lx, Ly, max_order=4, max_degree=3,
-                    formulation="weak", m=m, p=p, use_ibp=use_ibp,
+                    formulation="space_weak", m=m, p=p, space_ibp=space_ibp,
                 )
             elif library == "wsindy":
                 G, desc = build_wsindy_library(
                     f, Lx, Ly, max_order=4, max_poly=3,
-                    formulation="weak", m=m, p=p, use_ibp=use_ibp,
+                    formulation="space_weak", m=m, p=p, space_ibp=space_ibp,
                 )
             else:
                 G, desc = build_pdefind_library(
                     f, Lx, Ly, max_order=4, max_poly=3,
-                    formulation="weak", m=m, p=p, use_ibp=use_ibp,
+                    formulation="space_weak", m=m, p=p, space_ibp=space_ibp,
                 )
             b_w = wf.build_weak_rhs(ft, m=m, p=p)
 
             Nx, Ny = f.shape
             Nv_x, Nv_y = Nx - 2 * m, Ny - 2 * m
-            ix = np.arange(0, Nv_x, SAMPLE_STRIDE)
-            iy = np.arange(0, Nv_y, SAMPLE_STRIDE)
+            ix = np.arange(0, Nv_x, SPACE_STRIDE)
+            iy = np.arange(0, Nv_y, SPACE_STRIDE)
             IX, IY = np.meshgrid(ix, iy, indexing="ij")
             flat_idx = (IX * Nv_y + IY).ravel()
 
@@ -220,16 +215,18 @@ def build_weak_form(f_snaps, ft_snaps, idx_sets, Lx, Ly, library, backend,
     return G_all, b_all, desc
 
 
-def sweep_one(Theta, Ft, lam, d_tol, algorithm):
+def sweep_one(Theta, Ft, lam, d_tol, algorithm, cache=None):
     """Run regression and return (n_active, w, lam_out).
 
-    Only ``"stridge"`` and ``"rfe"`` are supported (no MSTLS).
+    Only ``"stridge"`` and ``"rfe"`` are supported (no MSTLS).  ``cache`` is a
+    ``regression.SolverCache`` shared by every call on this (Theta, Ft); it
+    only avoids recomputation, results are unchanged.
     """
     if algorithm == "rfe":
-        w = TrainRFE(Theta, Ft, lam=lam)
+        w = TrainRFE(Theta, Ft, lam=lam, cache=cache)
         lam_out = lam
     else:
-        w = TrainSTRidge(Theta, Ft, lam, d_tol)
+        w = TrainSTRidge(Theta, Ft, lam, d_tol, cache=cache)
         lam_out = lam
     n_active = int(np.count_nonzero(np.abs(w) > 1e-10))
     return n_active, w, lam_out
@@ -273,9 +270,9 @@ def main():
         choices=["spectral", "polynomial"],
     )
     parser.add_argument(
-        "--weak-m", nargs="+", type=int,
-        default=WEAK_M,
-        help="Test-function half-support values.",
+        "--space-m", "--weak-m", dest="space_m", nargs="+", type=int,
+        default=SPACE_M_GRID,
+        help="Spatial test-function half-supports (--weak-m is the old name).",
     )
     parser.add_argument(
         "--rfe-lam", nargs="+", type=float,
@@ -285,6 +282,14 @@ def main():
     parser.add_argument(
         "--name", default="",
         help="Optional tag appended to output filename.",
+    )
+    parser.add_argument(
+        "--eval-mode", choices=["dense", "qr"], default="dense",
+        help="dense: score every row against the full clean evaluation "
+             "matrix (legacy).  qr: replace it by the R factor of its QR "
+             "decomposition (evaluation.FactoredEval); E_coeff agrees to "
+             "round-off, fp/fn/exact_recovery are unchanged, and scoring no "
+             "longer scales with the grid size.",
     )
     parser.add_argument(
         "--out", default=None,
@@ -320,18 +325,18 @@ def main():
 
     backends = args.backends
     rfe_lams = args.rfe_lam
-    weak_m_vals = args.weak_m
+    space_m_vals = args.space_m
 
     # Filter out m values that can't resolve the degree-p test function for IBP
-    usable_ibp_m_vals = [
-        m for m in weak_m_vals
-        if wf.test_function_is_resolved(m, WEAK_P, max_deriv=4)
+    usable_space_ibp_m_vals = [
+        m for m in space_m_vals
+        if wf.test_function_is_resolved(m, SPACE_P_FIXED, max_deriv=4)
     ]
-    dropped = [m for m in weak_m_vals if m not in usable_ibp_m_vals]
+    dropped = [m for m in space_m_vals if m not in usable_space_ibp_m_vals]
     if dropped:
         print(
-            f"  [weak_ibp] skipping m={dropped}: 2m+1 grid points cannot "
-            f"resolve the degree-{WEAK_P} test function for IBP"
+            f"  [space_weak_ibp] skipping m={dropped}: 2m+1 grid points cannot "
+            f"resolve the degree-{SPACE_P_FIXED} test function for IBP"
         )
 
     # ── output ───────────────────────────────────────────────────────────
@@ -346,7 +351,7 @@ def main():
 
     fieldnames = [
         "equation", "noise", "method", "algorithm", "library", "backend",
-        "weak_m", "lam", "d_tol", "mstls_alpha",
+        "space_m", "lam", "d_tol", "mstls_alpha",
         "n_active", "fp", "fn", "exact_recovery", "E_coeff", "max_coeff_err",
         "E_data", "cond_theta", "n_samples",
         "post_hoc_noise", "spectral_cutoff",
@@ -487,17 +492,23 @@ def main():
             n_active_true = int(np.sum(np.abs(true_jet) > 1e-10))
             print(f"    eval Theta: {Theta_eval.shape}  "
                   f"active_true={n_active_true}", flush=True)
+            if args.eval_mode == "qr":
+                t_eval = time.time()
+                Theta_eval = FactoredEval(Theta_eval, Ft_eval)
+                Ft_eval = None
+                print(f"    eval QR factor: {Theta_eval.R.shape}  "
+                      f"({time.time() - t_eval:.1f}s)", flush=True)
 
             # ── Pre-build weak-form matrices ─────────────────────────────
             prebuilt = {}
 
             for library, backend in itertools.product(lib_set, backends):
-                for m_val in weak_m_vals:
-                    # weak_ibp: only usable m values
-                    if m_val not in usable_ibp_m_vals:
+                for m_val in space_m_vals:
+                    # space_weak_ibp: only usable m values
+                    if m_val not in usable_space_ibp_m_vals:
                         continue
-                    for use_ibp_flag in (False, True):
-                        method = "weak_ibp" if use_ibp_flag else "weak_direct"
+                    for space_ibp_flag in (False, True):
+                        method = "space_weak_ibp" if space_ibp_flag else "space_weak_direct"
                         actual_key = (method, library, backend, m_val)
                         if actual_key in prebuilt:
                             continue
@@ -507,9 +518,9 @@ def main():
                               f"lib={library} backend={backend} m={m_val}",
                               flush=True)
 
-                        Theta, Ft, desc = build_weak_form(
+                        Theta, Ft, desc = build_space_weak(
                             f_snaps, ft_snaps, idx_sets, Lx, Ly,
-                            library, backend, m_val, use_ibp_flag,
+                            library, backend, m_val, space_ibp_flag,
                         )
 
                         cond_val = cond_number(Theta)
@@ -524,15 +535,18 @@ def main():
             eq_total = 0
 
             for library, backend in itertools.product(lib_set, backends):
-                for m_val in weak_m_vals:
-                    if m_val not in usable_ibp_m_vals:
+                for m_val in space_m_vals:
+                    if m_val not in usable_space_ibp_m_vals:
                         continue
-                    for use_ibp_flag in (False, True):
-                        method = "weak_ibp" if use_ibp_flag else "weak_direct"
+                    for space_ibp_flag in (False, True):
+                        method = "space_weak_ibp" if space_ibp_flag else "space_weak_direct"
                         actual_key = (method, library, backend, m_val)
                         if actual_key not in prebuilt:
                             continue
                         Theta, Ft, desc, cond_val = prebuilt[actual_key]
+                        # Data-only solver work, shared by all settings on
+                        # this matrix.
+                        solver_cache = SolverCache()
 
                         # ── STRidge: lam × d_tol grid ────────────────────
                         for lam in LAMS:
@@ -540,6 +554,7 @@ def main():
                                 t_row = time.time()
                                 n_active, w, lam_out = sweep_one(
                                     Theta, Ft, lam, d_tol, "stridge",
+                                    cache=solver_cache,
                                 )
 
                                 eval_result = evaluate_unified(
@@ -556,7 +571,7 @@ def main():
                                     algorithm="stridge",
                                     library=library,
                                     backend=backend,
-                                    weak_m=m_val,
+                                    space_m=m_val,
                                     lam=lam_out,
                                     d_tol=d_tol,
                                     mstls_alpha="",
@@ -586,6 +601,7 @@ def main():
                             t_row = time.time()
                             n_active, w, lam_out = sweep_one(
                                 Theta, Ft, rfe_lam, 0.0, "rfe",
+                                cache=solver_cache,
                             )
 
                             eval_result = evaluate_unified(
@@ -602,7 +618,7 @@ def main():
                                 algorithm="rfe",
                                 library=library,
                                 backend=backend,
-                                weak_m=m_val,
+                                space_m=m_val,
                                 lam=lam_out,
                                 d_tol="",
                                 mstls_alpha="",
@@ -666,6 +682,7 @@ def main():
         lf.write(f"python_version: {sys.version.split()[0]}\n")
         lf.write(f"timestamp: {timestamp}\n")
         lf.write(f"equations: {args.equations or 'all aniso'}\n")
+        lf.write(f"eval_mode: {args.eval_mode}\n")
     print(f"Timing log → {log_path}")
 
 

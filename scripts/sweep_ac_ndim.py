@@ -53,10 +53,10 @@ from equivariant_pde_find.library import (  # noqa: E402
     build_pdefind_library,
 )
 from equivariant_pde_find.library import weak_form as wf  # noqa: E402
-from equivariant_pde_find.regression import TrainSTRidge  # noqa: E402
+from equivariant_pde_find.regression import TrainSTRidge, SolverCache  # noqa: E402
 from equivariant_pde_find.simulations import make_regression_data  # noqa: E402
 from equivariant_pde_find.evaluation import (  # noqa: E402
-    build_eval_theta_jet, evaluate_unified,
+    build_eval_theta_jet, evaluate_unified, FactoredEval,
 )
 from equivariant_pde_find.library.conversions import (  # noqa: E402
     collect_needed_jet_monomials,
@@ -72,8 +72,8 @@ RESULTS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "results"))
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 TAG = "dimstudy"
-WEAK_M = 12
-WEAK_MAX_DERIV = 4          # highest derivative order moved onto the test function
+SPACE_M = 12
+SPACE_MAX_DERIV = 4          # highest derivative order moved onto the test function
 MAX_ROWS = 2000             # same row budget at every ndim, so cost differences
                             # come from n_cols and N^ndim, not from sample size
 NOISE_LABELS = {0.0: "clean", 0.02: "noise2pct", 0.05: "noise5pct"}
@@ -253,8 +253,8 @@ def truth_vector(library, desc, ndim, eps):
     return w
 
 
-def build_weak(library, snaps, times, L, ndim, max_rows, seed=0):
-    """Weak-form (G, b) with IBP at m=WEAK_M, spectral backend.
+def build_space_weak(library, snaps, times, L, ndim, max_rows, seed=0):
+    """Weak-form (G, b) with IBP at m=SPACE_M, spectral backend.
 
     Uses only as many interior snapshots as the row budget needs, so the
     build cost is not inflated by data the regression will not use -- and
@@ -269,16 +269,16 @@ def build_weak(library, snaps, times, L, ndim, max_rows, seed=0):
     looks exactly like a dimension effect.  Sampling the tail makes every
     dimension see the same developed state.
     """
-    p = wf.select_test_function_degree(WEAK_M, WEAK_MAX_DERIV)
-    if not wf.test_function_is_resolved(WEAK_M, p, WEAK_MAX_DERIV):
-        raise RuntimeError(f"m={WEAK_M} cannot resolve a degree-{p} test function")
+    p = wf.select_test_function_degree(SPACE_M, SPACE_MAX_DERIV)
+    if not wf.test_function_is_resolved(SPACE_M, p, SPACE_MAX_DERIV):
+        raise RuntimeError(f"m={SPACE_M} cannot resolve a degree-{p} test function")
 
     f_snaps, ft_snaps, _idx, _dt = make_regression_data(
         snaps, times, n_per_snap=1, seed=seed
     )
     interior_times = times[1:len(f_snaps) + 1]
 
-    n_valid = (snaps.shape[1] - 2 * WEAK_M) ** ndim
+    n_valid = (snaps.shape[1] - 2 * SPACE_M) ** ndim
     n_needed = max(1, int(np.ceil(max_rows / max(n_valid, 1))))
     n_use = min(len(f_snaps), n_needed)
 
@@ -288,12 +288,12 @@ def build_weak(library, snaps, times, L, ndim, max_rows, seed=0):
     per_snap = int(np.ceil(max_rows / n_use))
 
     for s in range(len(f_snaps) - n_use, len(f_snaps)):
-        kw = dict(formulation="weak", m=WEAK_M, p=p, use_ibp=True, Lz=L)
+        kw = dict(formulation="space_weak", m=SPACE_M, p=p, space_ibp=True, Lz=L)
         if library == "pdefind":
             G, desc = builder(f_snaps[s], L, L, max_order=4, max_poly=3, **kw)
         else:
             G, desc = builder(f_snaps[s], L, L, max_p=2, max_n=3, **kw)
-        b = wf.build_weak_rhs(ft_snaps[s], m=WEAK_M, p=p)
+        b = wf.build_weak_rhs(ft_snaps[s], m=SPACE_M, p=p)
 
         take = min(per_snap, G.shape[0])
         sel = rng.choice(G.shape[0], size=take, replace=False)
@@ -332,8 +332,11 @@ def normalize_system(G, b):
 
 
 def run_cell(library, ndim, noise, lam, d_tol, max_rows, timeout_s,
-             normalize=True):
-    """One (library, ndim, noise) cell.  Returns a result row."""
+             normalize=True, eval_mode="dense"):
+    """One (library, ndim, noise) cell.  Returns a result row.
+
+    ``eval_mode="qr"`` scores through ``evaluation.FactoredEval`` (see
+    ``--eval-mode``)."""
     row = dict(ndim=ndim, noise=noise, library=library, lam=lam, d_tol=d_tol,
                status="ok", n_cols="", n_rows="", n_snapshots="", n_active="",
                fp="", fn="", exact_recovery="", E_coeff="", E_coeff_ls="",
@@ -344,7 +347,7 @@ def run_cell(library, ndim, noise, lam, d_tol, max_rows, timeout_s,
         snaps, times, L, eps = load(ndim, noise)
 
         t0 = time.time()
-        G, b, desc, n_use, window = build_weak(
+        G, b, desc, n_use, window = build_space_weak(
             library, snaps, times, L, ndim, max_rows)
         build_time = time.time() - t0
 
@@ -367,6 +370,8 @@ def run_cell(library, ndim, noise, lam, d_tol, max_rows, timeout_s,
         Theta_eval, Ft_eval, desc_jet, true_jet = build_eval_jet(
             snaps_eval, times, L, ndim, library, desc, w_true,
         )
+        if eval_mode == "qr":
+            Theta_eval, Ft_eval = FactoredEval(Theta_eval, Ft_eval), None
         ev = evaluate_unified(
             w, library, desc, desc_jet,
             Theta_eval, Ft_eval, true_jet,
@@ -400,8 +405,12 @@ def run_cell(library, ndim, noise, lam, d_tol, max_rows, timeout_s,
     return row
 
 
-def calibrate(ndim, noises, libraries, max_rows, normalize=True):
-    """Rank (lam, d_tol) on the study's exact configuration at one dimension."""
+def calibrate(ndim, noises, libraries, max_rows, normalize=True,
+              eval_mode="dense"):
+    """Rank (lam, d_tol) on the study's exact configuration at one dimension.
+
+    ``eval_mode="qr"`` scores through ``evaluation.FactoredEval`` (see
+    ``--eval-mode``)."""
     print(f"Calibrating (lam, d_tol) at ndim={ndim} on {len(libraries)} libraries, "
           f"{len(noises)} noise levels\n")
 
@@ -417,12 +426,14 @@ def calibrate(ndim, noises, libraries, max_rows, normalize=True):
         # Build eval Theta once per library (clean data, independent of noise)
         for noise in noises:
             snaps, times, L, eps = load(ndim, noise)
-            G, b, desc, _, _ = build_weak(
+            G, b, desc, _, _ = build_space_weak(
                 library, snaps, times, L, ndim, max_rows)
             if normalize:
                 G, b = normalize_system(G, b)
             w_true = truth_vector(library, desc, ndim, eps)
-            built[(library, noise)] = (G, b, desc, w_true)
+            # One SolverCache per matrix: the (lam, d_tol) grid reuses its
+            # data-only STRidge work (results are unchanged).
+            built[(library, noise)] = (G, b, desc, w_true, SolverCache())
 
             # Build eval info once per library (same for all noise levels)
             if library not in eval_info:
@@ -430,14 +441,16 @@ def calibrate(ndim, noises, libraries, max_rows, normalize=True):
                     snaps_eval, times_eval, L_eval, ndim,
                     library, desc, w_true,
                 )
+                if eval_mode == "qr":
+                    Theta_eval, Ft_eval = FactoredEval(Theta_eval, Ft_eval), None
                 eval_info[library] = (desc_jet, Theta_eval, Ft_eval, true_jet)
 
     scores = []
     for lam in CAL_LAMS:
         for d_tol in CAL_D_TOLS:
             n_exact, E_sum, n = 0, 0.0, 0
-            for (library, noise), (G, b, desc, w_true) in built.items():
-                w = TrainSTRidge(G, b, lam=lam, d_tol=d_tol)
+            for (library, noise), (G, b, desc, w_true, cache) in built.items():
+                w = TrainSTRidge(G, b, lam=lam, d_tol=d_tol, cache=cache)
                 desc_jet, Theta_eval, Ft_eval, true_jet = eval_info[library]
                 ev = evaluate_unified(
                     w, library, desc, desc_jet,
@@ -477,6 +490,11 @@ def main():
                     help="Rank (lam, d_tol) at the lowest requested ndim and exit.")
     ap.add_argument("--no-normalize", action="store_true",
                     help="Skip the 1/||b|| scaling (see normalize_system).")
+    ap.add_argument("--eval-mode", choices=["dense", "qr"], default="dense",
+                    help="dense: score against the evaluation matrix (legacy).  "
+                         "qr: use the R factor of its QR decomposition "
+                         "(evaluation.FactoredEval); E_coeff agrees to round-off, "
+                         "fp/fn/exact_recovery are unchanged.")
     ap.add_argument("--name", default="")
     args = ap.parse_args()
 
@@ -484,7 +502,7 @@ def main():
 
     if args.calibrate:
         calibrate(min(args.ndim), args.noise, args.libraries, args.max_rows,
-                  normalize=not args.no_normalize)
+                  normalize=not args.no_normalize, eval_mode=args.eval_mode)
         return
 
     if args.lam is None or args.d_tol is None:
@@ -503,7 +521,7 @@ def main():
     print(f"Allen-Cahn dimension study  ->  {out_path}")
     print(f"  ndim={args.ndim}  noise={args.noise}  libraries={args.libraries}")
     print(f"  lam={args.lam:g}  d_tol={args.d_tol:g}  max_rows={args.max_rows}")
-    print(f"  weak IBP, m={WEAK_M}, p={wf.select_test_function_degree(WEAK_M, WEAK_MAX_DERIV)},"
+    print(f"  weak IBP, m={SPACE_M}, p={wf.select_test_function_degree(SPACE_M, SPACE_MAX_DERIV)},"
           f" spectral backend\n")
 
     with open(out_path, "w", newline="") as fh:
@@ -517,7 +535,8 @@ def main():
                           end="", flush=True)
                     row = run_cell(library, ndim, noise, args.lam, args.d_tol,
                                    args.max_rows, args.timeout,
-                                   normalize=not args.no_normalize)
+                                   normalize=not args.no_normalize,
+                                   eval_mode=args.eval_mode)
                     writer.writerow(row)
                     fh.flush()
                     if row["status"] == "ok":

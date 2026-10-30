@@ -38,7 +38,7 @@ from equivariant_pde_find.library import (
     build_wsindy_library,
 )
 from equivariant_pde_find.library import weak_form as wf
-from equivariant_pde_find.regression import TrainSTRidge, TrainRFE
+from equivariant_pde_find.regression import TrainSTRidge, TrainRFE, SolverCache
 from equivariant_pde_find.simulations import make_regression_data
 from equivariant_pde_find.equations import (
     CH_EPSILON,
@@ -77,12 +77,12 @@ M_VALS_BY_NDIM = {2: [12], 3: [10], 4: [8], 5: [6]}
 # Test-function degree is fixed at 6 for both direct and IBP:
 # p=6 gives wider effective support (~6 grid points) for better sparse
 # recovery, and the IBP discretisation error (~0.27 %) is negligible.
-WEAK_P = 6
+SPACE_P_FIXED = 6
 
 
-def weak_p(m, use_ibp=True):
+def space_p(m, space_ibp=True):
     """Test-function degree for support *m* (fixed p=6)."""
-    return WEAK_P
+    return SPACE_P_FIXED
 
 
 def peak_rss_mb():
@@ -91,7 +91,7 @@ def peak_rss_mb():
 
 
 N_PER_SNAP = 200       # spatial samples per snapshot
-SAMPLE_STRIDE = 4
+SPACE_STRIDE = 4
 LAMS = [1e-6, 1e-4, 1e-2, 1.0]       # STRidge ridge penalty
 D_TOLS = [1e-4, 5e-4, 1e-3, 5e-3, 1e-2, 5e-2, 0.1, 0.2, 0.5,
           1.0, 2.0, 5.0, 10.0]
@@ -99,8 +99,8 @@ RFE_LAMS = [0.0]                        # RFE: pure OLS only
 
 # ── library builders ─────────────────────────────────────────────────────────
 
-def _build_weak_nd(f_snaps, ft_snaps, idx_sets, Lx, Ly, Lz,
-                   library_fn, m, p, use_ibp):
+def _build_space_weak_nd(f_snaps, ft_snaps, idx_sets, Lx, Ly, Lz,
+                   library_fn, m, p, space_ibp):
     """Build weak-form (G, b) for n-d data with a given library builder.
 
     Handles both 2-D (Lz=None) and N-D (Lz=float or None with ndim>3)
@@ -118,12 +118,12 @@ def _build_weak_nd(f_snaps, ft_snaps, idx_sets, Lx, Ly, Lz,
         if library_fn in (build_pdefind_library, build_wsindy_library):
             G, desc = library_fn(
                 f, Lx, Ly, max_order=4, max_poly=3,
-                formulation="weak", m=m, p=p, use_ibp=use_ibp, Lz=Lz,
+                formulation="space_weak", m=m, p=p, space_ibp=space_ibp, Lz=Lz,
             )
         else:
             G, desc = library_fn(
                 f, Lx, Ly, max_p=2, max_n=3,
-                formulation="weak", m=m, p=p, use_ibp=use_ibp, Lz=Lz,
+                formulation="space_weak", m=m, p=p, space_ibp=space_ibp, Lz=Lz,
             )
 
         # Build weak RHS (ravels via build_weak_rhs for flat-index compatibility).
@@ -133,7 +133,7 @@ def _build_weak_nd(f_snaps, ft_snaps, idx_sets, Lx, Ly, Lz,
         # Strided sampling of valid interior points (C-order / row-major).
         shape = f.shape
         Nv = tuple(s - 2 * m for s in shape)
-        grid_axes = [np.arange(0, Nv[i], SAMPLE_STRIDE) for i in range(ndim)]
+        grid_axes = [np.arange(0, Nv[i], SPACE_STRIDE) for i in range(ndim)]
         mesh = np.meshgrid(*grid_axes, indexing="ij")
         # Flatten with C-order: last axis varies fastest.
         flat_idx = 0
@@ -224,8 +224,10 @@ def main():
         help="Regression algorithms (stride, rfe).",
     )
     parser.add_argument(
-        "--ibp", default="both", choices=["both", "ibp", "direct"],
-        help="IBP mode: both (default), ibp (use_ibp=True), direct (use_ibp=False).",
+        "--space-ibp", "--ibp", dest="space_ibp_mode", default="both",
+        choices=["both", "ibp", "direct"],
+        help="Spatial IBP mode: both (default), ibp (space_ibp=True), direct "
+             "(space_ibp=False).  --ibp is the old name.",
     )
     parser.add_argument(
         "--name", default="", help="Tag appended to output filename.",
@@ -244,9 +246,9 @@ def main():
     data_dir = args.data_dir if args.data_dir else DATA_DIR
 
     # ── IBP modes ─────────────────────────────────────────────────────────
-    if args.ibp == "both":
+    if args.space_ibp_mode == "both":
         ibp_modes = [True, False]
-    elif args.ibp == "ibp":
+    elif args.space_ibp_mode == "ibp":
         ibp_modes = [True]
     else:
         ibp_modes = [False]
@@ -337,7 +339,7 @@ def main():
 
     fieldnames = [
         "equation", "ndim", "noise", "library", "algorithm",
-        "use_ibp", "m", "d_tol", "lam",
+        "space_ibp", "m", "d_tol", "lam",
         "n_active", "fp", "fn", "exact_recovery", "E_coeff",
         "E_data", "cond_theta",
         "n_cols", "n_rows", "n_snapshots", "grid_points",
@@ -405,18 +407,18 @@ def main():
                 else:
                     # Multigraph / mod_multigraph: truth_fn(descriptions, **params) → array
                     m_tmp = M_VALS_BY_NDIM[effective_ndim][0]
-                    p_tmp = weak_p(m_tmp, use_ibp=True)
+                    p_tmp = space_p(m_tmp, space_ibp=True)
                     if builder in (build_pdefind_library, build_wsindy_library):
                         _, desc_tmp = builder(
                             f_snaps[0], Lx, Ly, max_order=4, max_poly=3,
-                            formulation="weak", m=m_tmp, p=p_tmp,
-                            use_ibp=True, Lz=Lz,
+                            formulation="space_weak", m=m_tmp, p=p_tmp,
+                            space_ibp=True, Lz=Lz,
                         )
                     else:
                         _, desc_tmp = builder(
                             f_snaps[0], Lx, Ly, max_p=2, max_n=3,
-                            formulation="weak", m=m_tmp, p=p_tmp,
-                            use_ibp=True, Lz=Lz,
+                            formulation="space_weak", m=m_tmp, p=p_tmp,
+                            space_ibp=True, Lz=Lz,
                         )
                     true_w = truth_fn(desc_tmp, **_EQ_PARAMS.get(eq_key, {}))
                     true_dict = {d: true_w[i] for i, d in enumerate(desc_tmp)
@@ -426,14 +428,14 @@ def main():
                 m_vals = M_VALS_BY_NDIM.get(effective_ndim, [12])
                 for m_val in m_vals:
                     # ── loop over IBP modes ───────────────────────────
-                    for use_ibp in ibp_modes:
-                        p_val = weak_p(m_val, use_ibp)
+                    for space_ibp in ibp_modes:
+                        p_val = space_p(m_val, space_ibp)
 
                         # Build weak-form library once per (m, ibp)
                         t_build_start = time.time()
-                        G, b, desc = _build_weak_nd(
+                        G, b, desc = _build_space_weak_nd(
                             f_snaps, ft_snaps, idx_sets, Lx, Ly, Lz,
-                            builder, m_val, p_val, use_ibp,
+                            builder, m_val, p_val, space_ibp,
                         )
                         build_time_ms = (time.time() - t_build_start) * 1000
                         mem_mb = peak_rss_mb()
@@ -441,19 +443,23 @@ def main():
                         n_cols = len(desc)
                         n_rows = G.shape[0]
 
-                        ibp_label = "ibp" if use_ibp else "direct"
+                        ibp_label = "ibp" if space_ibp else "direct"
                         print(f"  [{lib_key:>16s}] m={m_val} {ibp_label:6s}  "
                               f"shape=({n_rows},{n_cols})  cond={cond_val:.2e}  "
                               f"build={build_time_ms:.0f}ms  "
                               f"rss={mem_mb:.0f}MB")
 
+                        # Data-only solver work, shared by all settings on
+                        # this matrix (results are unchanged).
+                        solver_cache = SolverCache()
                         for algorithm in args.algorithms:
                             if algorithm == "stride":
                                 for lam in LAMS:
                                     for d_tol in D_TOLS:
                                         t_fit = time.time()
                                         w = TrainSTRidge(G, b, lam, d_tol,
-                                                         maxit=25, seed=0)
+                                                         maxit=25, seed=0,
+                                                         cache=solver_cache)
                                         fit_time_ms = (time.time() - t_fit) * 1000
                                         eval_r = evaluate_native(w, desc, true_dict)
                                         E_data = float(
@@ -467,7 +473,7 @@ def main():
                                             "noise": noise,
                                             "library": lib_key,
                                             "algorithm": "stride",
-                                            "use_ibp": ibp_label,
+                                            "space_ibp": ibp_label,
                                             "m": m_val,
                                             "d_tol": d_tol,
                                             "lam": lam,
@@ -492,7 +498,8 @@ def main():
                             elif algorithm == "rfe":
                                 for rfe_lam in RFE_LAMS:
                                     t_fit = time.time()
-                                    w = TrainRFE(G, b, normalize=2, lam=rfe_lam)
+                                    w = TrainRFE(G, b, normalize=2, lam=rfe_lam,
+                                                 cache=solver_cache)
                                     fit_time_ms = (time.time() - t_fit) * 1000
                                     eval_r = evaluate_native(w, desc, true_dict)
                                     E_data = float(
@@ -506,7 +513,7 @@ def main():
                                         "noise": noise,
                                         "library": lib_key,
                                         "algorithm": "rfe",
-                                        "use_ibp": ibp_label,
+                                        "space_ibp": ibp_label,
                                         "m": m_val,
                                         "d_tol": "",
                                         "lam": rfe_lam,

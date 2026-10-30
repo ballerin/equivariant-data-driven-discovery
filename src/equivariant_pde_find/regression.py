@@ -1,8 +1,53 @@
 """Sparse regression algorithms for PDE discovery: STRidge, SR3, MSTLS,
 RFE, and brute-force exhaustive best-subset search, plus their Train*
-wrappers used by the sweep scripts."""
+wrappers used by the sweep scripts.
+
+Also provides ``centering``, an opt-in wrapper that partials the intercept
+out (Frisch-Waugh-Lovell) before delegating to any of the Train* solvers,
+so the constant column does not compete in the sparsification."""
 
 import numpy as np
+
+
+# ==================================================================================================
+# SolverCache - reuse data-only work across solver calls on the same matrix
+#
+# A sweep calls the Train* solvers many times on one (Theta, ut): 20 STRidge (lam, d_tol) settings,
+# several RFE lam values, several MSTLS alphas, each with and without centering.  Everything that
+# depends only on the data (train/test split, cond, column normalisation, normal equations,
+# least-squares refits on a given support, the MSTLS lambda path, the centred system) is identical
+# across those calls.  Passing one SolverCache to all of them computes it once.  The arithmetic is
+# unchanged, so results are bit-identical to calls without a cache.
+# ==================================================================================================
+
+class SolverCache:
+    """Memo for the ``cache=`` argument of ``TrainSTRidge``, ``TrainRFE``,
+    ``TrainMSTLS`` and ``centering``.
+
+    Entries are keyed by the *identity* of the input arrays (the cache holds a
+    reference, so an id cannot be reused while it is alive) plus the options
+    that affect the precomputation.  The arrays must therefore not be modified
+    in place while the cache is in use.  Create one cache per design matrix
+    and drop it when moving to the next, since entries hold copies of the
+    matrix (the training split, the normalised or centred columns).
+    """
+
+    def __init__(self):
+        self._entries = {}
+
+    def entry(self, arrays, options=()):
+        """Return the dict stored for ``arrays`` (a tuple) and ``options``,
+        creating an empty one on first use."""
+        key = tuple(id(a) for a in arrays) + tuple(options)
+        e = self._entries.get(key)
+        if e is None or any(r is not a for r, a in zip(e["_refs"], arrays)):
+            e = {"_refs": tuple(arrays)}
+            self._entries[key] = e
+        return e
+
+    def clear(self):
+        self._entries.clear()
+
 
 # ==================================================================================================
 # STRidge - Sequential Thresholding Ridge Regression
@@ -43,8 +88,20 @@ def STRidge(X0, y, lam, maxit, tol, normalize=2, early_stop=True, unbias=True):
     -------
     w : ndarray, shape (d,) - sparse coefficient vector
     """
-    n, d = X0.shape
     y = y.ravel()
+    X, Mreg, XtX, Xty = _stridge_setup(X0, y, normalize)
+    return _stridge_iterate(X, y, Mreg, XtX, Xty, lam, maxit, tol,
+                            early_stop=early_stop, unbias=unbias)
+
+
+def _stridge_setup(X0, y, normalize):
+    """Column normalisation and normal equations for ``STRidge``.
+
+    These depend only on the data, not on ``lam`` or ``tol``, so
+    ``TrainSTRidge`` computes them once and reuses them for every tolerance
+    it tries.
+    """
+    d = X0.shape[1]
 
     # Normalize columns to unit norm so thresholding is scale-invariant
     if normalize != 0:
@@ -57,6 +114,30 @@ def STRidge(X0, y, lam, maxit, tol, normalize=2, early_stop=True, unbias=True):
     # Precompute normal equations once (avoids repetitions)
     XtX = X.T @ X   # (d, d)
     Xty = X.T @ y   # (d,)
+    return X, Mreg, XtX, Xty
+
+
+def _support_lstsq(X, y, big, refits):
+    """Least squares of ``y`` on the columns ``X[:, big]``.
+
+    ``refits`` (a dict, or None to disable) memoises the result by support.
+    The same support recurs many times within a ``TrainSTRidge`` call and
+    across the λ path of ``TrainMSTLS``, and with many rows this solve is the
+    dominant cost.
+    """
+    if refits is None:
+        return np.linalg.lstsq(X[:, big], y, rcond=None)[0]
+    key = big.tobytes()
+    if key not in refits:
+        refits[key] = np.linalg.lstsq(X[:, big], y, rcond=None)[0]
+    return refits[key]
+
+
+def _stridge_iterate(X, y, Mreg, XtX, Xty, lam, maxit, tol, early_stop=True,
+                     unbias=True, refits=None):
+    """The thresholding loop of ``STRidge`` on precomputed ``_stridge_setup``
+    output.  ``refits`` is passed to ``_support_lstsq``."""
+    d = X.shape[1]
 
     # Initial ridge solve
     w = np.linalg.lstsq(XtX + lam * np.eye(d), Xty, rcond=None)[0]
@@ -84,18 +165,18 @@ def STRidge(X0, y, lam, maxit, tol, normalize=2, early_stop=True, unbias=True):
             w[big] = np.linalg.solve(G, h)
         except np.linalg.LinAlgError:
             # Fallback for rank-deficient active submatrix
-            w[big] = np.linalg.lstsq(X[:, big], y, rcond=None)[0]
+            w[big] = _support_lstsq(X, y, big, refits)
 
     # Pure least-squares on discovered support (to obtain unbiased coefficients)
     if unbias and big.sum() > 0:
-        w[big] = np.linalg.lstsq(X[:, big], y, rcond=None)[0]
+        w[big] = _support_lstsq(X, y, big, refits)
 
     return Mreg * w
 
 
 def TrainSTRidge(
     Theta, ut, lam, d_tol, maxit=125, STR_iters=10, l0_penalty=None,
-    normalize=2, split=0.8, seed=0, early_stop=True, unbias=True,
+    normalize=2, split=0.8, seed=0, early_stop=True, unbias=True, cache=None,
 ):
     """Train STRidge with cross-validation over the sparsity tolerance.
 
@@ -113,32 +194,54 @@ def TrainSTRidge(
     seed       : int   - RNG seed for reproducible train/test splits
     early_stop : bool  - passed through to STRidge (default True)
     unbias     : bool  - passed through to STRidge (default True)
+    cache      : SolverCache or None - reuse the split, cond, normalisation,
+                 normal equations and support refits across calls on the
+                 same (Theta, ut); results are unchanged
 
     Returns
     -------
     w : ndarray, shape (K,) - best sparse coefficient vector
     """
-    rng = np.random.default_rng(seed)
-    n = Theta.shape[0]
-    ut = ut.ravel()
-    perm = rng.permutation(n)
-    k = int(n * split)
-    train, test = perm[:k], perm[k:]
-    Theta_tr, Theta_te = Theta[train], Theta[test]
-    ytr, yte = ut[train], ut[test]
+    # Everything below up to the loop depends only on (Theta, ut, split, seed,
+    # normalize), not on lam or d_tol.  STRidge's own setup is independent of
+    # tol too, so it is computed once here rather than in each of up to maxit
+    # STRidge calls, and support refits are memoised.  The arithmetic is
+    # unchanged, so w is identical to calling STRidge in the loop.
+    pre = (cache.entry((Theta, ut), ("stridge", split, seed, normalize))
+           if cache is not None else {})
+    if "Theta_tr" not in pre:
+        rng = np.random.default_rng(seed)
+        n = Theta.shape[0]
+        y = ut.ravel()
+        perm = rng.permutation(n)
+        k = int(n * split)
+        train, test = perm[:k], perm[k:]
+        pre["Theta_tr"], pre["Theta_te"] = Theta[train], Theta[test]
+        pre["ytr"], pre["yte"] = y[train], y[test]
+        # Initial least-squares fit on the training set to get a baseline error
+        pre["w_ls"] = np.linalg.lstsq(pre["Theta_tr"], pre["ytr"], rcond=None)[0]
+        pre["res_ls"] = np.linalg.norm(pre["yte"] - pre["Theta_te"] @ pre["w_ls"])
+        pre["setup"] = _stridge_setup(pre["Theta_tr"], pre["ytr"], normalize)
+        pre["refits"] = {}
+    Theta_te, ytr, yte = pre["Theta_te"], pre["ytr"], pre["yte"]
 
     if l0_penalty is None:
-        l0_penalty = 0.001 * np.linalg.cond(Theta_tr)
+        if "cond" not in pre:
+            pre["cond"] = np.linalg.cond(pre["Theta_tr"])
+        l0_penalty = 0.001 * pre["cond"]
 
-    # Initial least-squares fit on the training set to get a baseline error
-    w_best = np.linalg.lstsq(Theta_tr, ytr, rcond=None)[0]
-    err_best = np.linalg.norm(yte - Theta_te @ w_best) + l0_penalty * np.count_nonzero(w_best)
+    w_best = pre["w_ls"].copy()
+    err_best = pre["res_ls"] + l0_penalty * np.count_nonzero(w_best)
     tol = float(d_tol)
+
+    X_tr, Mreg, XtX, Xty = pre["setup"]
+    refits = pre["refits"]
 
     # Cross-validation loop: increase tolerance until test error increases
     for _ in range(maxit):
-        w = STRidge(Theta_tr, ytr, lam, STR_iters, tol, normalize,
-                     early_stop=early_stop, unbias=unbias)
+        w = _stridge_iterate(X_tr, ytr, Mreg, XtX, Xty, lam, STR_iters, tol,
+                             early_stop=early_stop, unbias=unbias,
+                             refits=refits)
         err = np.linalg.norm(yte - Theta_te @ w) + l0_penalty * np.count_nonzero(w)
 
         if err <= err_best:
@@ -349,8 +452,15 @@ def mstls(X, y, lam, M=None, maxit=None):
     -------
     w : ndarray, shape (d,) - sparse coefficient vector (physical)
     """
-    n, d = X.shape
     y = y.ravel()
+    return _mstls_iterate(X, y, lam, M=M, maxit=maxit)
+
+
+def _mstls_iterate(X, y, lam, M=None, maxit=None, pre=None):
+    """``mstls`` body.  ``pre`` (a dict, or None) memoises the λ-independent
+    pieces - column norms, ‖y‖, the full least-squares solve - and the
+    least-squares refits by support, for reuse across λ on the same data."""
+    n, d = X.shape
 
     if M is None:
         M = np.ones(d)
@@ -360,14 +470,23 @@ def mstls(X, y, lam, M=None, maxit=None):
     if maxit is None:
         maxit = d + 1
 
-    col_norms = np.linalg.norm(X, axis=0)
-    col_norms[col_norms == 0] = np.inf
-    bnds = (np.linalg.norm(y) / col_norms) * M
+    if pre is None:
+        pre = {}
+    if "col_norms" not in pre:
+        col_norms = np.linalg.norm(X, axis=0)
+        col_norms[col_norms == 0] = np.inf
+        pre["col_norms"] = col_norms
+        pre["y_norm"] = np.linalg.norm(y)
+    if "w_ls" not in pre:
+        pre["w_ls"] = np.linalg.lstsq(X, y, rcond=None)[0]
+    refits = pre.setdefault("refits", {})
+
+    bnds = (pre["y_norm"] / pre["col_norms"]) * M
     lower = lam * np.maximum(bnds, 1.0)
     upper = (1.0 / lam) * np.minimum(bnds, 1.0)
 
     # Initial solve: scaled space → physical coefficients
-    w = M * np.linalg.lstsq(X, y, rcond=None)[0]
+    w = M * pre["w_ls"]
 
     prev = None
     for _ in range(maxit):
@@ -377,7 +496,7 @@ def mstls(X, y, lam, M=None, maxit=None):
         big = ~small
         w = np.zeros(d)
         if big.any():
-            w[big] = M[big] * np.linalg.lstsq(X[:, big], y, rcond=None)[0]
+            w[big] = M[big] * _support_lstsq(X, y, big, refits)
         prev = small
 
     return w  # physical coefficients
@@ -402,15 +521,22 @@ def select_lambda_grid(X, y, n_lambdas=50):
     lambdas : ndarray, shape (n_lambdas,)
         Log-spaced from λ_min to λ_max.
     """
-    _, d = X.shape
     y = y.ravel()
+    return _select_lambda_grid(X, y, n_lambdas)
+
+
+def _select_lambda_grid(X, y, n_lambdas, w_ls=None):
+    """``select_lambda_grid`` body; ``w_ls`` is the least-squares solution of
+    (X, y) when the caller already has it."""
+    _, d = X.shape
     col_norms = np.sqrt(np.sum(X ** 2, axis=0))
     # λ_max = largest regression coefficient magnitude
     Xty = np.abs(X.T @ y)
     lam_max = np.max(Xty / np.maximum(col_norms ** 2, 1e-30))
 
     # λ_min from projection magnitude
-    w_ls = np.linalg.lstsq(X, y, rcond=None)[0]
+    if w_ls is None:
+        w_ls = np.linalg.lstsq(X, y, rcond=None)[0]
     proj_norm = np.linalg.norm(X @ w_ls)
     lam_min = proj_norm / (d * max(np.max(col_norms), 1e-30))
 
@@ -425,7 +551,8 @@ def select_lambda_grid(X, y, n_lambdas=50):
     return np.logspace(np.log10(lam_min), np.log10(lam_max), n_lambdas)
 
 
-def TrainMSTLS(Theta, ut, lambdas=None, M=None, n_lambdas=50, maxit=None, alpha=0.5):
+def TrainMSTLS(Theta, ut, lambdas=None, M=None, n_lambdas=50, maxit=None, alpha=0.5,
+               cache=None):
     """MSTLS with automatic λ selection via the loss function.
 
     Matches the reference ``mstls`` + ``_mstls_loss`` from the WSINDy
@@ -458,6 +585,10 @@ def TrainMSTLS(Theta, ut, lambdas=None, M=None, n_lambdas=50, maxit=None, alpha=
         defaults to ``d + 1``
     alpha : float - projection-cost weight in [0, 1]; the reference
         uses α = 0.5 (equal weight)
+    cache : SolverCache or None - reuse the λ grid, the least-squares
+        solution, the support refits and the per-λ MSTLS solutions (which do
+        not depend on α) across calls on the same (Theta, ut); results are
+        unchanged
 
     Returns
     -------
@@ -473,14 +604,29 @@ def TrainMSTLS(Theta, ut, lambdas=None, M=None, n_lambdas=50, maxit=None, alpha=
     else:
         M = np.asarray(M, dtype=float).ravel()
 
-    if lambdas is None:
-        lambdas = select_lambda_grid(Theta, y, n_lambdas)
+    # Data-only work, shared by every call with the same data (and, for the
+    # λ path, the same M, grid and maxit).
+    data = cache.entry((Theta, ut), ("mstls",)) if cache is not None else {}
+    if "w_ls" not in data:
+        # LS solution in original (scaled) space
+        data["w_ls"] = np.linalg.lstsq(Theta, y, rcond=None)[0]
+    w_ls = data["w_ls"]
 
-    # LS solution in original (scaled) space
-    w_ls = np.linalg.lstsq(Theta, y, rcond=None)[0]
-    denom = np.linalg.norm(Theta @ w_ls)
-    if denom < 1e-30:
-        denom = 1.0
+    if lambdas is None:
+        grids = data.setdefault("grids", {})
+        if n_lambdas not in grids:
+            grids[n_lambdas] = _select_lambda_grid(Theta, y, n_lambdas, w_ls=w_ls)
+        lambdas = grids[n_lambdas]
+    lambdas = np.asarray(lambdas)
+
+    if "denom" not in data:
+        denom = np.linalg.norm(Theta @ w_ls)
+        data["denom"] = 1.0 if denom < 1e-30 else denom
+    denom = data["denom"]
+
+    paths = data.setdefault("paths", {})
+    path_key = (M.tobytes(), lambdas.tobytes(), maxit)
+    path = paths.setdefault(path_key, {})
 
     best_loss = np.inf
     best_w = np.zeros(d)
@@ -488,12 +634,14 @@ def TrainMSTLS(Theta, ut, lambdas=None, M=None, n_lambdas=50, maxit=None, alpha=
     loss_vals = np.empty(len(lambdas))
 
     for i, lam in enumerate(lambdas):
-        w = mstls(Theta, ut, lam, M=M, maxit=maxit)
-        # Loss - matches _mstls_loss from the reference:
-        #   ls_term   = ‖G @ (w_sc − w_ls)‖ / ‖G @ w_ls‖
-        #   sparsity  = nnz(w_phys) / d
-        w_sc = w / np.maximum(M, 1e-30)          # physical → scaled
-        ls_term = np.linalg.norm(Theta @ (w_sc - w_ls)) / denom
+        if i not in path:
+            w = _mstls_iterate(Theta, y, lam, M=M, maxit=maxit, pre=data)
+            # Loss - matches _mstls_loss from the reference:
+            #   ls_term   = ‖G @ (w_sc − w_ls)‖ / ‖G @ w_ls‖
+            #   sparsity  = nnz(w_phys) / d
+            w_sc = w / np.maximum(M, 1e-30)          # physical → scaled
+            path[i] = (w, np.linalg.norm(Theta @ (w_sc - w_ls)) / denom)
+        w, ls_term = path[i]
         nnz = np.count_nonzero(w)
         sparsity_term = nnz / max(d, 1)
         loss = alpha * ls_term + (1.0 - alpha) * sparsity_term
@@ -559,8 +707,14 @@ def RFE(X0, y, normalize=2, lam=0.0):
     -------
     w : ndarray, shape (d,) - sparse coefficient vector (original scale)
     """
-    N, d = X0.shape
     y = y.ravel()
+    return _rfe(X0, y, normalize=normalize, lam=lam)
+
+
+def _rfe_setup(X0, y, normalize):
+    """Column normalisation and normal equations for ``RFE`` (independent of
+    ``lam``)."""
+    d = X0.shape[1]
 
     # Column normalisation
     if normalize != 0:
@@ -577,6 +731,13 @@ def RFE(X0, y, normalize=2, lam=0.0):
     # Precompute normal equations
     XtX = X.T @ X   # (d, d)
     Xty = X.T @ y   # (d,)
+    return X, scale, XtX, Xty
+
+
+def _rfe(X0, y, normalize=2, lam=0.0, setup=None):
+    """``RFE`` body; ``setup`` is a precomputed ``_rfe_setup`` result."""
+    d = X0.shape[1]
+    X, scale, XtX, Xty = setup if setup is not None else _rfe_setup(X0, y, normalize)
 
     # Initial (ridge-regularised) LS on all features
     try:
@@ -627,7 +788,7 @@ def RFE(X0, y, normalize=2, lam=0.0):
     return w_out
 
 
-def TrainRFE(Theta, ut, lam=0.0, **kwargs):
+def TrainRFE(Theta, ut, lam=0.0, cache=None, **kwargs):
     """Thin wrapper around ``RFE`` for API consistency with other regression
     methods (STRidge, SR3, MSTLS).
 
@@ -636,8 +797,17 @@ def TrainRFE(Theta, ut, lam=0.0, **kwargs):
     Theta : ndarray - design matrix
     ut    : ndarray - target vector
     lam   : float - ridge regularisation (0 = pure OLS, >0 = ridge-RFE)
+    cache : SolverCache or None - reuse the column normalisation and normal
+            equations across calls (e.g. several ``lam``) on the same
+            (Theta, ut); results are unchanged
     """
-    return RFE(Theta, ut, lam=lam)
+    if cache is None:
+        return RFE(Theta, ut, lam=lam)
+    y = ut.ravel()
+    pre = cache.entry((Theta, ut), ("rfe", 2))
+    if "setup" not in pre:
+        pre["setup"] = _rfe_setup(Theta, y, 2)
+    return _rfe(Theta, y, normalize=2, lam=lam, setup=pre["setup"])
 
 
 # =====================================================================================
@@ -793,3 +963,258 @@ def TrainExhaustive(Theta, ut, max_k=None, normalize=2, l0_penalty=0.0,
         l0_penalty=l0_penalty, verbose=verbose,
     )
     return best[2]  # xi vector
+
+
+# ==================================================================================================
+# Centering - intercept partialling for sparse PDE regression
+#
+# Frisch, R. & Waugh, F. V. (1933), "Partial time regressions as compared with individual
+# trends", Econometrica 1(4), 387-401, doi: 10.2307/1907330.
+#
+# Lovell, M. C. (1963), "Seasonal adjustment of economic time series and multiple regression
+# analysis", J. Amer. Statist. Assoc. 58(304), 993-1010, doi: 10.1080/01621459.1963.10480682.
+#
+# The libraries in this package carry an explicit constant column "1", and the solvers above
+# fit it as an ordinary feature: it is column-normalised alongside the others and competes in
+# the thresholding / elimination loop.  The constant column is however exactly the direction
+# that mean-centring removes, so it is collinear with the mean component of every other
+# column.  This inflates cond(Theta) - and hence TrainSTRidge's default
+# l0_penalty = 0.001 * cond(Theta_tr) - and lets the sparsifier trade a dropped constant
+# against a corrupted coefficient on a genuine term.
+#
+# Centering partials the intercept out instead (Frisch-Waugh-Lovell): drop the constant
+# column, centre y and the remaining columns, run the sparse solver on the centred system
+# where the constant cannot compete, then recover the intercept in closed form
+#
+#     w0 = mean(y) - w . mean(X00, axis=0)
+#
+# and zero it when |w0| < tol * mean(|y|).  For plain OLS steps 3-4 reproduce the full-library
+# solution exactly (that is the FWL identity); for a sparsifying solver the selection path
+# genuinely differs, which is the point of the method.
+#
+# This is the convention used by scikit-learn's linear models (``fit_intercept=True`` centres
+# X and y in ``_preprocess_data`` and leaves the intercept unpenalised).  Note it is the
+# *opposite* of the PySINDy convention, whose ``BaseOptimizer`` passes ``fit_intercept=False``
+# and documents that "intercept is the responsibility of feature libraries", and of PDE-FIND,
+# which carries Theta(U) = [1, U, U^2, ...] and fits the constant as a feature.
+# ==================================================================================================
+
+def _resolve_const_index(Theta, descs=None, const_index=None, const_desc="1"):
+    """Locate the constant column of a library matrix.
+
+    Resolution order: explicit ``const_index``, then ``descs.index(const_desc)``,
+    then a numeric search for a zero-variance column.
+
+    Parameters
+    ----------
+    Theta      : ndarray, shape (K, m) - library matrix
+    descs      : sequence of str or None - column descriptions
+    const_index: int or None - explicit column index (may be negative)
+    const_desc : str - description marking the constant column
+
+    Returns
+    -------
+    int or None - index of the constant column, or None if there is none.
+    """
+    m = Theta.shape[1]
+
+    if const_index is not None:
+        j = int(const_index) % m
+        return j
+
+    if descs is not None:
+        descs = list(descs)
+        if len(descs) != m:
+            raise ValueError(
+                f"descs has length {len(descs)} but Theta has {m} columns."
+            )
+        if const_desc in descs:
+            return descs.index(const_desc)
+        return None
+
+    # Numeric fallback: a column is constant if its spread is negligible relative
+    # to its own level.  Same convention as diagnostics.vif_factors, which skips
+    # columns with std ~ 0.
+    col_mean = Theta.mean(axis=0)
+    col_std = Theta.std(axis=0)
+    scale = np.maximum(1.0, np.abs(col_mean))
+    const_cols = np.where(col_std < 1e-12 * scale)[0]
+    if const_cols.size == 0:
+        return None
+    return int(const_cols[0])
+
+
+def centering(Theta, ut, algorithm, tol=0.0, descs=None, const_index=None,
+              const_desc="1", allow_missing=False, return_intercept=False,
+              zero_tol=1e-12, cache=None):
+    """Fit a sparse model with the intercept partialled out.
+
+    Drops the constant column, centres the target and the remaining columns,
+    delegates to ``algorithm`` on the centred system, then recovers the
+    intercept in closed form and thresholds it against ``tol * mean(|ut|)``.
+
+    The returned coefficient vector has the *same length and ordering* as
+    ``Theta`` has columns, with the recovered intercept written back into the
+    constant column's slot.  It is therefore a drop-in replacement for the
+    output of ``TrainSTRidge`` / ``TrainRFE`` and needs no changes to
+    ``evaluate_native``, ``evaluate_unified``, or the usual
+    ``E_data = ||Theta @ w - ut|| / ||ut||``.
+
+    Centring uses the mean over *all* rows, before ``algorithm`` applies any
+    internal train/test split (as ``TrainSTRidge`` does).  One scalar mean per
+    column therefore crosses from test to train; this is deliberate, matching
+    the reference algorithm, and negligible in practice.
+
+    Columns that become degenerate *because* of centring - any other constant
+    column, which centres to exactly zero - are held out of the fit and
+    returned as exact zeros, since a zero column carries no signal and would
+    otherwise be selected arbitrarily.
+
+    Parameters
+    ----------
+    Theta       : ndarray, shape (K, m) - library matrix including a constant column
+    ut          : ndarray, shape (K,) - target vector
+    algorithm   : callable ``(Theta, ut) -> w`` - sparse solver, e.g.
+                  ``lambda X, y: TrainSTRidge(X, y, lam, d_tol)`` or
+                  ``lambda X, y: TrainRFE(X, y, lam=lam)`` (RFERidge).  Solvers
+                  returning a tuple (such as ``TrainMSTLS``) are unwrapped by
+                  taking element 0.  Note the ``(design, target)`` argument
+                  order, matching the rest of this module.
+    tol         : float - relative threshold for the intercept; ``w0`` is zeroed
+                  when ``|w0| < tol * mean(|ut|)``.  0 (the default) disables the
+                  threshold, so that calling this function never silently
+                  suppresses a term.  On the weak-form AC/SH/PME/CH data in this
+                  repo - none of which carry a genuine constant - the spurious
+                  intercept left by STRidge runs at 1e-3 to 2e-2 of
+                  ``mean(|ut|)`` across 0-5 % noise, so ``tol=0.05`` removes it
+                  with an order of magnitude to spare; that is the recommended
+                  starting value.  Note that ``w0`` absorbs the mean of whatever
+                  the sparse fit failed to explain, so a large ``|w0|`` is
+                  usually a symptom of a bad fit (missing terms) rather than a
+                  real constant - raising ``tol`` to hide it is the wrong fix.
+    descs       : sequence of str or None - column descriptions, used to locate
+                  the constant column by name
+    const_index : int or None - explicit index of the constant column
+    const_desc  : str - description marking the constant column (default ``"1"``)
+    allow_missing : bool - if True, centre even when there is no constant column
+                  and return the intercept separately instead of raising
+    return_intercept : bool - also return the scalar intercept
+    zero_tol    : float - relative norm below which a centred column is treated
+                  as degenerate
+    cache       : SolverCache or None - reuse the centred system across calls
+                  on the same (Theta, ut).  ``algorithm`` then receives the
+                  same centred arrays each time, so a cache passed to the
+                  solver inside ``algorithm`` is reused as well; results are
+                  unchanged
+
+    Returns
+    -------
+    w : ndarray, shape (m,) - coefficient vector aligned with ``Theta``'s columns.
+        The constant column's slot holds ``w0 / c``, where ``c`` is that
+        column's value (1 pointwise; the test-function mass ⟨ψ, 1⟩ in the weak
+        form), so ``Theta @ w`` is the fitted model in every formulation.
+    w0 : float - the intercept in units of ``ut`` (the additive offset), only
+        when ``return_intercept`` is True.  Equals the slot when ``c == 1``.  When
+        there is no constant column (``allow_missing=True``) the intercept is
+        *not* representable in ``w`` and is only available through this.
+
+    Raises
+    ------
+    ValueError
+        If no constant column can be located and ``allow_missing`` is False.
+    """
+    pre = None
+    if cache is not None:
+        pre = cache.entry(
+            (Theta, ut),
+            ("centering", None if descs is None else tuple(descs), const_index,
+             const_desc, allow_missing, zero_tol),
+        )
+    Theta = np.asarray(Theta, dtype=float)
+    ut = np.asarray(ut, dtype=float).ravel()
+    K, m = Theta.shape
+
+    if pre is not None and "live" in pre:
+        j_const, keep_idx, mu_y, mu_X, y1, live, X1_live = (
+            pre[k] for k in ("j_const", "keep_idx", "mu_y", "mu_X", "y1", "live",
+                             "X1_live"))
+    else:
+        j_const, keep_idx, mu_y, mu_X, y1, live, X1_live = _centre_system(
+            Theta, ut, K, m, descs, const_index, const_desc, allow_missing,
+            zero_tol)
+        if pre is not None:
+            pre.update(j_const=j_const, keep_idx=keep_idx, mu_y=mu_y, mu_X=mu_X,
+                       y1=y1, live=live, X1_live=X1_live)
+
+    w_sub = np.zeros(keep_idx.size)
+    if np.any(live):
+        w_fit = algorithm(X1_live, y1)
+        if isinstance(w_fit, tuple):
+            w_fit = w_fit[0]
+        w_sub[live] = np.asarray(w_fit, dtype=float).ravel()
+
+    # Recover the intercept in closed form and threshold it
+    w0 = mu_y - float(w_sub @ mu_X)
+    if tol > 0.0:
+        y_scale = float(np.mean(np.abs(ut)))
+        if abs(w0) < tol * max(y_scale, 1e-300):
+            w0 = 0.0
+
+    # Reassemble a full-length vector aligned with Theta's columns.  The
+    # constant column need not be all ones: in the weak form it is ⟨ψ, 1⟩, the
+    # test function's mass.  Its coefficient is w0 divided by that value, so
+    # that Theta @ w reproduces the fit and the slot holds the PDE's constant.
+    w = np.zeros(m)
+    w[keep_idx] = w_sub
+    if j_const is not None:
+        c_val = float(Theta[:, j_const].mean())
+        w[j_const] = w0 / c_val if c_val != 0.0 else 0.0
+
+    if return_intercept:
+        return w, w0
+    return w
+
+
+def _centre_system(Theta, ut, K, m, descs, const_index, const_desc, allow_missing,
+                   zero_tol):
+    """The data-only part of ``centering``: locate the constant column, centre
+    the target and the other columns, and screen out degenerate ones.
+
+    Returns ``(j_const, keep_idx, mu_y, mu_X, y1, live, X1[:, live])``.
+    """
+    if ut.shape[0] != K:
+        raise ValueError(
+            f"ut has length {ut.shape[0]} but Theta has {K} rows."
+        )
+
+    j_const = _resolve_const_index(Theta, descs, const_index, const_desc)
+    if j_const is None and not allow_missing:
+        raise ValueError(
+            "No constant column found in Theta. Pass descs= or const_index= to "
+            "identify it, or allow_missing=True to centre anyway and receive "
+            "the intercept separately (it has no slot in the returned vector)."
+        )
+
+    # Non-constant columns, in their original order
+    keep = np.ones(m, dtype=bool)
+    if j_const is not None:
+        keep[j_const] = False
+    keep_idx = np.where(keep)[0]
+    X00 = Theta[:, keep_idx]
+
+    # Centre target and columns
+    mu_y = float(ut.mean())
+    mu_X = X00.mean(axis=0)
+    y1 = ut - mu_y
+    X1 = X00 - mu_X[np.newaxis, :]
+
+    # Screen columns that centring made degenerate (any *other* constant column
+    # centres to exactly zero).  They are excluded from the fit and returned as
+    # exact zeros rather than left to absorb noise.
+    col_norms = np.linalg.norm(X1, axis=0)
+    ref = np.median(col_norms) if col_norms.size else 0.0
+    if ref <= 0.0:
+        ref = float(np.max(col_norms)) if col_norms.size else 0.0
+    live = col_norms > zero_tol * max(ref, 1e-300)
+
+    return j_const, keep_idx, mu_y, mu_X, y1, live, X1[:, live]

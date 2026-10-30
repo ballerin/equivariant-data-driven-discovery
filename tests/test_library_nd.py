@@ -62,11 +62,11 @@ class TestAllLibrariesWeakNdim4:
         build_multigraph_library, build_mod_multigraph_library,
         build_pdefind_library, build_polyjet_library, build_wsindy_library,
     ])
-    @pytest.mark.parametrize("use_ibp", [False, True])
-    def test_shape_and_finite(self, builder, use_ibp):
+    @pytest.mark.parametrize("space_ibp", [False, True])
+    def test_shape_and_finite(self, builder, space_ibp):
         f, L = _make_field(N=10)
         m, p = 3, 4
-        G, desc = builder(f, L, L, formulation="weak", m=m, p=p, use_ibp=use_ibp)
+        G, desc = builder(f, L, L, formulation="space_weak", m=m, p=p, space_ibp=space_ibp)
         Nv = (10 - 2 * m) ** 4
         assert G.shape == (Nv, len(desc))
         assert np.all(np.isfinite(G))
@@ -87,10 +87,10 @@ class TestIBPvsDirectNdim4:
         m, p = 4, 6
         Theta_p, desc_p = build_pdefind_library(f, L, L, max_order=1, max_poly=1)
         Theta_w, desc_w = build_pdefind_library(
-            f, L, L, max_order=1, max_poly=1, formulation="weak", m=m, p=p, use_ibp=True,
+            f, L, L, max_order=1, max_poly=1, formulation="space_weak", m=m, p=p, space_ibp=True,
         )
         Theta_direct, _ = build_pdefind_library(
-            f, L, L, max_order=1, max_poly=1, formulation="weak", m=m, p=p, use_ibp=False,
+            f, L, L, max_order=1, max_poly=1, formulation="space_weak", m=m, p=p, space_ibp=False,
         )
         i = desc_w.index("f_x")
         rel = np.linalg.norm(Theta_w[:, i] - Theta_direct[:, i]) / np.linalg.norm(Theta_direct[:, i])
@@ -100,10 +100,10 @@ class TestIBPvsDirectNdim4:
         f, L = _make_field(N=14)
         m, p = 4, 6
         Theta_w, desc_w = build_polyjet_library(
-            f, L, L, max_order=1, max_degree=1, formulation="weak", m=m, p=p, use_ibp=True,
+            f, L, L, max_order=1, max_degree=1, formulation="space_weak", m=m, p=p, space_ibp=True,
         )
         Theta_direct, _ = build_polyjet_library(
-            f, L, L, max_order=1, max_degree=1, formulation="weak", m=m, p=p, use_ibp=False,
+            f, L, L, max_order=1, max_degree=1, formulation="space_weak", m=m, p=p, space_ibp=False,
         )
         i = desc_w.index("f_x")
         rel = np.linalg.norm(Theta_w[:, i] - Theta_direct[:, i]) / np.linalg.norm(Theta_direct[:, i])
@@ -113,10 +113,10 @@ class TestIBPvsDirectNdim4:
         f, L = _make_field(N=14)
         m, p = 4, 6
         Theta_w, desc_w = build_wsindy_library(
-            f, L, L, max_order=1, max_poly=1, formulation="weak", m=m, p=p, use_ibp=True,
+            f, L, L, max_order=1, max_poly=1, formulation="space_weak", m=m, p=p, space_ibp=True,
         )
         Theta_direct, _ = build_wsindy_library(
-            f, L, L, max_order=1, max_poly=1, formulation="weak", m=m, p=p, use_ibp=False,
+            f, L, L, max_order=1, max_poly=1, formulation="space_weak", m=m, p=p, space_ibp=False,
         )
         i = desc_w.index("f_{x}")
         rel = np.linalg.norm(Theta_w[:, i] - Theta_direct[:, i]) / np.linalg.norm(Theta_direct[:, i])
@@ -149,7 +149,7 @@ class TestEndToEndSimulateDiscoverNdim4:
             f = f_snaps[s]
             ft = ft_snaps[s]
             G, desc = build_multigraph_library(
-                f, L, L, max_p=2, max_n=3, formulation="weak", m=m, p=p, use_ibp=True,
+                f, L, L, max_p=2, max_n=3, formulation="space_weak", m=m, p=p, space_ibp=True,
             )
             b_w = wf.build_weak_rhs(ft, m=m, p=p)
             idx = idx_sets[s] % len(b_w)

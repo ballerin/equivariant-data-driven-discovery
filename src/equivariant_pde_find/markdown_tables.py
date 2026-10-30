@@ -392,8 +392,8 @@ def build_standard_summary_table(rows):
     for noise, noise_label in [("0.0", "Clean"), ("0.02", "2%"), ("0.05", "5%")]:
         for method, method_label in [
             ("pointwise", "pointwise"),
-            ("weak_direct", "weak (no IBP)"),
-            ("weak_ibp", "weak (IBP)"),
+            ("space_weak_direct", "space-weak (no IBP)"),
+            ("space_weak_ibp", "space-weak (IBP)"),
         ]:
             for be, be_label in [("spectral", "spectral"), ("polynomial", "polynomial")]:
                 eq = _best_eq(rows, noise, method, be)
@@ -492,7 +492,7 @@ def build_weak_table(rows, backend, backend_label):
         ("multigraphs", "Mod. Multigraphs", "mod_multigraph"),
     ]:
         for n, nl in [("0.0", "Clean"), ("0.02", "2%"), ("0.05", "5%")]:
-            for mtd, ibp in [("weak_direct", "no"), ("weak_ibp", "yes")]:
+            for mtd, ibp in [("space_weak_direct", "no"), ("space_weak_ibp", "yes")]:
                 for a, al in [("stridge", "STRidge"), ("mstls", "MSTLS"), ("rfe", "RFE"), ("brute", "Brute-force")]:
                     b = _best_in_lib(rows, lib, n, mtd, backend, a,
                                      lib_original=lib_orig)
@@ -510,7 +510,7 @@ def build_weak_table(rows, backend, backend_label):
                     else:
                         p = b.get("d_tol", "")
                     t.add_row(
-                        lib_label, nl, al, str(p), str(b.get("weak_m", "")),
+                        lib_label, nl, al, str(p), str(b.get("space_m", "")),
                         ibp, fpf, str(b["n_active"]), E, E_data, tim, ex,
                     )
     return t
@@ -538,22 +538,22 @@ def build_oracle_table(rows):
 
     for noise, nl in [("0.0", "Clean"), ("0.02", "2%"), ("0.05", "5%")]:
         for method, ml in [("pointwise", "pointwise"),
-                           ("weak_direct", "weak (no IBP)"),
-                           ("weak_ibp", "weak (IBP)")]:
+                           ("space_weak_direct", "space-weak (no IBP)"),
+                           ("space_weak_ibp", "space-weak (IBP)")]:
             for be, bl in [("spectral", "spectral"), ("polynomial", "polynomial")]:
                 if method == "pointwise":
                     m_vals = [0]
                 else:
                     m_vals = [4, 8, 12]
                 for mv in m_vals:
-                    ibp = "yes" if method == "weak_ibp" else (
-                        "no" if method == "weak_direct" else "")
+                    ibp = "yes" if method == "space_weak_ibp" else (
+                        "no" if method == "space_weak_direct" else "")
                     matches = [
                         r for r in oracle_rows
                         if str(r["noise"]) == str(noise)
                         and r["method"] == method
                         and r["backend"] == be
-                        and str(r.get("weak_m", "0")) == str(mv)
+                        and str(r.get("space_m", "0")) == str(mv)
                     ]
                     if not matches:
                         continue
@@ -639,7 +639,7 @@ def _collect_ablation_entries(rows):
     def _conf_str(r):
         backend = r.get("backend", "")
         method = METHOD_MAP.get(r.get("method", ""), r.get("method", ""))
-        wm = r.get("weak_m", "")
+        wm = r.get("space_m", "")
         parts = [backend, method]
         if wm not in ("", "nan", None):
             parts.append(f"m={int(float(wm))}")

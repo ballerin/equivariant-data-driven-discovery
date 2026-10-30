@@ -11,4 +11,3 @@ dependencies:
   - pip
   - pip:
       - sympy>=1.9      # test-only: independent CAS oracle for jet-algebra tests
-      - modal            # cloud batch parallelization (https://modal.com)
